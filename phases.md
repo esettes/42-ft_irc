@@ -63,8 +63,9 @@ Ejecución:
 
 El servidor debería mantener una colección similar a:
 
-``
-std::vector<pollfd> pollDescriptors;``
+```cpp
+std::vector<pollfd> pollDescriptors;
+```
 
 El primer descriptor será normalmente el socket de escucha:
 ```text
