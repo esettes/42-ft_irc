@@ -20,11 +20,11 @@ send cuando poll indique POLLOUT
 
 ## Fase 0 — Estudiar el protocolo y elegir cliente de referencia
 
-Elegir un cliente real para las pruebas: HexChat, irssi, WeeChat, etc.
-Observar qué comandos envía nada más conectarse.
-Definir exactamente qué comandos se van a soportar.
-Definir el formato interno de mensajes.
-Definir los códigos numéricos que se necesitarán.
+- Elegir un cliente real para las pruebas: HexChat, irssi, WeeChat, etc.
+- Observar qué comandos envía nada más conectarse.
+- Definir exactamente qué comandos se van a soportar.
+- Definir el formato interno de mensajes.
+- Definir los códigos numéricos que se necesitarán.
 
 El cliente probablemente enviará algo parecido a:
 
