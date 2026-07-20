@@ -18,6 +18,23 @@ buffer de salida
 send cuando poll indique POLLOUT
 ```
 
+## Fase 0 — Estudiar el protocolo y elegir cliente de referencia
+
+Elegir un cliente real para las pruebas: HexChat, irssi, WeeChat, etc.
+Observar qué comandos envía nada más conectarse.
+Definir exactamente qué comandos se van a soportar.
+Definir el formato interno de mensajes.
+Definir los códigos numéricos que se necesitarán.
+
+El cliente probablemente enviará algo parecido a:
+
+```text
+CAP LS 302
+PASS password
+NICK roxana
+USER roxana 0 * :Roxana
+```
+Aunque `CAP` no sea una funcionalidad principal del subject, es habitual que los clientes reales lo envíen. El servidor debería reconocerlo o ignorarlo correctamente, no desconectarse.
 
 ## Fase 1 — Esqueleto del proyecto
 - Comprobar que existen exactamente dos argumentos.
