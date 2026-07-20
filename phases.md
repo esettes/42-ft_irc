@@ -46,9 +46,10 @@ Aunque `CAP` no sea una funcionalidad principal del subject, es habitual que los
 
 Ejecución:
 
-``
+```bash
 ./ircserv port password
-``
+```
+
 ## Fase 2 — Socket de escucha
 
 - socket().
@@ -57,7 +58,11 @@ Ejecución:
 - bind().
 - listen().
 
-`` nc 127.0.0.1 6667`` debe poder establecer una conexión TCP.
+```bash
+nc 127.0.0.1 6667
+``` 
+
+Debe poder establecer una conexión TCP.
 
 ## Fase 3 — Bucle principal con un único poll()
 
@@ -68,6 +73,7 @@ std::vector<pollfd> pollDescriptors;
 ```
 
 El primer descriptor será normalmente el socket de escucha:
+
 ```text
 pollDescriptors[0] → listening socket
 pollDescriptors[1] → client A
@@ -76,6 +82,7 @@ pollDescriptors[3] → client C
 ```
 
 El bucle principal será conceptualmente:
+
 ```text
 poll()
  ├── listener tiene POLLIN → accept()
@@ -110,18 +117,22 @@ Client
 ```
 
 Estados recomendados:
-- bool passwordAccepted;
-- bool nicknameReceived;
-- bool usernameReceived;
-- bool registered;
+```cpp
+bool passwordAccepted;
+bool nicknameReceived;
+bool usernameReceived;
+bool registered;
+```
 
 Un cliente estará registrado cuando se cumpla:
-``
+
+```text
 PASS correcto
     +
 NICK válido y disponible
     +
-USER recibido``
+USER recibido
+```
 
 ## Fase 5 — Reconstrucción del flujo TCP
 
