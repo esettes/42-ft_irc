@@ -688,3 +688,11 @@ KICK #channel nobody
 ```bash
 valgrind --leak-check=full --track-fds=yes ./ircserv 6667 secret
 ```
+
+## Clientes
+
+Recomendaciones:
+
+- Irssi: cliente principal para desarrollar y evaluar comportamiento IRC.
+- netcat (`nc`): pruebas de bajo nivel del parser, comandos incompletos, CRLF, errores y casos límite.
+- HexChat: opcional, al final, para comprobar que también funciona con un cliente gráfico real.
