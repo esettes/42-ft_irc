@@ -691,6 +691,24 @@ valgrind --leak-check=full --track-fds=yes ./ircserv 6667 secret
 
 ## Clientes
 
+Irssi como cliente principal.
+
+Es ligero, funciona en terminal y obliga a entender los comandos IRC reales, sin que una interfaz gráfica esconda fallos de el servidor. Además es muy cómodo para abrir varias conexiones y probar canales, operadores, kicks, invites, etc.
+
+```bash
+sudo apt install irssi
+irssi
+```
+
+Después:
+
+```text
+/connect -password tu_password 127.0.0.1 6667
+/nick Roxana
+/join #pruebas
+/msg #pruebas Hola
+```
+
 Recomendaciones:
 
 - Irssi: cliente principal para desarrollar y evaluar comportamiento IRC.
