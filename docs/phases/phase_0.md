@@ -1,5 +1,44 @@
 # Fase 0
 
+## Flujo `irssi`
+
+El servidor deberá recibir exactamente esa línea:
+
+`CAP LS 302\r\n`
+
+Y el parser debe convertirlo a:
+
+```text
+command: "CAP"
+parameters[0]: "LS"
+parameters[1]: "302"
+```
+
+Después, el servidor tendrá que responder:
+
+```text
+:irc.local CAP * LS :\r\n
+```
+
+Al recibir esa respuesta, Irssi podrá continuar el proceso de conexión.
+
+La comunicación sería:
+
+```text
+Irssi                                    Servidor
+  │                                         │
+  │ CAP LS 302                              │
+  │────────────────────────────────────────>│
+  │                                         │
+  │ :irc.local CAP * LS :                   │
+  │<────────────────────────────────────────│
+  │                                         │
+  │ PASS password                           │
+  │ NICK roxana                             │
+  │ USER roxana 0 * :Roxana                 │
+  │────────────────────────────────────────>│
+```
+
 ## Primeros comandos soportados por el servidor
 
 ```text

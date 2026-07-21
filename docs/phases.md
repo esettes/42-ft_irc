@@ -700,13 +700,10 @@ sudo apt install irssi
 irssi
 ```
 
-Después:
+Después levantar escucha:
 
-```text
-/connect -password tu_password 127.0.0.1 6667
-/nick Roxana
-/join #pruebas
-/msg #pruebas Hola
+```bash
+nc -lv 127.0.0.1 6667
 ```
 
 Recomendaciones:
