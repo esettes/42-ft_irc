@@ -44,7 +44,7 @@ private:
     CommandDispatcher(const CommandDispatcher &other);
     CommandDispatcher &operator=(const CommandDispatcher &other);
     ~CommandDispatcher();
-    
+
     void registerCommands();
 
     void handlePass(Client &client, const IrcMessage &message);
