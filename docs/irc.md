@@ -8,7 +8,7 @@ Un servidor IRC necesita hacer funcionar dos capas distintas:
 El ejecutable normalmente se inicia así:
 
 ```bash
-./ircserv \<port> \<password>
+./ircserv <port> <password>
 ```
 
 Por ejemplo:
