@@ -55,6 +55,10 @@ class Server
         ~Server();
 
         void run();
+        void stop();
+
+        int getPort() const;
+        
 
         /* For send parsed commands to the dispatcher */
         void dispatchCommand(Client &client, const IrcMessage &message);

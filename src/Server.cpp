@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+
 /** por el momento debe:
  * 
  * Crea un socket TCP.
@@ -18,9 +19,12 @@
  */
 
 Server::Server(int port, const std::string &password)
-    : port(port), password(password), listenSocket(-1), dispatcher(*this)
+    : port(port), 
+    password(password), 
+    listenSocket(-1), 
+    dispatcher(*this)
 {
-    //createListeningSocket();
+    createListeningSocket();
 }
 
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)
@@ -46,10 +50,10 @@ void Server::run()
         }
         // Procesar eventos de clientes
         std::size_t i = 0;
-        while (i < pollFds.size())
+        while (i < pollFds.size())  // num de eventos a vigilar por poll()
         {
             const int socketFd = pollFds[i].fd;
-            const short returnedEvents = pollFds[i].revents;
+            const short returnedEvents = pollFds[i].revents;    // eventos que ocurrieron en este socket
             if (returnedEvents == 0)
             {
                 // No hay eventos para este socket, pasar al siguiente
@@ -58,26 +62,29 @@ void Server::run()
             }
             if (socketFd == listenSocket)
             {
-                if ((returnedEvents & POLLIN) != 0)
+                if (returnedEvents & POLLIN)    // descriptor tiene datos para leer (nuevo cliente)
                     acceptClient(); // 
 
-                if ((returnedEvents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+                if (returnedEvents & POLLOUT)   // descriptor listo para escribir (no debería ocurrir en listenSocket)
+                    throw std::runtime_error("Unexpected POLLOUT event on listening socket.");
+
+                if (returnedEvents & (POLLERR | POLLHUP | POLLNVAL))    // ERROR
                     throw std::runtime_error("Listening socket stopped working.");
 
                 ++i;
                 continue ;
             }
-            if ((returnedEvents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+            if (returnedEvents & (POLLERR | POLLHUP | POLLNVAL))
                 disconnectClient(socketFd);
                 continue;
 
-            if ((returnedEvents & POLLIN) != 0)
+            if (returnedEvents & POLLIN)
                 receiveFromClient(socketFd);
 
             if (clients.find(socketFd) == clients.end())
                 continue;
 
-            if ((returnedEvents & POLLOUT) != 0)
+            if (returnedEvents & POLLOUT)
                 flushClientOutput(socketFd);
 
             if (clients.find(socketFd) == clients.end())
@@ -90,3 +97,5 @@ void Server::run()
         }
     }
 }
+
+//void Server::createListeningSocket

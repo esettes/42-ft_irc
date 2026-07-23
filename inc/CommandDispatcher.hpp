@@ -15,6 +15,7 @@ public:
     CommandDispatcher(Server &server);
 
     void execute(Client &client, const IrcMessage &message);
+    ~CommandDispatcher();
 
 private:
     /* Type that points to member functions of CommandDispatcher */
@@ -43,7 +44,7 @@ private:
 
     CommandDispatcher(const CommandDispatcher &other);
     CommandDispatcher &operator=(const CommandDispatcher &other);
-    ~CommandDispatcher();
+    
 
     void registerCommands();
 

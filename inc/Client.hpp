@@ -31,7 +31,18 @@ class Client
 
         bool isReadyToRegister() const;
         bool isRegistered() const;
+        bool isPasswordAccepted() const;
+        void setPasswordAccepted(bool accepted);
+        void setRegistered(bool registered);
 
+        void setNickname(const std::string &nickname);
+        const std::string &getNickname() const;
+        void setUsername(const std::string &username);
+        const std::string &getUsername() const;
+        void setRealname(const std::string &realname);
+        const std::string &getRealname() const;
+
+        void removeSentOutput(std::size_t bytesSendt);
 };
 
 #endif
