@@ -20,7 +20,7 @@ The code should be cpplint compliant to have a minimum of code quality.
 ## Makefile rules
 Run `make help` to know which rules are availabe in this project
 ## Installation
-Clone the repository: `git clone https://github.com/danielfdez17/ft_irc.git && cd ft_irc`
+Clone the repository: `git clone https://github.com/esettes/42-ft_irc && cd 42-ft_irc`
 ## Compilation
 Run `make || make all`
 
