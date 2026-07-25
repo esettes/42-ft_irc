@@ -56,3 +56,57 @@ Asigna el puerto validado durante la fase 1.
 `htons()` convierte un entero corto desde el orden de bytes del ordenador al orden utilizado por la red:
 
 `host to network short`
+
+`INADDR_ANY` acepta conexiones enviadas a cualquier interfaz de red del ordenador(`0.0.0.0`), dependiendo también del firewall:
+
+- 127.0.0.1
+- La IP de la red local, como 192.168.1.50
+- Otras IP asignadas a la máquina
+
+Si se quiere limitar el servidor exclusivamente al propio ordenador:
+
+```cpp
+serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+```
+
+---
+
+#### `bind()`
+
+Asocia un socket con una dirección IP local y un puerto concreto.
+
+Después de configurar la dirección, `bind()` vincula esa dirección al socket:
+
+```cpp
+bind(
+    serverSocket,
+    reinterpret_cast<struct sockaddr *>(&serverAddress),
+    sizeof(serverAddress)
+);
+```
+
+---
+
+### listen()
+
+```cpp
+::listen(listenSocket, SOMAXCONN);
+```
+
+El segundo argumento establece el límite de la cola de conexiones pendientes.
+
+Cuando un cliente intenta conectarse, el sistema operativo puede completar la conexión TCP y dejarla esperando en esa cola hasta que el servidor ejecute `accept()`.
+
+```text
+Cliente se conecta
+        ↓
+Conexión pendiente en la cola
+        ↓
+accept() la recoge
+```
+
+`SOMAXCONN` solicita el máximo de conexiones pendientes permitido por el sistema. No representa:
+
+- El máximo total de clientes del servidor.
+- El número de clientes actualmente conectados.
+- Un número de conexiones reservado de antemano.

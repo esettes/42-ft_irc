@@ -57,6 +57,7 @@ Server::Server(int port, const std::string &password)
             "password cannot be empty");
     }
     createListeningSocket();
+    displayStartupInformation();
 }
 
 /** @brief Creates the listening socket.
@@ -98,6 +99,35 @@ void Server::createListeningSocket()
     serverAddress.sin_family = AF_INET; // ipv4
     serverAddress.sin_addr.s_addr = htons(INADDR_ANY);  // accepts connections that are directed to any ipv4 interface of the server machine
     serverAddress.sin_port = htons(static_cast<unsigned short>(port));  // listen port
+
+    if (::bind(listenSocket,
+        reinterpret_cast<const struct sockaddr *>(&serverAddress),  // address cast to sockaddr pointer
+        sizeof(serverAddress)) == -1)
+    {
+        const int errorNumber = errno;
+
+        closeFd(listenSocket);
+        throw createSystemError("bind", errorNumber);
+    }
+
+    if (::listen(listenSocket,SOMAXCONN) == -1)
+    {
+        const int errorNumber = errno;
+
+        closeFd(listenSocket);
+        throw createSystemError("listen", errorNumber);
+    }
+}
+
+void Server::displayStartupInformation() const
+{
+    std::cout
+        << "IRC server configuration:" << std::endl
+        << "  Address: 0.0.0.0" << std::endl
+        << "  Port: " << port << std::endl
+        << "  Protocol: TCP/IPv4" << std::endl
+        << "  Socket mode: non-blocking" << std::endl
+        << "  Status: listening" << std::endl;
 }
 
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)
@@ -119,7 +149,7 @@ void Server::run()
                 // Señal interrumpió poll(), continuar esperando
                 continue;
             }
-            throw std::runtime_error("Error en poll(): ");// + std::strerror(errno));
+            throw std::runtime_error("poll(): " + std::string(std::strerror(errno)));
         }
         // Procesar eventos de clientes
         std::size_t i = 0;

@@ -54,6 +54,8 @@ class Server
             const std::vector<std::string> &parameters
         );
 
+        void displayStartupInformation() const;
+
     public:
         Server(int port, const std::string &password);
         ~Server();
