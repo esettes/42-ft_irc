@@ -9,7 +9,7 @@ MAKEFLAGS += --no-print-directory
 
 CXX =	c++
 
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -g3 -fsanitize=address
+CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -g3 -fsanitize=address -MMD -MP
 
 INC = -I ./inc/
 
@@ -32,6 +32,9 @@ COMMANDS_SRC	= $(addprefix $(COMMANDS_DIR), \
 SRCS			+= $(COMMANDS_SRC)
 
 OBJS = $(addprefix $(OBJ_DIR), $(notdir $(SRCS:.cpp=.o)))
+# .d files to avoid recompiling the whole app when a header file is modified
+DEPS = $(addprefix $(OBJ_DIR)/,$(SRCS:.cpp=.d))
+-include $(DEPS)
 
 RM = /bin/rm -rf
 
@@ -53,7 +56,7 @@ obj:
 	@mkdir -p $(OBJ_DIR)
 
 clean:
-	@$(RM) $(OBJS)
+	@$(RM) $(OBJS) $(OBJ_DIR)
 
 fclean: clean 
 	@$(RM) $(NAME)
