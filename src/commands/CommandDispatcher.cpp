@@ -71,3 +71,42 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
 
     (this->*(definition.handler))(client, message);
 }
+
+CommandDispatcher::~CommandDispatcher()
+{
+}
+
+void CommandDispatcher::handlePass(Client &client, const IrcMessage &message)
+{
+    // do something with client
+    client.setPasswordAccepted(true);
+    message.params[0]; // Access the password parameter
+}
+
+void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
+{
+    // do something with client and message
+    client.setNickname(message.params[0]);
+}
+
+void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
+{
+    // do something with client and message
+    client.setUsername(message.params[0]);
+}
+
+void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
+{
+    // do something with client and message
+    std::string channelName = message.params[0];
+    client.setRegistered(true);
+}
+
+void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)
+{
+    // do something with client and message
+    std::string target = message.params[0];
+    std::string msg = message.params[1];
+    client.appendToOutputBuffer("Message sent to " + target + ": " + msg);
+
+}

@@ -10,12 +10,17 @@ OBJ_DIR = ./src/obj/
 
 SRC_DIR			= src/
 SRC_SRCS		= $(addprefix $(SRC_DIR), \
-					main.cpp)
+					main.cpp \
+					SignalHandler.cpp \
+					Server.cpp \
+					Client.cpp \
+					IrcMessage.cpp)
 SRCS 			= $(SRC_SRCS)
 
 COMMANDS_DIR	= src/commands/
 COMMANDS_SRC	= $(addprefix $(COMMANDS_DIR), \
-					RegistrationCommands.cpp)
+					RegistrationCommands.cpp \
+					CommandDispatcher.cpp)
 
 SRCS			+= $(COMMANDS_SRC)
 

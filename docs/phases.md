@@ -52,11 +52,11 @@ Ejecución:
 
 ## Fase 2 — Socket de escucha
 
-- socket().
-- setsockopt() con SO_REUSEADDR.
-- fcntl() para hacerlo no bloqueante.
-- bind().
-- listen().
+- `socket()`.
+- `setsockopt()` con `SO_REUSEADDR`.
+- `fcntl()` para hacerlo no bloqueante.
+- `bind()`.
+- `listen()`.
 
 ```bash
 nc 127.0.0.1 6667

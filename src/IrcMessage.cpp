@@ -24,3 +24,8 @@ std::string IrcMessage::serialize() const
     
     return result;
 }
+
+const std::string &IrcMessage::getCommand() const
+{
+    return cmd;
+}

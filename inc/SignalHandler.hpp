@@ -6,12 +6,14 @@
 class SignalHandler
 {
     public:
-        static void signalHandler(int sig);
+        static void runSignalHandler();
         static bool isShutdownRequested();
 
     private:
         static volatile sig_atomic_t shutdownRequested;
         
+        static void handleTerminationSignal(int signalNumber);
+
         SignalHandler();
         SignalHandler(const SignalHandler &other);
         SignalHandler &operator=(const SignalHandler &other);

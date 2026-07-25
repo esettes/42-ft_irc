@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "SignalHandler.hpp"
 
 #include <cerrno>
 #include <cstdlib>
@@ -6,14 +7,26 @@
 #include <stdexcept>
 #include <string>
 
-static int parsePort(const char *arg)
+static int parsePort(const std::string &arg)
 {
     char *remainChars;
     long port;
 
     errno = 0;
     remainChars = NULL;
-    port = std::strtol(arg, &remainChars, 10);
+    if (arg.empty())
+            throw std::invalid_argument("port cannot be empty");
+    for (std::size_t i = 0; i < arg.size(); ++i)
+    {
+        const unsigned char c = static_cast<unsigned char>(arg[i]);
+
+        if (std::isdigit(c) == 0){
+            throw std::invalid_argument(
+                "port must contain only digits");
+        }
+    }
+
+    port = std::strtol(arg.c_str(), &remainChars, 10);
 
     if (errno != 0 || *remainChars != '\0')
         throw std::runtime_error("Invalid port");
@@ -37,6 +50,9 @@ int main(int argc, char **argv)
         const std::string password = argv[2];
         if (password.empty())
             throw std::runtime_error("Password cannot be empty");
+            
+        SignalHandler::runSignalHandler();
+
         Server server(port, password);
         server.run();
     }

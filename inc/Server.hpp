@@ -8,8 +8,10 @@
 
 #include <map>
 #include <poll.h>
+#include <cerrno>
 #include <string>
 #include <vector>
+
 
 class Server
 {
@@ -27,7 +29,7 @@ class Server
         void acceptClient();
         void receiveFromClient(int socketFd);
         void processClientBuffer(Client &client);
-        void dispatchCommand(Client &client, const IrcMessage &msg);
+       
         void disconnectClient(int socketFd);
 
         void tryRegisterClient(Client &client);
@@ -35,7 +37,6 @@ class Server
 
         void flushClientOutput(int socketFd);
         void updateClientPollEvents(int socketFd);
-        void disconnectClient(int socketFd);
 
         Client *findClientByNickname(const std::string &nickname);
 
@@ -43,6 +44,9 @@ class Server
         std::string getClientPrefix(const Client &client) const;
         Server(const Server &other);
         Server &operator=(const Server &other);
+
+        void closeAllFds();
+        void closeFd(int &fd);
 
         void queueNumericReply(
             Client &client,
