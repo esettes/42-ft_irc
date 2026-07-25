@@ -6,6 +6,10 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <fcntl.h>
+#include <cstring>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 /** por el momento debe:
  * 
@@ -55,11 +59,45 @@ Server::Server(int port, const std::string &password)
     createListeningSocket();
 }
 
+/** @brief Creates the listening socket.
+ * Configures the socket to be non-blocking and sets the SO_REUSEADDR option.
+ * Describes the server's address and binds the socket to it.
+ * Starts listening for incoming connections.
+*/
 void Server::createListeningSocket()
 {
     listenSocket = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listenSocket == INVALID_FD)
         throw createSystemError("socket", errno);
+
+    int reuseAddr = 1;
+    if (::setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr)) == -1)
+    {
+        const int errorNumber = errno;
+
+        closeFd(listenSocket);
+        throw createSystemError("setsockopt", errorNumber);
+    }
+    const int currentSocketFlags = ::fcntl(listenSocket, F_GETFL, 0);
+
+    if (currentSocketFlags == -1)
+    {
+        const int errorNumber = errno;
+        closeFd(listenSocket);
+        throw createSystemError("fcntl F_GETFL", errorNumber);
+    }
+    if (::fcntl(listenSocket, F_SETFL, currentSocketFlags | O_NONBLOCK) == -1)
+    {
+        const int errorNumber = errno;
+        closeFd(listenSocket);
+        throw createSystemError("fcntl F_SETFL", errorNumber);
+    }
+
+    struct sockaddr_in serverAddress;
+    std::memset(&serverAddress, 0, sizeof(serverAddress));
+    serverAddress.sin_family = AF_INET; // ipv4
+    serverAddress.sin_addr.s_addr = htons(INADDR_ANY);  // accepts connections that are directed to any ipv4 interface of the server machine
+    serverAddress.sin_port = htons(static_cast<unsigned short>(port));  // listen port
 }
 
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)

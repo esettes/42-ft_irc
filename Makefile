@@ -1,4 +1,11 @@
+GREEN = \033[0;32m
+YELLOW = \033[0;33m
+RED = \033[0;31m
+RESET = \033[0m
+
 NAME =	ircserv
+
+MAKEFLAGS += --no-print-directory
 
 CXX =	c++
 
@@ -29,26 +36,29 @@ OBJS = $(addprefix $(OBJ_DIR), $(notdir $(SRCS:.cpp=.o)))
 RM = /bin/rm -rf
 
 $(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(INC) $(OBJS) -o $(NAME)
+	@$(CXX) $(CXXFLAGS) $(INC) $(OBJS) -o $(NAME)
 
 all: obj $(NAME)
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
 	@mkdir -p $(OBJ_DIR)
+	@echo "$(YELLOW)$<$(RESET)"
 	@$(CXX) $(CXXFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_DIR)%.o: $(COMMANDS_DIR)%.cpp
+	@echo "$(YELLOW)$<$(RESET)"
 	@$(CXX) $(CXXFLAGS) $(INC) -c $< -o $@
 
 obj:
 	@mkdir -p $(OBJ_DIR)
 
 clean:
-	$(RM) $(OBJS)
+	@$(RM) $(OBJS)
 
 fclean: clean 
-	$(RM) $(NAME)
+	@$(RM) $(NAME)
 
 re: fclean all
+	@echo "$(GREEN)$(NAME) [OK]$(RESET)"
 
 .PHONY: all clean fclean re
