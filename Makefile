@@ -87,6 +87,8 @@ endef
 NAME =	ircserv
 IRC := $(MAGENTA)[$(NAME)]$(RESET)
 
+.DEFAULT_GOAL := $(NAME)
+
 MAKEFLAGS += --no-print-directory
 
 CXX =	c++
@@ -115,7 +117,7 @@ SRCS			+= $(COMMANDS_SRC)
 
 OBJS = $(addprefix $(OBJ_DIR), $(notdir $(SRCS:.cpp=.o)))
 # .d files to avoid recompiling the whole app when a header file is modified
-DEPS = $(addprefix $(OBJ_DIR)/,$(SRCS:.cpp=.d))
+DEPS = $(addprefix $(OBJ_DIR), $(notdir $(SRCS:.cpp=.d)))
 -include $(DEPS)
 
 RM = /bin/rm -rf
