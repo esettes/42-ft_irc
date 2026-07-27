@@ -105,7 +105,9 @@ SRC_SRCS		= $(addprefix $(SRC_DIR), \
 					SignalHandler.cpp \
 					Server.cpp \
 					Client.cpp \
-					IrcMessage.cpp)
+					IrcMessage.cpp \
+					Console.cpp)
+
 SRCS 			= $(SRC_SRCS)
 
 COMMANDS_DIR	= src/commands/

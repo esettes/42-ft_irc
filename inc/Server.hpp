@@ -5,13 +5,24 @@
 #include "IrcMessage.hpp"
 #include "Channel.hpp"
 #include "CommandDispatcher.hpp"
+#include "SignalHandler.hpp"
 
 #include <map>
 #include <poll.h>
 #include <cerrno>
 #include <string>
 #include <vector>
-
+#include <cstddef>
+#include <cerrno>
+#include <cstring>
+#include <iostream>
+#include <stdexcept>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <fcntl.h>
+#include <cstring>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 class Server
 {
@@ -22,20 +33,25 @@ class Server
         CommandDispatcher dispatcher;
 
         std::vector<struct pollfd> pollFds;
-        std::map<int, Client> clients;
+        std::map<int, Client *> clients;
         std::map<std::string, Channel> channels;
 
         void createListeningSocket();
+        void registerListeningSocket();
+
         void acceptClient();
-        void receiveFromClient(int socketFd);
+        void configureSocketAsNonBlocking(int socketFd);
+
+        bool receiveClientData(std::size_t descriptorIndex);
+        void removeClient(std::size_t descriptorIndex);
+
         void processClientBuffer(Client &client);
-       
-        void disconnectClient(int socketFd);
 
         void tryRegisterClient(Client &client);
         void sendWelcomeMessages(Client &client);
 
-        void flushClientOutput(int socketFd);
+        void queueClientOutput(Client &client, const std::string &data);
+        bool flushClientOutput(int socketFd);
         void updateClientPollEvents(int socketFd);
 
         Client *findClientByNickname(const std::string &nickname);
@@ -48,11 +64,11 @@ class Server
         void closeAllFds();
         void closeFd(int &fd);
 
-        void queueNumericReply(
-            Client &client,
-            const std::string &numericCode,
-            const std::vector<std::string> &parameters
-        );
+        // void queueNumericReply(
+        //     Client &client,
+        //     const std::string &numericCode,
+        //     const std::vector<std::string> &parameters
+        // );
 
         void displayStartupInformation() const;
 

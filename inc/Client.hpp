@@ -2,6 +2,8 @@
 #define CLIENT_HPP
 
 #include <string>
+#include <cstddef>
+#include <utility>
 
 /** @brief Represents an accepted connection by the server */
 class Client
