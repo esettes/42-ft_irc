@@ -44,7 +44,9 @@ class Client
         void setRealname(const std::string &realname);
         const std::string &getRealname() const;
 
-        void removeSentOutput(std::size_t bytesSendt);
+        void removeSentOutput(std::size_t sentByteCount);
+
+        bool extractNextLine(std::string &completeLine);
 };
 
 #endif

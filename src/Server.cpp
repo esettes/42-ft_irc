@@ -202,9 +202,9 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
 
     char receiveBuffer[RECEIVE_BUFFER_SIZE];
 
-    const ssize_t bytes = ::recv(clientSocketFd, receiveBuffer, sizeof(receiveBuffer), 0);
+    const ssize_t receivedBytes = ::recv(clientSocketFd, receiveBuffer, sizeof(receiveBuffer), 0);
 
-    if (bytes > 0)
+    if (receivedBytes > 0)
     {
         std::map<int, Client *>::iterator clientIterator = clients.find(clientSocketFd);
         if (clientIterator == clients.end())
@@ -213,21 +213,22 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         }
 
         Client *client = clientIterator->second;
-
-        const std::string receivedData(receiveBuffer, static_cast<std::size_t>(bytes));
+        // bytes can be received in multiple calls to recv(), so we need to append the received data to the client's input buffer
+        const std::string receivedData(receiveBuffer, static_cast<std::size_t>(receivedBytes));
 
         client->appendToInputBuffer(receivedData);
 
         /* Temporary phase 3 echo test. */
-        queueClientOutput(*client, receivedData);
+        //queueClientOutput(*client, receivedData);
 
-        std::cout << Console::CLIENT << " Received " << bytes << " bytes: fd=" << clientSocketFd 
+        std::cout << Console::CLIENT << " Received " << receivedBytes << " bytes: fd=" << clientSocketFd 
             << ", buffered=" << client->getInputBuffer().size() << std::endl;
 
+        processClientBuffer(*client);
         return true;
     }
 
-    if (bytes == 0)
+    if (receivedBytes == 0)
         return false;
 
     const int receiveErrno = errno;
@@ -444,6 +445,24 @@ void Server::queueClientOutput(Client &client, const std::string &data)
 
     client.appendToOutputBuffer(data);
     updateClientPollEvents(client.getSocketFd());
+}
+
+void Server::processClientBuffer(Client &client)
+{
+    std::string completeLine;
+
+    while (client.extractNextLine(completeLine))
+    {
+        if (completeLine.empty())
+            continue;
+
+        std::cout << Console::CLIENT << " Complete line: fd=" << client.getSocketFd()
+            << ", line=\"" << completeLine << "\"" << std::endl;
+
+        /*
+         * Parsing and command dispatching
+         */
+    }
 }
 
 void Server::closeFd(int &fd)

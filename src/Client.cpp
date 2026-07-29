@@ -124,13 +124,38 @@ const std::string &Client::getRealname() const
     return realname;
 }
 
-void Client::removeSentOutput(std::size_t bytesSendt)
+void Client::removeSentOutput(std::size_t sentByteCount)
 {
-    if (bytesSendt >= outputBuffer.size())
+    if (sentByteCount >= outputBuffer.size())
     {
         outputBuffer.clear();
         return;
     }
 
-    outputBuffer.erase(0, bytesSendt);
+    outputBuffer.erase(0, sentByteCount);
+}
+
+/**
+ * @brief Extracts the next complete line from the input buffer.
+ * A complete line is a sequence of characters ending with a newline character ('\n').
+ * If a complete line is found, it is assigned to the provided string reference and removed from
+ * the input buffer.
+ */
+bool Client::extractNextLine(std::string &completeLine)
+{
+    const std::string::size_type pos = inputBuffer.find('\n');
+
+    if (pos == std::string::npos)
+        return false;
+
+    std::string::size_type len = pos;
+
+    if (len > 0 && inputBuffer[len - 1] == '\r')
+        --len;
+
+    completeLine.assign(inputBuffer, 0, len);
+
+    inputBuffer.erase(0, pos + 1);
+
+    return true;
 }
