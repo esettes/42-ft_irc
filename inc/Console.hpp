@@ -4,6 +4,7 @@
 /**
  * @file Console.hpp
  * @brief PODRIA QUEDAR DEFINIDO EN EL PROPIO .hpp
+ * @brief ¿POR QUÉ UTILIZAMOS const char[] EN LUGAR DE std::string PARA LOS CÓDIGOS DE FORMATEO DE CONSOLA?
  * @brief Declares console color and formatting constants used for server logging.
  * 
  * @param RESET ANSI escape code to reset console formatting.
