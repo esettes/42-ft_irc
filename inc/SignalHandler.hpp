@@ -3,20 +3,26 @@
 
 #include <signal.h>
 
+/**
+ * @file SignalHandler.hpp
+ * @brief Declares the signal handling utilities used to request orderly server shutdown.
+ * 
+ * @param shutdownRequested A static flag indicating whether a termination signal has been received.
+ */
 class SignalHandler
 {
-    public:
-        static void runSignalHandler();
-        static bool isShutdownRequested();
-
     private:
         static volatile sig_atomic_t shutdownRequested;
         
         static void handleTerminationSignal(int signalNumber);
-
+        
         SignalHandler();
         SignalHandler(const SignalHandler &other);
         SignalHandler &operator=(const SignalHandler &other);
+
+    public:
+        static void runSignalHandler();
+        static bool isShutdownRequested();
 };
 
 #endif

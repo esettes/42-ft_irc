@@ -4,13 +4,17 @@
 #include "IrcMessage.hpp"
 #include <string>
 
+/**
+ * @file MessageParser.hpp
+ * @brief Declares helpers for parsing raw IRC protocol lines into structured messages.
+ */
 class MessageParser
 {
-    public:
-        static IrcMessage parse(const std::string &line);
-
     private:
         MessageParser();
+
+    public:
+        static IrcMessage parse(const std::string &line);
 };
 
 #endif

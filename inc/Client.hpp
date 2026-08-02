@@ -5,7 +5,19 @@
 #include <cstddef>
 #include <utility>
 
-/** @brief Represents an accepted connection by the server */
+/**
+ * @file Client.hpp
+ * @brief Declares the Client abstraction that owns per-connection state and buffers.
+ * 
+ * @param socketFd The file descriptor associated with the client's socket connection.
+ * @param inputBuffer A buffer that accumulates incoming data from the client until complete lines can be extracted.
+ * @param outputBuffer A buffer that holds outgoing data to be sent to the client.
+ * @param nickname The client's chosen nickname, which must be unique across the server.
+ * @param username The client's username, provided during registration.
+ * @param realname The client's real name, provided during registration.
+ * @param passwordAccepted A flag indicating whether the client has successfully provided the correct server password.
+ * @param registered A flag indicating whether the client has completed the registration process.
+ */
 class Client
 {
     private:
@@ -17,6 +29,7 @@ class Client
         std::string realname;
         bool passwordAccepted;
         bool registered;
+
         Client(const Client &other);
         Client &operator=(const Client &other);
 

@@ -5,6 +5,14 @@
 #include <stdexcept>
 #include <string>
 
+/**
+ * @file SignalHandler.cpp
+ * @brief Implements the signal handling utilities used to request orderly server shutdown.
+ * 
+ * This module provides a static interface for installing signal handlers for SIGINT and SIGTERM,
+ * allowing the server to detect shutdown requests and exit gracefully. It also ignores SIGPIPE
+ * to prevent crashes when writing to closed sockets.
+ */
 namespace
 {
     std::runtime_error createSystemError(

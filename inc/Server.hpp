@@ -24,6 +24,18 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+/**
+ * @file Server.hpp
+ * @brief Declares the main IRC server that accepts clients, processes messages, and manages channels.
+ * 
+ * @param port The TCP port on which the server listens for incoming connections.
+ * @param password The server password required for clients to register.
+ * @param listenSocket The file descriptor of the listening socket.
+ * @param dispatcher The CommandDispatcher instance responsible for routing IRC commands to handlers.
+ * @param pollFds A vector of pollfd structures used for monitoring multiple file descriptors for events.
+ * @param clients A mapping of client socket file descriptors to their corresponding Client objects.
+ * @param channels A mapping of channel names to their corresponding Channel objects.
+ */
 class Server
 {
     private:
