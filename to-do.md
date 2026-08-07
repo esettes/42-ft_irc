@@ -29,7 +29,7 @@ Status legend: [x] implemented, [~] partially implemented, [ ] pending
 ## IRC message handling
 - [x] Implement a persistent input buffer per client
 - [x] Reconstruct complete IRC lines from fragmented TCP data
-- [ ] Implement a real IRC message parser and integrate it with command dispatching
+- [x] Implement a real IRC message parser and integrate it with command dispatching
 - [ ] Preserve trailing parameters exactly, including spaces and CTCP payloads
 
 ## Command execution
