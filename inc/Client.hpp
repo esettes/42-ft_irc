@@ -16,6 +16,8 @@
  * @param username The client's username, provided during registration.
  * @param realname The client's real name, provided during registration.
  * @param passwordAccepted A flag indicating whether the client has successfully provided the correct server password.
+ * @param nicknameReceived A flag indicating whether the client has provided a nickname.
+ * @param usernameReceived A flag indicating whether the client has provided a username.
  * @param registered A flag indicating whether the client has completed the registration process.
  */
 class Client
@@ -28,6 +30,8 @@ class Client
         std::string username;
         std::string realname;
         bool passwordAccepted;
+        bool nicknameReceived;
+        bool usernameReceived;
         bool registered;
         //bool isOperator; //todo: getter, setters
 
@@ -48,7 +52,11 @@ class Client
         bool isReadyToRegister() const;
         bool isRegistered() const;
         bool isPasswordAccepted() const;
+        bool isNicknameReceived() const;
+        bool isUsernameReceived() const;
         void setPasswordAccepted(bool accepted);
+        void setNicknameReceived(bool received);
+        void setUsernameReceived(bool received);
         void setRegistered(bool registered);
 
         void setNickname(const std::string &nickname);

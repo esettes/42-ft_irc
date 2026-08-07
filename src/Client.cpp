@@ -8,6 +8,8 @@ Client::Client(int socketFd)
     username(""), 
     realname(""), 
     passwordAccepted(false), 
+    nicknameReceived(false), 
+    usernameReceived(false), 
     registered(false)
     // isOperator(false)
 {
@@ -25,6 +27,8 @@ Client::Client(const Client &other)
     username(other.username), 
     realname(other.realname), 
     passwordAccepted(other.passwordAccepted), 
+    nicknameReceived(other.nicknameReceived), 
+    usernameReceived(other.usernameReceived), 
     registered(other.registered)
     // isOperator(other.isOperator)
 {
@@ -41,6 +45,8 @@ Client &Client::operator=(const Client &other)
         username = other.username;
         realname = other.realname;
         passwordAccepted = other.passwordAccepted;
+        nicknameReceived = other.nicknameReceived;
+        usernameReceived = other.usernameReceived;
         registered = other.registered;
         // isOperator = other.isOperator;
     }
@@ -74,7 +80,7 @@ const std::string &Client::getOutputBuffer() const
 
 bool Client::isReadyToRegister() const
 {
-    return !nickname.empty() && !username.empty() && !realname.empty() && passwordAccepted;
+    return passwordAccepted && nicknameReceived && usernameReceived;
 }
 
 bool Client::isRegistered() const
@@ -87,9 +93,29 @@ bool Client::isPasswordAccepted() const
     return passwordAccepted;
 }
 
+bool Client::isNicknameReceived() const
+{
+    return nicknameReceived;
+}
+
+bool Client::isUsernameReceived() const
+{
+    return usernameReceived;
+}
+
 void Client::setPasswordAccepted(bool accepted)
 {
     passwordAccepted = accepted;
+}
+
+void Client::setNicknameReceived(bool received)
+{
+    nicknameReceived = received;
+}
+
+void Client::setUsernameReceived(bool received)
+{
+    usernameReceived = received;
 }
 
 void Client::setRegistered(bool registered)

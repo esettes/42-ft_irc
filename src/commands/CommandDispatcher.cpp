@@ -87,6 +87,7 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
 {
     // do something with client and message
     client.setNickname(message.params[0]);
+    client.setNicknameReceived(true);
 }
 
 void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
@@ -94,6 +95,7 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
     // do something with client and message
     client.setUsername(message.params[0]);
     client.setRealname(message.params[3]);
+    client.setUsernameReceived(true);
 }
 
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
