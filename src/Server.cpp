@@ -1,5 +1,6 @@
 #include "Server.hpp"
 #include "Console.hpp"
+#include "MessageParser.hpp"
 
 
 /** por el momento debe:
@@ -459,9 +460,16 @@ void Server::processClientBuffer(Client &client)
         std::cout << Console::CLIENT << " Complete line: fd=" << client.getSocketFd()
             << ", line=\"" << completeLine << "\"" << std::endl;
 
-        /*
-         * Parsing and command dispatching
-         */
+        try
+        {
+            const IrcMessage message = MessageParser::parse(completeLine);
+            dispatchCommand(client, message);
+        }
+        catch (const std::invalid_argument &error)
+        {
+            std::cerr << Console::CLIENT << " Parse error: fd=" << client.getSocketFd()
+                << ", reason=" << error.what() << std::endl;
+        }
     }
 }
 
@@ -506,4 +514,3 @@ Server::~Server()
 
     std::cout << Console::SERVER << " All sockets closed" << std::endl;
 }
-
