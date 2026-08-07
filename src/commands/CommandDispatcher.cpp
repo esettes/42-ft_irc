@@ -98,6 +98,8 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 {
     // do something with client and message
+    // check channel existence, create if not exists, add client to channel
+    // check operator/user and password if needed
     std::string channelName = message.params[0];
     client.setRegistered(true);
 }
