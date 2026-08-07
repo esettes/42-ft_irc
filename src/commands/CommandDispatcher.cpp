@@ -93,6 +93,7 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
 {
     // do something with client and message
     client.setUsername(message.params[0]);
+    client.setRealname(message.params[3]);
 }
 
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)

@@ -9,6 +9,7 @@ Client::Client(int socketFd)
     realname(""), 
     passwordAccepted(false), 
     registered(false)
+    // isOperator(false)
 {
 }
 
@@ -25,6 +26,7 @@ Client::Client(const Client &other)
     realname(other.realname), 
     passwordAccepted(other.passwordAccepted), 
     registered(other.registered)
+    // isOperator(other.isOperator)
 {
 }
 
@@ -40,6 +42,7 @@ Client &Client::operator=(const Client &other)
         realname = other.realname;
         passwordAccepted = other.passwordAccepted;
         registered = other.registered;
+        // isOperator = other.isOperator;
     }
     return *this;
 }
