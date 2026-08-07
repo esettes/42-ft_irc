@@ -269,6 +269,28 @@ void Server::removeClient(std::size_t descriptorIndex)
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)
 {
     dispatcher.execute(client, msg);
+    tryRegisterClient(client);
+}
+
+void Server::tryRegisterClient(Client &client)
+{
+    if (client.isRegistered())
+        return;
+
+    if (!client.isReadyToRegister())
+        return;
+
+    client.setRegistered(true);
+    sendWelcomeMessages(client);
+}
+
+void Server::sendWelcomeMessages(Client &client)
+{
+    const std::string welcomeMessage = ":ircserv 001 " + client.getNickname()
+        + " :Welcome to the IRC Network " + client.getNickname()
+        + "!" + client.getUsername() + "@localhost\r\n";
+
+    queueClientOutput(client, welcomeMessage);
 }
 
 void Server::run()

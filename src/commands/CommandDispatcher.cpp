@@ -50,7 +50,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
     CommandMap::iterator it;
 
     it = cmmds.find(message.getCommand());
-    if (it != cmmds.end())
+    if (it == cmmds.end())
     {
         //server.handleUnknownCommand(client, message);
         return ;
@@ -87,6 +87,7 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
 {
     // do something with client and message
     client.setNickname(message.params[0]);
+    client.setNicknameReceived(true);
 }
 
 void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
@@ -94,13 +95,15 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
     // do something with client and message
     client.setUsername(message.params[0]);
     client.setRealname(message.params[3]);
+    client.setUsernameReceived(true);
 }
 
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 {
     // do something with client and message
+    (void)client;
     std::string channelName = message.params[0];
-    client.setRegistered(true);
+    (void)channelName;
 }
 
 void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)
