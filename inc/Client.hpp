@@ -4,6 +4,7 @@
 #include <string>
 #include <cstddef>
 #include <utility>
+#include <set>
 
 /**
  * @file Client.hpp
@@ -29,7 +30,8 @@ class Client
         std::string realname;
         bool passwordAccepted;
         bool registered;
-        //bool isOperator; //todo: getter, setters
+        std::set<std::string> joinedChannels;
+        bool isOperator;
 
         Client(const Client &other);
         Client &operator=(const Client &other);
@@ -50,6 +52,13 @@ class Client
         bool isPasswordAccepted() const;
         void setPasswordAccepted(bool accepted);
         void setRegistered(bool registered);
+        void setIsOperator(bool isOperator);
+        bool getIsOperator() const;
+
+        void joinChannel(const std::string &channelName);
+        void leaveChannel(const std::string &channelName);
+        bool isInChannel(const std::string &channelName) const;
+        const std::set<std::string> &getJoinedChannels() const;
 
         void setNickname(const std::string &nickname);
         const std::string &getNickname() const;
@@ -61,6 +70,7 @@ class Client
         void removeSentOutput(std::size_t sentByteCount);
 
         bool extractNextLine(std::string &completeLine);
+
 };
 
 #endif
