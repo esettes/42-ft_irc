@@ -50,7 +50,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
     CommandMap::iterator it;
 
     it = cmmds.find(message.getCommand());
-    if (it != cmmds.end())
+    if (it == cmmds.end())
     {
         //server.handleUnknownCommand(client, message);
         return ;
