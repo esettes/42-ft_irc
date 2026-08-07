@@ -4,6 +4,7 @@
 #include <string>
 #include <cstddef>
 #include <utility>
+#include <set>
 
 /**
  * @file Client.hpp
@@ -16,6 +17,8 @@
  * @param username The client's username, provided during registration.
  * @param realname The client's real name, provided during registration.
  * @param passwordAccepted A flag indicating whether the client has successfully provided the correct server password.
+ * @param nicknameReceived A flag indicating whether the client has provided a nickname.
+ * @param usernameReceived A flag indicating whether the client has provided a username.
  * @param registered A flag indicating whether the client has completed the registration process.
  */
 class Client
@@ -28,8 +31,11 @@ class Client
         std::string username;
         std::string realname;
         bool passwordAccepted;
+        bool nicknameReceived;
+        bool usernameReceived;
         bool registered;
-        bool isOperator; //todo: getter, setters
+        std::set<std::string> joinedChannels;
+        bool isOperator;
 
         Client(const Client &other);
         Client &operator=(const Client &other);
@@ -48,8 +54,19 @@ class Client
         bool isReadyToRegister() const;
         bool isRegistered() const;
         bool isPasswordAccepted() const;
+        bool isNicknameReceived() const;
+        bool isUsernameReceived() const;
         void setPasswordAccepted(bool accepted);
+        void setNicknameReceived(bool received);
+        void setUsernameReceived(bool received);
         void setRegistered(bool registered);
+        void setIsOperator(bool isOperator);
+        bool getIsOperator() const;
+
+        void joinChannel(const std::string &channelName);
+        void leaveChannel(const std::string &channelName);
+        bool isInChannel(const std::string &channelName) const;
+        const std::set<std::string> &getJoinedChannels() const;
 
         void setNickname(const std::string &nickname);
         const std::string &getNickname() const;
@@ -61,6 +78,7 @@ class Client
         void removeSentOutput(std::size_t sentByteCount);
 
         bool extractNextLine(std::string &completeLine);
+
 };
 
 #endif
