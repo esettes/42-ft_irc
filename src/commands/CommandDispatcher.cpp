@@ -52,7 +52,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
     it = cmmds.find(message.getCommand());
     if (it != cmmds.end())
     {
-        //server.dhandleUnknownCommand(client, message);
+        //server.handleUnknownCommand(client, message);
         return ;
     }
 

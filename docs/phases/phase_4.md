@@ -8,11 +8,11 @@ Cada vez que el servidor acepte una nueva conexión TCP mediante `accept()`, deb
 
 En esta fase todavía no es necesario implementar por completo los comandos IRC. El objetivo es preparar el modelo de datos que permitirá gestionar posteriormente:
 
-* La recepción y el envío de información.
-* La autenticación mediante contraseña.
-* El registro IRC mediante `NICK` y `USER`.
-* Los canales a los que pertenece el cliente.
-* La desconexión y eliminación segura del cliente.
+* [x] La recepción y el envío de información.
+* [ ] La autenticación mediante contraseña.
+* [ ] El registro IRC mediante `NICK` y `USER`.
+* [ ] Los canales a los que pertenece el cliente (como en slack).
+* [ ] La desconexión y eliminación segura del cliente.
 
 ---
 

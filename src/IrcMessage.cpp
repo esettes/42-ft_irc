@@ -2,6 +2,9 @@
 
 #include <stdexcept>
 
+/**
+ * 
+ */
 IrcMessage::IrcMessage(
         const std::string &msgCmd,
         const std::vector<std::string> &msgParams,

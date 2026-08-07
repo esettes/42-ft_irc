@@ -29,6 +29,7 @@ class Client
         std::string realname;
         bool passwordAccepted;
         bool registered;
+        bool isOperator; //todo: getter, setters
 
         Client(const Client &other);
         Client &operator=(const Client &other);

@@ -52,6 +52,8 @@ int main(int argc, char **argv)
             throw std::runtime_error("Password cannot be empty");
             
         SignalHandler::runSignalHandler();
+        
+        // command dispatcher
 
         Server server(port, password);
         server.run();

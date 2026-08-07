@@ -26,10 +26,10 @@ class Channel
         std::string topic;
         std::string key;
 
-        bool inviteOnly;
-        bool topicRestricted;
-        bool hasUserLimit;
-        std::size_t userLimit;
+        //bool inviteOnly;
+        //bool topicRestricted;
+        // bool hasUserLimit;
+        // std::size_t userLimit;  
 
         std::set<int> memberFds;
         std::set<int> operatorFds;
