@@ -10,12 +10,6 @@ The project consists of developing an IRC server using C++ 98 standard. This mea
 |:---:|:---:|:---:|:---:|:---:|
 |ircserv|Makefile, \*.{h.hpp},\*.cpp, \*.tpp, \*.ipp, an optional configuration file|NAME, all, clean, fclean, re|port (*listening port*), password(*connection password*)|socket, close, setsockopt, getsockname, getprotobyname, gethostbyname, getaddrinfo, freeaddrinfo, bind, connect, listen, accept, htons, htonl, ntohs, ntohl, inet_addr, inet_ntoa, inet_ntop, send, recv, signal, sigaction, sigemptyset, sigfillset, sigaddset, sigdelset, sigismember, lseek, fstat, fcntl, poll (or equivalent)|
 
-### Others
-#### cpplint
-The code should be cpplint compliant to have a minimum of code quality.
-
-#### git hooks
-
 # **Instructions**
 ## Makefile rules
 Run `make help` to know which rules are availabe in this project
