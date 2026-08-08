@@ -109,7 +109,7 @@ SRC_SRCS		= $(addprefix $(SRC_DIR), \
 					MessageParser.cpp \
 					Console.cpp)
 
-TEST_DIR = ./tests/
+TEST_DIR = ./src/tests/
 MSG_PARSER_TEST = message_parser.test
 IRC_MSG_TEST = $(TEST_DIR)irc_message_tests.test
 TEST_SRC = $(TEST_DIR)IrcMessageTests.cpp
