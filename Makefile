@@ -108,6 +108,10 @@ SRC_SRCS		= $(addprefix $(SRC_DIR), \
 					IrcMessage.cpp \
 					Console.cpp)
 
+TEST_DIR = ./tests/
+TEST_BINARY = $(TEST_DIR)irc_message_tests
+TEST_SRC = $(TEST_DIR)IrcMessageTests.cpp
+
 SRCS 			= $(SRC_SRCS)
 
 COMMANDS_DIR	= src/commands/
@@ -172,4 +176,10 @@ help: ## ❓ Show available targets
 		awk 'BEGIN {FS = ":.*## "}; {printf "  $(CYAN)%-25s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 
-.PHONY: all obj clean fclean re help
+test: ## 🧪 Runs the IRC message serialization tests
+	@mkdir -p $(TEST_DIR)
+	@echo " $(YELLOW)$(TEST_SRC)$(RESET)"
+	@$(CXX) $(CXXFLAGS) $(INC) $(TEST_SRC) $(SRC_DIR)IrcMessage.cpp -o $(TEST_BINARY)
+	@$(TEST_BINARY)
+
+.PHONY: all obj clean fclean re help test
