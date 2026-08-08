@@ -1,5 +1,6 @@
 #include "Server.hpp"
 #include "Console.hpp"
+#include "MessageParser.hpp"
 
 
 /** por el momento debe:
@@ -269,6 +270,28 @@ void Server::removeClient(std::size_t descriptorIndex)
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)
 {
     dispatcher.execute(client, msg);
+    tryRegisterClient(client);
+}
+
+void Server::tryRegisterClient(Client &client)
+{
+    if (client.isRegistered())
+        return;
+
+    if (!client.isReadyToRegister())
+        return;
+
+    client.setRegistered(true);
+    sendWelcomeMessages(client);
+}
+
+void Server::sendWelcomeMessages(Client &client)
+{
+    const std::string welcomeMessage = ":ircserv 001 " + client.getNickname()
+        + " :Welcome to the IRC Network " + client.getNickname()
+        + "!" + client.getUsername() + "@localhost\r\n";
+
+    queueClientOutput(client, welcomeMessage);
 }
 
 void Server::run()
@@ -459,9 +482,16 @@ void Server::processClientBuffer(Client &client)
         std::cout << Console::CLIENT << " Complete line: fd=" << client.getSocketFd()
             << ", line=\"" << completeLine << "\"" << std::endl;
 
-        /*
-         * Parsing and command dispatching
-         */
+        try
+        {
+            const IrcMessage message = MessageParser::parse(completeLine);
+            dispatchCommand(client, message);
+        }
+        catch (const std::invalid_argument &error)
+        {
+            std::cerr << Console::CLIENT << " Parse error: fd=" << client.getSocketFd()
+                << ", reason=" << error.what() << std::endl;
+        }
     }
 }
 
@@ -506,4 +536,3 @@ Server::~Server()
 
     std::cout << Console::SERVER << " All sockets closed" << std::endl;
 }
-

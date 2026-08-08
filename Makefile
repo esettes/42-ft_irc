@@ -85,6 +85,7 @@ define RUN_AND_LOG
 endef
 
 NAME =	ircserv
+PARSER_TEST_NAME = message_parser.test
 IRC := $(MAGENTA)[$(NAME)]$(RESET)
 
 .DEFAULT_GOAL := $(NAME)
@@ -106,6 +107,7 @@ SRC_SRCS		= $(addprefix $(SRC_DIR), \
 					Server.cpp \
 					Client.cpp \
 					IrcMessage.cpp \
+					MessageParser.cpp \
 					Console.cpp)
 
 TEST_DIR = ./tests/
@@ -120,6 +122,10 @@ COMMANDS_SRC	= $(addprefix $(COMMANDS_DIR), \
 					CommandDispatcher.cpp)
 
 SRCS			+= $(COMMANDS_SRC)
+
+TESTS_DIR		= src/tests/
+TESTS_SRCS		= $(addprefix $(TESTS_DIR), \
+					MessageParserTest.cpp)
 
 OBJS = $(addprefix $(OBJ_DIR), $(notdir $(SRCS:.cpp=.o)))
 # .d files to avoid recompiling the whole app when a header file is modified
@@ -163,11 +169,19 @@ clean: ## 🧹 Removes the object files
 	$(call RUN_AND_LOG,$(RM) $(OBJ_DIR),$(IRC) $(RED)Object files removed $(RESET))
 fclean: ## 🗑️  Removes both object and executable files
 # 	@$(RM) $(NAME)
-	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME),$(IRC) $(RED)Removed $(RESET))
+	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(PARSER_TEST_NAME),$(IRC) $(RED)Removed $(RESET))
 
 re: ## 🔁 Rebuilds the library
 # 	@echo "$(GREEN)$(NAME) [OK]$(RESET)"
 	$(call RUN_AND_LOG,$(MAKE) $(SILENT) fclean $(NOPRINT); $(MAKE) all $(NOPRINT),$(IRC) $(YELLOW)Rebuilt $(RESET))
+
+test-parser: ## 🧪 Runs message parser test case
+	@$(CXX) $(CXXFLAGS) $(INC) \
+		$(TESTS_SRCS) \
+		$(SRC_DIR)IrcMessage.cpp \
+		$(SRC_DIR)MessageParser.cpp \
+		-o $(PARSER_TEST_NAME)
+	@./$(PARSER_TEST_NAME)
 
 help: ## ❓ Show available targets
 	@$(call print_banner,Available Makefile Targets)
@@ -182,4 +196,4 @@ test: ## 🧪 Runs the IRC message serialization tests
 	@$(CXX) $(CXXFLAGS) $(INC) $(TEST_SRC) $(SRC_DIR)IrcMessage.cpp -o $(TEST_BINARY)
 	@$(TEST_BINARY)
 
-.PHONY: all obj clean fclean re help test
+.PHONY: all obj clean fclean re help test test-parser
