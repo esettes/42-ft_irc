@@ -78,6 +78,23 @@ static void testRejectsInvalidCommand()
     }
 }
 
+static void testRejectsCommandWithControlCharacters()
+{
+    std::vector<std::string> params;
+    params.push_back("value");
+    IrcMessage message("PING\r", params);
+
+    try
+    {
+        message.serialize();
+        expectTrue(false, "serialize should reject commands containing carriage return");
+    }
+    catch (const std::runtime_error &)
+    {
+        expectTrue(true, "serialize rejected invalid command with carriage return");
+    }
+}
+
 static void testRejectsInvalidPrefix()
 {
     std::vector<std::string> params;
@@ -118,6 +135,7 @@ int main()
     testSerializeWithPrefixAndMultipleParameters();
     testSerializeEmptyTrailingParameter();
     testRejectsInvalidCommand();
+    testRejectsCommandWithControlCharacters();
     testRejectsInvalidPrefix();
     testRejectsInvalidParameter();
 
