@@ -9,7 +9,7 @@ envíos parciales. Quedan los siguientes trabajos.
 - [x] Completar la serialización única de `IrcMessage`: prefijo, comando, parámetros, trailing y `\r\n`.
 - [x] Rechazar CR, LF y NUL internos en mensajes generados.
 - [x] Definir un nombre estable para el servidor y guardar hostname o IP de cada cliente.
-- [ ] Centralizar los prefijos `:server` y `:nick!user@host`.
+- [x] Centralizar los prefijos `:server` y `:nick!user@host`.
 - [ ] Centralizar las respuestas numéricas, su formato de tres cifras y el destinatario `*` cuando falte el nick.
 - [ ] Hacer que todos los handlers encolen respuestas y activen `POLLOUT`; nunca escribir directamente ni modificar el buffer sin actualizar `poll()`.
 - [ ] Devolver errores desde el dispatcher en vez de ignorar comandos desconocidos, parámetros ausentes o clientes no registrados.

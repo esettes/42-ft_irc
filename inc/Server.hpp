@@ -74,7 +74,6 @@ class Server
         Client *findClientByNickname(const std::string &nickname);
 
         std::string getReplyTarget(const Client &client) const;
-        std::string getClientPrefix(const Client &client) const;
         Server(const Server &other);
         Server &operator=(const Server &other);
 
@@ -98,7 +97,8 @@ class Server
 
         int getPort() const;
         const std::string &getServerName() const;
-        
+        std::string getServerPrefix() const;
+        std::string getClientPrefix(const Client &client) const;
 
         /* For send parsed commands to the dispatcher */
         void dispatchCommand(Client &client, const IrcMessage &message);

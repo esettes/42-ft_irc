@@ -251,6 +251,16 @@ std::string Server::resolveClientHost(
     return UNKNOWN_CLIENT_HOST;
 }
 
+std::string Server::getServerPrefix() const
+{
+    return ":" + serverName;
+}
+
+std::string Server::getClientPrefix(const Client &client) const
+{
+    return ":" + client.getNickname() + "!" + client.getUsername() + "@" + client.getHost();
+}
+
 bool Server::receiveClientData(std::size_t descriptorIndex)
 {
     const int clientSocketFd = pollFds[descriptorIndex].fd;
@@ -341,9 +351,9 @@ void Server::tryRegisterClient(Client &client)
 
 void Server::sendWelcomeMessages(Client &client)
 {
-    const std::string welcomeMessage = ":" + serverName + " 001 " + client.getNickname()
-        + " :Welcome to the IRC Network " + client.getNickname()
-        + "!" + client.getUsername() + "@" + client.getHost() + "\r\n";
+    const std::string clientPrefix = getClientPrefix(client);
+    const std::string welcomeMessage = getServerPrefix() + " 001 " + client.getNickname()
+        + " :Welcome to the IRC Network " + clientPrefix.substr(1) + "\r\n";
 
     queueClientOutput(client, welcomeMessage);
 }

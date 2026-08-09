@@ -111,6 +111,7 @@ void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &m
     // do something with client and message
     std::string target = message.params[0];
     std::string msg = message.params[1];
-    client.appendToOutputBuffer("Message sent to " + target + ": " + msg);
+    client.appendToOutputBuffer(server.getClientPrefix(client) + " PRIVMSG " + target + " :"
+        + msg + "\r\n");
 
 }
