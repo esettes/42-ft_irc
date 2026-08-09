@@ -1,12 +1,13 @@
 #include "Client.hpp"
 
-Client::Client(int socketFd)
+Client::Client(int socketFd, const std::string &host)
     : socketFd(socketFd), 
     inputBuffer(""), 
     outputBuffer(""), 
     nickname(""), 
     username(""), 
     realname(""), 
+    host(host),
     passwordAccepted(false), 
     nicknameReceived(false), 
     usernameReceived(false), 
@@ -27,6 +28,7 @@ Client::Client(const Client &other)
     nickname(other.nickname), 
     username(other.username), 
     realname(other.realname), 
+    host(other.host),
     passwordAccepted(other.passwordAccepted), 
     nicknameReceived(other.nicknameReceived), 
     usernameReceived(other.usernameReceived), 
@@ -46,6 +48,7 @@ Client &Client::operator=(const Client &other)
         nickname = other.nickname;
         username = other.username;
         realname = other.realname;
+        host = other.host;
         passwordAccepted = other.passwordAccepted;
         nicknameReceived = other.nicknameReceived;
         usernameReceived = other.usernameReceived;
@@ -154,6 +157,11 @@ void Client::setRealname(const std::string &realname)
 const std::string &Client::getRealname() const
 {
     return realname;
+}
+
+const std::string &Client::getHost() const
+{
+    return host;
 }
 
 void Client::setIsOperator(bool isOperator)

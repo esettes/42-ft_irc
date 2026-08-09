@@ -1,6 +1,7 @@
 #include "Server.hpp"
 #include "Console.hpp"
 #include "MessageParser.hpp"
+#include <netdb.h>
 
 
 /** por el momento debe:
@@ -24,6 +25,8 @@ namespace
     const int POLL_TIMEOUT_MS = 1000;
     const std::size_t RECEIVE_BUFFER_SIZE = 4096;
     const std::size_t MAX_SEND_SIZE = 16384;
+    const char *DEFAULT_SERVER_NAME = "irc.42.local";
+    const char *UNKNOWN_CLIENT_HOST = "unknown";
 
     std::runtime_error createSystemError(const std::string &operation, int errorNumber)
     {
@@ -32,7 +35,11 @@ namespace
 }
 
 Server::Server(int port, const std::string &password)
-    : port(port), password(password), listenSocket(INVALID_FD), dispatcher(*this)
+    : port(port),
+      password(password),
+      serverName(DEFAULT_SERVER_NAME),
+      listenSocket(INVALID_FD),
+      dispatcher(*this)
 {
     if (port < 1 || port > 65535)
         throw std::invalid_argument("invalid server port");
@@ -119,7 +126,14 @@ void Server::createListeningSocket()
 
 void Server::acceptClient()
 {
-    const int clientSocketFd = ::accept(listenSocket, NULL, NULL);
+    struct sockaddr_storage clientAddress;
+    std::memset(&clientAddress, 0, sizeof(clientAddress));
+    socklen_t clientAddressLength = sizeof(clientAddress);
+    const int clientSocketFd = ::accept(
+        listenSocket,
+        reinterpret_cast<struct sockaddr *>(&clientAddress),
+        &clientAddressLength
+    );
 
     if (clientSocketFd == INVALID_FD)
     {
@@ -136,7 +150,8 @@ void Server::acceptClient()
     {
         configureSocketAsNonBlocking(clientSocketFd);
 
-        newClient = new Client(clientSocketFd);
+        const std::string clientHost = resolveClientHost(clientAddress, clientAddressLength);
+        newClient = new Client(clientSocketFd, clientHost);
 
         const std::pair<std::map<int, Client *>::iterator, bool
         > insertionResult = clients.insert(std::make_pair(clientSocketFd, newClient));
@@ -166,7 +181,8 @@ void Server::acceptClient()
         throw ;
     }
 
-    std::cout << Console::CLIENT << " Connection accepted: fd=" << clientSocketFd << std::endl;
+    std::cout << Console::CLIENT << " Connection accepted: fd=" << clientSocketFd
+        << ", host=" << newClient->getHost() << std::endl;
 }
 
 /**
@@ -190,11 +206,49 @@ void Server::displayStartupInformation() const
 {
     std::cout
         << "IRC server configuration:" << std::endl
+        << "  Server name: " << serverName << std::endl
         << "  Address: 0.0.0.0" << std::endl
         << "  Port: " << port << std::endl
         << "  Protocol: TCP/IPv4" << std::endl
         << "  Socket mode: non-blocking" << std::endl
         << "  Status: listening" << std::endl;
+}
+
+std::string Server::resolveClientHost(
+    const struct sockaddr_storage &clientAddress,
+    socklen_t clientAddressLength
+) const
+{
+    char hostBuffer[NI_MAXHOST];
+    const struct sockaddr *addressPtr = reinterpret_cast<const struct sockaddr *>(&clientAddress);
+
+    const int reverseLookupResult = ::getnameinfo(
+        addressPtr,
+        clientAddressLength,
+        hostBuffer,
+        sizeof(hostBuffer),
+        NULL,
+        0,
+        NI_NAMEREQD
+    );
+
+    if (reverseLookupResult == 0)
+        return std::string(hostBuffer);
+
+    const int numericLookupResult = ::getnameinfo(
+        addressPtr,
+        clientAddressLength,
+        hostBuffer,
+        sizeof(hostBuffer),
+        NULL,
+        0,
+        NI_NUMERICHOST
+    );
+
+    if (numericLookupResult == 0)
+        return std::string(hostBuffer);
+
+    return UNKNOWN_CLIENT_HOST;
 }
 
 bool Server::receiveClientData(std::size_t descriptorIndex)
@@ -287,9 +341,9 @@ void Server::tryRegisterClient(Client &client)
 
 void Server::sendWelcomeMessages(Client &client)
 {
-    const std::string welcomeMessage = ":ircserv 001 " + client.getNickname()
+    const std::string welcomeMessage = ":" + serverName + " 001 " + client.getNickname()
         + " :Welcome to the IRC Network " + client.getNickname()
-        + "!" + client.getUsername() + "@localhost\r\n";
+        + "!" + client.getUsername() + "@" + client.getHost() + "\r\n";
 
     queueClientOutput(client, welcomeMessage);
 }
@@ -535,4 +589,9 @@ Server::~Server()
     closeAllFds();
 
     std::cout << Console::SERVER << " All sockets closed" << std::endl;
+}
+
+const std::string &Server::getServerName() const
+{
+    return serverName;
 }

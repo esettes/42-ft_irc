@@ -41,6 +41,7 @@ class Server
     private:
         int port;
         std::string password;
+        std::string serverName;
         int listenSocket;
         CommandDispatcher dispatcher;
 
@@ -65,6 +66,10 @@ class Server
         void queueClientOutput(Client &client, const std::string &data);
         bool flushClientOutput(int socketFd);
         void updateClientPollEvents(int socketFd);
+        std::string resolveClientHost(
+            const struct sockaddr_storage &clientAddress,
+            socklen_t clientAddressLength
+        ) const;
 
         Client *findClientByNickname(const std::string &nickname);
 
@@ -92,6 +97,7 @@ class Server
         void stop();
 
         int getPort() const;
+        const std::string &getServerName() const;
         
 
         /* For send parsed commands to the dispatcher */

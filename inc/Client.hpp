@@ -16,6 +16,7 @@
  * @param nickname The client's chosen nickname, which must be unique across the server.
  * @param username The client's username, provided during registration.
  * @param realname The client's real name, provided during registration.
+ * @param host The client's hostname if available, otherwise its IP address.
  * @param passwordAccepted A flag indicating whether the client has successfully provided the correct server password.
  * @param nicknameReceived A flag indicating whether the client has provided a nickname.
  * @param usernameReceived A flag indicating whether the client has provided a username.
@@ -30,6 +31,7 @@ class Client
         std::string nickname;
         std::string username;
         std::string realname;
+        std::string host;
         bool passwordAccepted;
         bool nicknameReceived;
         bool usernameReceived;
@@ -41,7 +43,7 @@ class Client
         Client &operator=(const Client &other);
 
     public:
-        explicit Client(int socketFd);
+        Client(int socketFd, const std::string &host);
         ~Client();
         
         int getSocketFd() const;
@@ -74,6 +76,7 @@ class Client
         const std::string &getUsername() const;
         void setRealname(const std::string &realname);
         const std::string &getRealname() const;
+        const std::string &getHost() const;
 
         void removeSentOutput(std::size_t sentByteCount);
 
