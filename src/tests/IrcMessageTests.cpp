@@ -55,7 +55,7 @@ static void testSerializeEmptyTrailingParameter()
 {
     std::vector<std::string> params;
     params.push_back("");
-    IrcMessage message("PING", params);
+    IrcMessage message("PING", params, "", true);
 
     expectEqual(message.serialize(), "PING :\r\n",
         "serialize should preserve an explicit empty trailing parameter");
@@ -129,6 +129,77 @@ static void testRejectsInvalidParameter()
     }
 }
 
+static void expectSerializationFailure(
+    const IrcMessage &message,
+    const std::string &failureMessage
+)
+{
+    try
+    {
+        message.serialize();
+        expectTrue(false, failureMessage);
+    }
+    catch (const std::runtime_error &)
+    {
+    }
+}
+
+static void testRejectsInvalidMiddleParameters()
+{
+    std::vector<std::string> parameters;
+
+    parameters.push_back("invalid parameter");
+    parameters.push_back("last");
+
+    expectSerializationFailure(
+        IrcMessage("COMMAND", parameters),
+        "serialize should reject middle parameters containing spaces"
+    );
+
+    parameters.clear();
+    parameters.push_back("");
+    parameters.push_back("last");
+
+    expectSerializationFailure(
+        IrcMessage("COMMAND", parameters),
+        "serialize should reject empty middle parameters"
+    );
+
+    parameters.clear();
+    parameters.push_back(":invalid");
+    parameters.push_back("last");
+
+    expectSerializationFailure(
+        IrcMessage("COMMAND", parameters),
+        "serialize should reject middle parameters starting with a colon"
+    );
+}
+
+static void testPreservesColonAtStartOfTrailingParameter()
+{
+    std::vector<std::string> parameters;
+    parameters.push_back(":literal");
+
+    const IrcMessage message("NOTICE", parameters);
+
+    expectEqual(
+        message.serialize(),
+        "NOTICE ::literal\r\n",
+        "serialize should preserve a colon belonging to trailing content"
+    );
+}
+
+static void testRejectsTrailingWithoutParameter()
+{
+    const std::vector<std::string> parameters;
+    const IrcMessage message("QUIT", parameters, "", true);
+
+    expectSerializationFailure(
+        message,
+        "serialize should reject trailing state without a parameter"
+    );
+}
+
 int main()
 {
     testSerializeWithTrailingParameter();
@@ -138,6 +209,9 @@ int main()
     testRejectsCommandWithControlCharacters();
     testRejectsInvalidPrefix();
     testRejectsInvalidParameter();
+    testRejectsInvalidMiddleParameters();
+    testPreservesColonAtStartOfTrailingParameter();
+    testRejectsTrailingWithoutParameter();
 
     if (g_failures != 0)
     {

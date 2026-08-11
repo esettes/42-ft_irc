@@ -35,7 +35,7 @@ int main()
     }
 
     const IrcMessage explicitTrailingMessage =
-    MessageParser::parse("QUIT :bye");
+        MessageParser::parse("QUIT :bye");
 
     if (!explicitTrailingMessage.hasTrailingParameter)
     {
