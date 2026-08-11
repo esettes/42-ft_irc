@@ -45,6 +45,7 @@ IrcMessage MessageParser::parse(const std::string &line)
     if (cursor == lineLength)
         throw std::invalid_argument("empty IRC line");
 
+    bool hasTrailingParameter = false;
     std::string prefix;
     if (line[cursor] == ':')
     {
@@ -86,6 +87,7 @@ IrcMessage MessageParser::parse(const std::string &line)
 
         if (line[cursor] == ':')
         {
+            hasTrailingParameter = true;
             params.push_back(line.substr(cursor + 1));
             break;
         }
@@ -97,5 +99,5 @@ IrcMessage MessageParser::parse(const std::string &line)
         params.push_back(line.substr(paramStart, cursor - paramStart));
     }
 
-    return IrcMessage(command, params, prefix);
+    return IrcMessage(command, params, prefix, hasTrailingParameter);
 }
