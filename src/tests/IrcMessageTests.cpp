@@ -144,6 +144,42 @@ static void expectSerializationFailure(
     }
 }
 
+static void testRejectsPrefixContainingSpace()
+{
+    std::vector<std::string> params;
+    params.push_back("value");
+
+    expectSerializationFailure(
+        IrcMessage("PING", params, "bad prefix"),
+        "serialize should reject prefixes containing spaces"
+    );
+}
+
+static void testRejectsPrefixStartingWithColon()
+{
+    std::vector<std::string> params;
+    params.push_back("value");
+
+    expectSerializationFailure(
+        IrcMessage("PING", params, ":badprefix"),
+        "serialize should reject prefixes starting with a colon"
+    );
+}
+
+static void testKeepsTabInsideRegularParameter()
+{
+    std::vector<std::string> params;
+    params.push_back("value\tpart");
+
+    const IrcMessage message("COMMAND", params);
+
+    expectEqual(
+        message.serialize(),
+        "COMMAND value\tpart\r\n",
+        "serialize should not treat tabs as IRC parameter separators"
+    );
+}
+
 static void testRejectsInvalidMiddleParameters()
 {
     std::vector<std::string> parameters;
@@ -212,6 +248,9 @@ int main()
     testRejectsInvalidMiddleParameters();
     testPreservesColonAtStartOfTrailingParameter();
     testRejectsTrailingWithoutParameter();
+    testRejectsPrefixContainingSpace();
+    testRejectsPrefixStartingWithColon();
+    testKeepsTabInsideRegularParameter();
 
     if (g_failures != 0)
     {

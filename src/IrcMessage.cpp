@@ -77,7 +77,7 @@ std::string IrcMessage::serialize() const
 
     if (!prefix.empty())
     {
-        validateField(prefix, "prefix");
+        validatePrefix(prefix);
         result += ':';
         result += prefix;
         result += ' ';
@@ -97,8 +97,7 @@ std::string IrcMessage::serialize() const
         const bool requiresTrailingMarker =
             param.empty()
             || startsWithColon
-            || param.find(' ') != std::string::npos
-            || param.find('\t') != std::string::npos;
+            || param.find(' ') != std::string::npos;
         const bool serializeAsTrailing =
             isLastParameter
             && (hasTrailingParameter || requiresTrailingMarker);
