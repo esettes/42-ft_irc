@@ -30,15 +30,17 @@ namespace
 IrcMessage::IrcMessage(
         const std::string &msgCmd,
         const std::vector<std::string> &msgParams,
-        const std::string &msgPrefix
+        const std::string &msgPrefix,
+        bool messageHasTrailingParameter
         )
         :   prefix(msgPrefix),
             cmd(msgCmd),
-            params(msgParams)
+            params(msgParams),
+            hasTrailingParameter(messageHasTrailingParameter)
 {
 }
 
-IrcMessage::IrcMessage() : prefix(""), cmd(""), params(std::vector<std::string>()) {}
+IrcMessage::IrcMessage() : prefix(""), cmd(""), params(std::vector<std::string>()), hasTrailingParameter(false) {}
 
 std::string IrcMessage::serialize() const
 {
@@ -54,6 +56,11 @@ std::string IrcMessage::serialize() const
         result += ' ';
     }
 
+    if (hasTrailingParameter && params.empty())
+    {
+        throw std::runtime_error("Trailing parameter declared without parameters");
+    }
+
     result += cmd;
 
     for (std::size_t i = 0; i < params.size(); ++i)
@@ -62,10 +69,14 @@ std::string IrcMessage::serialize() const
 
         validateField(param, "parameter");
 
-        if (i + 1 == params.size()
-            && (param.empty()
-                || param.find(' ') != std::string::npos
-                || param.find('\t') != std::string::npos))
+        const bool isLastParameter = i + 1 == params.size();
+        const bool requiresTrailingMarker =
+            param.empty()
+            || param.find(' ') != std::string::npos
+            || param.find('\t') != std::string::npos;
+
+        if (isLastParameter
+            && (hasTrailingParameter || requiresTrailingMarker))
         {
             result += " :";
             result += param;
