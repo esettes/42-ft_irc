@@ -169,7 +169,7 @@ clean: ## 🧹 Removes the object files
 	$(call RUN_AND_LOG,$(RM) $(OBJ_DIR),$(IRC) $(RED)Object files removed $(RESET))
 fclean: ## 🗑️  Removes both object and executable files
 # 	@$(RM) $(NAME)
-	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST),$(IRC) $(RED)Removed $(RESET))
+	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST),$(IRC) $(RED)Removed $(RESET))
 
 re: ## 🔁 Rebuilds the library
 # 	@echo "$(GREEN)$(NAME) [OK]$(RESET)"
