@@ -22,6 +22,28 @@ namespace
             || field.find('\0') != std::string::npos)
             throw std::runtime_error("Invalid " + fieldName);
     }
+
+    void validatePrefix(const std::string &prefix)
+    {
+        validateField(prefix, "prefix");
+
+        if (prefix.find(' ') != std::string::npos || prefix[0] == ':')
+        {
+            throw std::runtime_error("Invalid prefix");
+        }
+    }
+
+    void validateMiddleParameter(const std::string &parameter)
+    {
+        validateField(parameter, "middle parameter");
+
+        if (parameter.empty()
+            || parameter.find(' ') != std::string::npos
+            || parameter[0] == ':')
+        {
+            throw std::runtime_error("Invalid middle parameter");
+        }
+    }
 }
 
 /**
@@ -48,17 +70,17 @@ std::string IrcMessage::serialize() const
 
     validateCommand(cmd);
 
+    if (hasTrailingParameter && params.empty())
+    {
+        throw std::runtime_error("Trailing parameter declared without parameters");
+    }
+
     if (!prefix.empty())
     {
         validateField(prefix, "prefix");
         result += ':';
         result += prefix;
         result += ' ';
-    }
-
-    if (hasTrailingParameter && params.empty())
-    {
-        throw std::runtime_error("Trailing parameter declared without parameters");
     }
 
     result += cmd;
@@ -70,19 +92,26 @@ std::string IrcMessage::serialize() const
         validateField(param, "parameter");
 
         const bool isLastParameter = i + 1 == params.size();
+        const bool startsWithColon =
+            !param.empty() && param[0] == ':';
         const bool requiresTrailingMarker =
             param.empty()
+            || startsWithColon
             || param.find(' ') != std::string::npos
             || param.find('\t') != std::string::npos;
+        const bool serializeAsTrailing =
+            isLastParameter
+            && (hasTrailingParameter || requiresTrailingMarker);
 
-        if (isLastParameter
-            && (hasTrailingParameter || requiresTrailingMarker))
+        if (serializeAsTrailing)
         {
+            validateField(param, "trailing parameter");
             result += " :";
             result += param;
         }
         else
         {
+            validateMiddleParameter(param);
             result += ' ';
             result += param;
         }
