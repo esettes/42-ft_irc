@@ -347,7 +347,7 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         client->appendToInputBuffer(receivedData);
 
         /* Temporary phase 3 echo test. */
-        //queueClientOutput(*client, receivedData);
+        //queueMessage(*client, receivedData);
 
         std::cout << Console::CLIENT << " Received " << receivedBytes << " bytes: fd=" << clientSocketFd 
             << ", buffered=" << client->getInputBuffer().size() << std::endl;
@@ -415,13 +415,12 @@ void Server::tryRegisterClient(Client &client)
 void Server::sendWelcomeMessages(Client &client)
 {
     const std::string clientPrefix = getClientPrefix(client);
-    const std::string welcomeMessage = buildNumericReply(
-        NumericReply::RPL_WELCOME,
+
+    queueNumericReply(
         client,
+        NumericReply::RPL_WELCOME,
         "Welcome to the IRC Network " + clientPrefix.substr(1)
     );
-
-    queueClientOutput(client, welcomeMessage);
 }
 
 void Server::run()
@@ -587,17 +586,52 @@ bool Server::flushClientOutput(int socketFd)
 }
 
 /**
- * @brief Queues data to be sent to a client.
- * Appends the specified data to the client's output buffer.
- * Updates the poll events for the client's socket to include POLLOUT.
+ * @brief Queues a complete IRC message for non-blocking delivery.
+ * Appends the message to the client's output buffer and enables POLLOUT.
+ * Handlers must use this instead of writing to the buffer or calling send().
  */
-void Server::queueClientOutput(Client &client, const std::string &data)
+void Server::queueMessage(Client &client, const std::string &message)
 {
-    if (data.empty())
+    if (message.empty())
         return;
 
-    client.appendToOutputBuffer(data);
+    client.appendToOutputBuffer(message);
     updateClientPollEvents(client.getSocketFd());
+}
+
+void Server::queueNumericReply(
+    Client &client,
+    int numericCode,
+    const std::string &trailingMessage
+)
+{
+    queueMessage(client, buildNumericReply(numericCode, client, trailingMessage));
+}
+
+void Server::queueNumericReply(
+    Client &client,
+    int numericCode,
+    const std::string &parameter,
+    const std::string &trailingMessage
+)
+{
+    queueMessage(
+        client,
+        buildNumericReply(numericCode, client, parameter, trailingMessage)
+    );
+}
+
+void Server::queueNumericReply(
+    Client &client,
+    int numericCode,
+    const std::vector<std::string> &parameters,
+    const std::string &trailingMessage
+)
+{
+    queueMessage(
+        client,
+        buildNumericReply(numericCode, client, parameters, trailingMessage)
+    );
 }
 
 void Server::processClientBuffer(Client &client)

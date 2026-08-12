@@ -24,6 +24,8 @@
  */
 class Client
 {
+    friend class Server;
+
     private:
         int socketFd;
         std::string inputBuffer;
@@ -42,6 +44,9 @@ class Client
         Client(const Client &other);
         Client &operator=(const Client &other);
 
+        void appendToOutputBuffer(const std::string &data);
+        void removeSentOutput(std::size_t sentByteCount);
+
     public:
         Client(int socketFd, const std::string &host);
         ~Client();
@@ -50,7 +55,6 @@ class Client
 
         void appendToInputBuffer(const std::string &data);
         const std::string &getInputBuffer() const;
-        void appendToOutputBuffer(const std::string &data);
         const std::string &getOutputBuffer() const;
 
         bool isReadyToRegister() const;
@@ -77,8 +81,6 @@ class Client
         void setRealname(const std::string &realname);
         const std::string &getRealname() const;
         const std::string &getHost() const;
-
-        void removeSentOutput(std::size_t sentByteCount);
 
         bool extractNextLine(std::string &completeLine);
 

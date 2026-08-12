@@ -64,7 +64,6 @@ class Server
         void tryRegisterClient(Client &client);
         void sendWelcomeMessages(Client &client);
 
-        void queueClientOutput(Client &client, const std::string &data);
         bool flushClientOutput(int socketFd);
         void updateClientPollEvents(int socketFd);
         std::string resolveClientHost(
@@ -111,6 +110,25 @@ class Server
             const std::vector<std::string> &parameters,
             const std::string &trailingMessage
         ) const;
+
+        void queueMessage(Client &client, const std::string &message);
+        void queueNumericReply(
+            Client &client,
+            int numericCode,
+            const std::string &trailingMessage
+        );
+        void queueNumericReply(
+            Client &client,
+            int numericCode,
+            const std::string &parameter,
+            const std::string &trailingMessage
+        );
+        void queueNumericReply(
+            Client &client,
+            int numericCode,
+            const std::vector<std::string> &parameters,
+            const std::string &trailingMessage
+        );
 
         /* For send parsed commands to the dispatcher */
         void dispatchCommand(Client &client, const IrcMessage &message);

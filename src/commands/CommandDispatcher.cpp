@@ -108,10 +108,11 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 
 void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)
 {
-    // do something with client and message
-    std::string target = message.params[0];
-    std::string msg = message.params[1];
-    client.appendToOutputBuffer(server.getClientPrefix(client) + " PRIVMSG " + target + " :"
-        + msg + "\r\n");
+    const std::string &target = message.params[0];
+    const std::string &msg = message.params[1];
 
+    server.queueMessage(
+        client,
+        server.getClientPrefix(client) + " PRIVMSG " + target + " :" + msg + "\r\n"
+    );
 }
