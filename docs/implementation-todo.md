@@ -12,7 +12,7 @@ envíos parciales. Quedan los siguientes trabajos.
 - [x] Centralizar los prefijos `:server` y `:nick!user@host`.
 - [x] Centralizar las respuestas numéricas, su formato de tres cifras y el destinatario `*` cuando falte el nick.
 - [x] Hacer que todos los handlers encolen respuestas y activen `POLLOUT`; nunca escribir directamente ni modificar el buffer sin actualizar `poll()`.
-- [ ] Devolver errores desde el dispatcher en vez de ignorar comandos desconocidos, parámetros ausentes o clientes no registrados.
+- [x] Devolver errores desde el dispatcher en vez de ignorar comandos desconocidos, parámetros ausentes o clientes no registrados.
 - [ ] Implementar los numerics documentados: `001–005`, `324`, `331`, `332`, `341`, `353`, `366`, `401`, `403`, `404`, `409`, `411`, `412`, `421`, `431`, `432`, `433`, `441`, `442`, `443`, `451`, `461`, `462`, `464`, `471`, `472`, `473`, `475` y `482`.
 - [ ] Limitar cada línea IRC a 512 bytes, incluyendo `\r\n`.
 - [ ] Limitar los buffers de entrada y salida; desconectar limpiamente clientes abusivos o demasiado lentos.

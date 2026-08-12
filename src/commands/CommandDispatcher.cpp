@@ -52,21 +52,36 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
     it = cmmds.find(message.getCommand());
     if (it == cmmds.end())
     {
-        //server.handleUnknownCommand(client, message);
-        return ;
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_UNKNOWNCOMMAND,
+            message.getCommand(),
+            "Unknown command"
+        );
+        return;
     }
 
     const CommandDefinition &definition = it->second;
-    if (message.params.size() < definition.minParams)
-    {
-        // server.handleNotEnoughParams(client, message);
-        return ;
-    }
 
     if (definition.requiresRegistration && !client.isRegistered())
     {
-        // server.handleNotRegistered(client, message);
-        return ;
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTREGISTERED,
+            "You have not registered"
+        );
+        return;
+    }
+
+    if (message.params.size() < definition.minParams)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            "Not enough parameters"
+        );
+        return;
     }
 
     (this->*(definition.handler))(client, message);
