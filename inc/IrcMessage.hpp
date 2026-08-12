@@ -3,6 +3,13 @@
 
 #include <string>
 #include <vector>
+#include <cstddef>
+
+/**
+ * IRC messages are limited to 512 bytes including the terminating CR-LF.
+ * @see RFC 1459 / RFC 2812
+ */
+const std::size_t IRC_MAX_MESSAGE_LENGTH = 512;
 
 /**
  * @file IrcMessage.hpp

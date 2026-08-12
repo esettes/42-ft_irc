@@ -59,7 +59,7 @@ class Server
         bool receiveClientData(std::size_t descriptorIndex);
         void removeClient(std::size_t descriptorIndex);
 
-        void processClientBuffer(Client &client);
+        bool processClientBuffer(Client &client);
 
         void tryRegisterClient(Client &client);
         void sendWelcomeMessages(Client &client);

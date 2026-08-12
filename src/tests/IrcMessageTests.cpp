@@ -236,6 +236,18 @@ static void testRejectsTrailingWithoutParameter()
     );
 }
 
+static void testRejectsMessageExceedingMaxLength()
+{
+    std::vector<std::string> params;
+    params.push_back(std::string(IRC_MAX_MESSAGE_LENGTH, 'A'));
+    const IrcMessage message("PRIVMSG", params, "nick!user@host", true);
+
+    expectSerializationFailure(
+        message,
+        "serialize should reject messages longer than 512 bytes including CRLF"
+    );
+}
+
 int main()
 {
     testSerializeWithTrailingParameter();
@@ -251,6 +263,7 @@ int main()
     testRejectsPrefixContainingSpace();
     testRejectsPrefixStartingWithColon();
     testKeepsTabInsideRegularParameter();
+    testRejectsMessageExceedingMaxLength();
 
     if (g_failures != 0)
     {

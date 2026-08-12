@@ -117,6 +117,10 @@ std::string IrcMessage::serialize() const
     }
 
     result += "\r\n";
+
+    if (result.size() > IRC_MAX_MESSAGE_LENGTH)
+        throw std::runtime_error("IRC message exceeds 512 bytes");
+
     return result;
 }
 

@@ -48,6 +48,13 @@ class Client
         void removeSentOutput(std::size_t sentByteCount);
 
     public:
+        enum LineReadStatus
+        {
+            LINE_INCOMPLETE = 0,
+            LINE_COMPLETE = 1,
+            LINE_TOO_LONG = -1
+        };
+
         Client(int socketFd, const std::string &host);
         ~Client();
         
@@ -82,7 +89,7 @@ class Client
         const std::string &getRealname() const;
         const std::string &getHost() const;
 
-        bool extractNextLine(std::string &completeLine);
+        LineReadStatus extractNextLine(std::string &completeLine);
 
 };
 

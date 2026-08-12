@@ -377,8 +377,7 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         std::cout << Console::CLIENT << " Received " << receivedBytes << " bytes: fd=" << clientSocketFd 
             << ", buffered=" << client->getInputBuffer().size() << std::endl;
 
-        processClientBuffer(*client);
-        return true;
+        return processClientBuffer(*client);
     }
 
     if (receivedBytes == 0)
@@ -650,6 +649,9 @@ void Server::queueMessage(Client &client, const std::string &message)
     if (message.empty())
         return;
 
+    if (message.size() > IRC_MAX_MESSAGE_LENGTH)
+        throw std::runtime_error("IRC message exceeds 512 bytes");
+
     client.appendToOutputBuffer(message);
     updateClientPollEvents(client.getSocketFd());
 }
@@ -698,12 +700,25 @@ void Server::queueNumericReply(
     queueMessage(client, buildNumericReply(numericCode, client, parameters));
 }
 
-void Server::processClientBuffer(Client &client)
+bool Server::processClientBuffer(Client &client)
 {
     std::string completeLine;
 
-    while (client.extractNextLine(completeLine))
+    while (true)
     {
+        const Client::LineReadStatus status = client.extractNextLine(completeLine);
+
+        if (status == Client::LINE_INCOMPLETE)
+            return true;
+
+        if (status == Client::LINE_TOO_LONG)
+        {
+            std::cerr << Console::CLIENT << " IRC line exceeds "
+                << IRC_MAX_MESSAGE_LENGTH << " bytes: fd=" << client.getSocketFd()
+                << std::endl;
+            return false;
+        }
+
         if (completeLine.empty())
             continue;
 

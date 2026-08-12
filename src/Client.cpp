@@ -1,4 +1,5 @@
 #include "Client.hpp"
+#include "IrcMessage.hpp"
 
 Client::Client(int socketFd, const std::string &host)
     : socketFd(socketFd), 
@@ -206,26 +207,34 @@ const std::set<std::string> &Client::getJoinedChannels() const
 }
 
 /**
- * @brief Extracts the next complete line from the input buffer.
- * A complete line is a sequence of characters ending with a newline character ('\n').
- * If a complete line is found, it is assigned to the provided string reference and removed from
- * the input buffer.
+ * @brief Extracts the next complete IRC line from the input buffer.
+ * A complete line ends with LF, optionally preceded by CR.
+ * The extracted content excludes the terminator.
+ * Returns LINE_TOO_LONG when the pending or complete line would exceed
+ * IRC_MAX_MESSAGE_LENGTH bytes including the terminator.
  */
-bool Client::extractNextLine(std::string &completeLine)
+Client::LineReadStatus Client::extractNextLine(std::string &completeLine)
 {
-    const std::string::size_type pos = inputBuffer.find('\n');
+    const std::string::size_type newlinePos = inputBuffer.find('\n');
 
-    if (pos == std::string::npos)
-        return false;
+    if (newlinePos == std::string::npos)
+    {
+        // Content alone cannot leave room for CR-LF within the 512-byte limit.
+        if (inputBuffer.size() > IRC_MAX_MESSAGE_LENGTH - 2)
+            return LINE_TOO_LONG;
+        return LINE_INCOMPLETE;
+    }
 
-    std::string::size_type len = pos;
+    const std::size_t totalLength = newlinePos + 1;
+    if (totalLength > IRC_MAX_MESSAGE_LENGTH)
+        return LINE_TOO_LONG;
 
-    if (len > 0 && inputBuffer[len - 1] == '\r')
-        --len;
+    std::string::size_type contentLength = newlinePos;
+    if (contentLength > 0 && inputBuffer[contentLength - 1] == '\r')
+        --contentLength;
 
-    completeLine.assign(inputBuffer, 0, len);
+    completeLine.assign(inputBuffer, 0, contentLength);
+    inputBuffer.erase(0, totalLength);
 
-    inputBuffer.erase(0, pos + 1);
-
-    return true;
+    return LINE_COMPLETE;
 }
