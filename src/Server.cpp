@@ -324,6 +324,31 @@ std::string Server::buildNumericReply(
     return reply.serialize();
 }
 
+std::string Server::buildNumericReply(
+    int numericCode,
+    const Client &client,
+    const std::vector<std::string> &parameters
+) const
+{
+    std::vector<std::string> replyParameters;
+
+    replyParameters.push_back(getReplyTarget(client));
+    replyParameters.insert(
+        replyParameters.end(),
+        parameters.begin(),
+        parameters.end()
+    );
+
+    const IrcMessage reply(
+        NumericReply::formatCode(numericCode),
+        replyParameters,
+        serverName,
+        false
+    );
+
+    return reply.serialize();
+}
+
 bool Server::receiveClientData(std::size_t descriptorIndex)
 {
     const int clientSocketFd = pollFds[descriptorIndex].fd;
@@ -414,12 +439,42 @@ void Server::tryRegisterClient(Client &client)
 
 void Server::sendWelcomeMessages(Client &client)
 {
-    const std::string clientPrefix = getClientPrefix(client);
+    const std::string clientIdentity = getClientPrefix(client).substr(1);
 
     queueNumericReply(
         client,
         NumericReply::RPL_WELCOME,
-        "Welcome to the IRC Network " + clientPrefix.substr(1)
+        NumericReply::welcomeMessage(clientIdentity)
+    );
+
+    queueNumericReply(
+        client,
+        NumericReply::RPL_YOURHOST,
+        NumericReply::yourHostMessage(serverName)
+    );
+
+    queueNumericReply(
+        client,
+        NumericReply::RPL_CREATED,
+        NumericReply::MSG_CREATED
+    );
+
+    std::vector<std::string> myInfoParameters;
+    myInfoParameters.push_back(serverName);
+    myInfoParameters.push_back(NumericReply::SERVER_VERSION);
+    myInfoParameters.push_back(NumericReply::AVAILABLE_USER_MODES);
+    myInfoParameters.push_back(NumericReply::AVAILABLE_CHANNEL_MODES);
+    queueNumericReply(client, NumericReply::RPL_MYINFO, myInfoParameters);
+
+    std::vector<std::string> isupportParameters;
+    isupportParameters.push_back(NumericReply::ISUPPORT_CHANTYPES);
+    isupportParameters.push_back(NumericReply::ISUPPORT_PREFIX);
+    isupportParameters.push_back(NumericReply::ISUPPORT_CHANMODES);
+    queueNumericReply(
+        client,
+        NumericReply::RPL_ISUPPORT,
+        isupportParameters,
+        NumericReply::MSG_ISUPPORT
     );
 }
 
@@ -632,6 +687,15 @@ void Server::queueNumericReply(
         client,
         buildNumericReply(numericCode, client, parameters, trailingMessage)
     );
+}
+
+void Server::queueNumericReply(
+    Client &client,
+    int numericCode,
+    const std::vector<std::string> &parameters
+)
+{
+    queueMessage(client, buildNumericReply(numericCode, client, parameters));
 }
 
 void Server::processClientBuffer(Client &client)

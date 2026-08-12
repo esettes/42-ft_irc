@@ -110,6 +110,11 @@ class Server
             const std::vector<std::string> &parameters,
             const std::string &trailingMessage
         ) const;
+        std::string buildNumericReply(
+            int numericCode,
+            const Client &client,
+            const std::vector<std::string> &parameters
+        ) const;
 
         void queueMessage(Client &client, const std::string &message);
         void queueNumericReply(
@@ -128,6 +133,11 @@ class Server
             int numericCode,
             const std::vector<std::string> &parameters,
             const std::string &trailingMessage
+        );
+        void queueNumericReply(
+            Client &client,
+            int numericCode,
+            const std::vector<std::string> &parameters
         );
 
         /* For send parsed commands to the dispatcher */

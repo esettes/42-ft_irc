@@ -56,7 +56,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
             client,
             NumericReply::ERR_UNKNOWNCOMMAND,
             message.getCommand(),
-            "Unknown command"
+            NumericReply::MSG_UNKNOWNCOMMAND
         );
         return;
     }
@@ -68,7 +68,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTREGISTERED,
-            "You have not registered"
+            NumericReply::MSG_NOTREGISTERED
         );
         return;
     }
@@ -79,7 +79,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            "Not enough parameters"
+            NumericReply::MSG_NEEDMOREPARAMS
         );
         return;
     }
