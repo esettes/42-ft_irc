@@ -261,6 +261,56 @@ std::string Server::getClientPrefix(const Client &client) const
     return ":" + client.getNickname() + "!" + client.getUsername() + "@" + client.getHost();
 }
 
+std::string Server::normalizeNickname(const std::string &nickname) const
+{
+    return IrcCasemap::normalize(nickname);
+}
+
+std::string Server::normalizeChannelName(const std::string &channelName) const
+{
+    return IrcCasemap::normalize(channelName);
+}
+
+Client *Server::findClientByNickname(const std::string &nickname)
+{
+    const std::string normalizedNickname = normalizeNickname(nickname);
+
+    if (normalizedNickname.empty())
+        return NULL;
+
+    std::map<int, Client *>::iterator clientIterator = clients.begin();
+
+    while (clientIterator != clients.end())
+    {
+        Client *client = clientIterator->second;
+
+        if (client->isNicknameReceived()
+            && normalizeNickname(client->getNickname()) == normalizedNickname)
+        {
+            return client;
+        }
+        ++clientIterator;
+    }
+
+    return NULL;
+}
+
+Channel *Server::findChannel(const std::string &channelName)
+{
+    const std::string normalizedChannelName = normalizeChannelName(channelName);
+
+    if (normalizedChannelName.empty())
+        return NULL;
+
+    std::map<std::string, Channel>::iterator channelIterator =
+        channels.find(normalizedChannelName);
+
+    if (channelIterator == channels.end())
+        return NULL;
+
+    return &channelIterator->second;
+}
+
 std::string Server::getReplyTarget(const Client &client) const
 {
     if (client.getNickname().empty())
@@ -476,6 +526,7 @@ void Server::sendWelcomeMessages(Client &client)
     isupportParameters.push_back(NumericReply::ISUPPORT_CHANTYPES);
     isupportParameters.push_back(NumericReply::ISUPPORT_PREFIX);
     isupportParameters.push_back(NumericReply::ISUPPORT_CHANMODES);
+    isupportParameters.push_back(NumericReply::ISUPPORT_CASEMAPPING);
     queueNumericReply(
         client,
         NumericReply::RPL_ISUPPORT,

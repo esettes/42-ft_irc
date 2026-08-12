@@ -21,6 +21,8 @@
  * @param nicknameReceived A flag indicating whether the client has provided a nickname.
  * @param usernameReceived A flag indicating whether the client has provided a username.
  * @param registered A flag indicating whether the client has completed the registration process.
+ * @param joinedChannels Normalized channel keys for membership lookups.
+ * @param isOperator Whether the client has global operator status (legacy; per-channel ops live on Channel).
  */
 class Client
 {

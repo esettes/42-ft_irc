@@ -82,6 +82,7 @@ namespace NumericReply
     const char *const ISUPPORT_CHANTYPES = "CHANTYPES=#";
     const char *const ISUPPORT_PREFIX = "PREFIX=(o)@";
     const char *const ISUPPORT_CHANMODES = "CHANMODES=,k,l,it";
+    const char *const ISUPPORT_CASEMAPPING = "CASEMAPPING=rfc1459";
 
     /* Version / mode tokens for RPL_MYINFO */
     const char *const SERVER_VERSION = "1.0";

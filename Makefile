@@ -106,13 +106,16 @@ SRC_SRCS		= $(addprefix $(SRC_DIR), \
 					Server.cpp \
 					Client.cpp \
 					IrcMessage.cpp \
+					IrcCasemap.cpp \
 					MessageParser.cpp \
 					Console.cpp)
 
 TEST_DIR = ./src/tests/
 MSG_PARSER_TEST = message_parser.test
 IRC_MSG_TEST = $(TEST_DIR)irc_message_tests.test
+CASEMAP_TEST = $(TEST_DIR)irc_casemap_tests.test
 TEST_SRC = $(TEST_DIR)IrcMessageTests.cpp
+CASEMAP_TEST_SRC = $(TEST_DIR)IrcCasemapTests.cpp
 
 SRCS 			= $(SRC_SRCS)
 
@@ -169,7 +172,7 @@ clean: ## 🧹 Removes the object files
 	$(call RUN_AND_LOG,$(RM) $(OBJ_DIR),$(IRC) $(RED)Object files removed $(RESET))
 fclean: ## 🗑️  Removes both object and executable files
 # 	@$(RM) $(NAME)
-	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST),$(IRC) $(RED)Removed $(RESET))
+	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST) $(CASEMAP_TEST),$(IRC) $(RED)Removed $(RESET))
 
 re: ## 🔁 Rebuilds the library
 # 	@echo "$(GREEN)$(NAME) [OK]$(RESET)"
@@ -190,10 +193,13 @@ test-parser: ## 🧪 Runs message parser test case
 		-o $(MSG_PARSER_TEST)
 	@./$(MSG_PARSER_TEST)
 
-test: ## 🧪 Runs the IRC message serialization tests
+test: ## 🧪 Runs the IRC message serialization and casemap tests
 	@mkdir -p $(TEST_DIR)
 	@echo " $(YELLOW)$(TEST_SRC)$(RESET)"
 	@$(CXX) $(CXXFLAGS) $(INC) $(TEST_SRC) $(SRC_DIR)IrcMessage.cpp -o $(IRC_MSG_TEST)
 	@$(IRC_MSG_TEST)
+	@echo " $(YELLOW)$(CASEMAP_TEST_SRC)$(RESET)"
+	@$(CXX) $(CXXFLAGS) $(INC) $(CASEMAP_TEST_SRC) $(SRC_DIR)IrcCasemap.cpp -o $(CASEMAP_TEST)
+	@$(CASEMAP_TEST)
 
 .PHONY: all obj clean fclean re help test test-parser

@@ -1,4 +1,5 @@
 #include "Client.hpp"
+#include "IrcCasemap.hpp"
 #include "IrcMessage.hpp"
 
 Client::Client(int socketFd, const std::string &host)
@@ -201,17 +202,18 @@ void Client::removeSentOutput(std::size_t sentByteCount)
 
 void Client::joinChannel(const std::string &channelName)
 {
-    joinedChannels.insert(channelName);
+    joinedChannels.insert(IrcCasemap::normalize(channelName));
 }
 
 void Client::leaveChannel(const std::string &channelName)
 {
-    joinedChannels.erase(channelName);
+    joinedChannels.erase(IrcCasemap::normalize(channelName));
 }
 
 bool Client::isInChannel(const std::string &channelName) const
 {
-    return joinedChannels.find(channelName) != joinedChannels.end();
+    return joinedChannels.find(IrcCasemap::normalize(channelName))
+        != joinedChannels.end();
 }
 
 const std::set<std::string> &Client::getJoinedChannels() const

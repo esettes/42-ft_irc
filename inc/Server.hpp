@@ -3,6 +3,7 @@
 
 #include "Client.hpp"
 #include "IrcMessage.hpp"
+#include "IrcCasemap.hpp"
 #include "Channel.hpp"
 #include "CommandDispatcher.hpp"
 #include "NumericReplies.hpp"
@@ -35,7 +36,7 @@
  * @param dispatcher The CommandDispatcher instance responsible for routing IRC commands to handlers.
  * @param pollFds A vector of pollfd structures used for monitoring multiple file descriptors for events.
  * @param clients A mapping of client socket file descriptors to their corresponding Client objects.
- * @param channels A mapping of channel names to their corresponding Channel objects.
+ * @param channels A mapping of normalized channel names to their corresponding Channel objects.
  */
 class Server
 {
@@ -71,8 +72,6 @@ class Server
             socklen_t clientAddressLength
         ) const;
 
-        Client *findClientByNickname(const std::string &nickname);
-
         std::string getReplyTarget(const Client &client) const;
         Server(const Server &other);
         Server &operator=(const Server &other);
@@ -93,6 +92,10 @@ class Server
         const std::string &getServerName() const;
         std::string getServerPrefix() const;
         std::string getClientPrefix(const Client &client) const;
+        std::string normalizeNickname(const std::string &nickname) const;
+        std::string normalizeChannelName(const std::string &channelName) const;
+        Client *findClientByNickname(const std::string &nickname);
+        Channel *findChannel(const std::string &channelName);
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
