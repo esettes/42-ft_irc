@@ -12,6 +12,18 @@
 const std::size_t IRC_MAX_MESSAGE_LENGTH = 512;
 
 /**
+ * Maximum pending input bytes per client (incomplete fragments + burst).
+ * Prevents unbounded growth from abusive senders.
+ */
+const std::size_t IRC_MAX_INPUT_BUFFER_SIZE = 8192;
+
+/**
+ * Maximum pending output bytes per client.
+ * Disconnects slow clients that do not drain their socket.
+ */
+const std::size_t IRC_MAX_OUTPUT_BUFFER_SIZE = 65536;
+
+/**
  * @file IrcMessage.hpp
  * @brief Declares the parsed IRC message representation shared across the server.
  * 

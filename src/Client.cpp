@@ -14,7 +14,8 @@ Client::Client(int socketFd, const std::string &host)
     usernameReceived(false), 
     registered(false),
     joinedChannels(),
-    isOperator(false)
+    isOperator(false),
+    disconnectRequested(false)
 {
 }
 
@@ -35,7 +36,8 @@ Client::Client(const Client &other)
     usernameReceived(other.usernameReceived), 
     registered(other.registered),
     joinedChannels(other.joinedChannels),
-    isOperator(other.isOperator)
+    isOperator(other.isOperator),
+    disconnectRequested(other.disconnectRequested)
 {
 }
 
@@ -56,6 +58,7 @@ Client &Client::operator=(const Client &other)
         registered = other.registered;
         joinedChannels = other.joinedChannels;
         isOperator = other.isOperator;
+        disconnectRequested = other.disconnectRequested;
     }
     return *this;
 }
@@ -173,6 +176,16 @@ void Client::setIsOperator(bool isOperator)
 bool Client::getIsOperator() const
 {
     return isOperator;
+}
+
+void Client::requestDisconnect()
+{
+    disconnectRequested = true;
+}
+
+bool Client::isDisconnectRequested() const
+{
+    return disconnectRequested;
 }
 
 void Client::removeSentOutput(std::size_t sentByteCount)

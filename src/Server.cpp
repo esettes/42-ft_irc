@@ -366,8 +366,15 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         }
 
         Client *client = clientIterator->second;
-        // bytes can be received in multiple calls to recv(), so we need to append the received data to the client's input buffer
         const std::string receivedData(receiveBuffer, static_cast<std::size_t>(receivedBytes));
+
+        if (client->getInputBuffer().size() + receivedData.size() > IRC_MAX_INPUT_BUFFER_SIZE)
+        {
+            std::cerr << Console::CLIENT << " Input buffer limit exceeded ("
+                << IRC_MAX_INPUT_BUFFER_SIZE << " bytes): fd=" << clientSocketFd
+                << std::endl;
+            return false;
+        }
 
         client->appendToInputBuffer(receivedData);
 
@@ -547,6 +554,24 @@ void Server::run()
             ++i;
         }
 
+        i = 1;
+        while (i < pollFds.size())
+        {
+            const int clientSocketFd = pollFds[i].fd;
+            std::map<int, Client *>::iterator clientIterator = clients.find(clientSocketFd);
+
+            if (clientIterator != clients.end()
+                && clientIterator->second->isDisconnectRequested())
+            {
+                std::cerr << Console::CLIENT
+                    << " Disconnecting abusive or slow client: fd="
+                    << clientSocketFd << std::endl;
+                removeClient(i);
+                continue;
+            }
+            ++i;
+        }
+
         std::cout << Console::SERVER << " Ready descriptors: " << pollResult << std::endl;
     }
 }
@@ -646,11 +671,20 @@ bool Server::flushClientOutput(int socketFd)
  */
 void Server::queueMessage(Client &client, const std::string &message)
 {
-    if (message.empty())
+    if (message.empty() || client.isDisconnectRequested())
         return;
 
     if (message.size() > IRC_MAX_MESSAGE_LENGTH)
         throw std::runtime_error("IRC message exceeds 512 bytes");
+
+    if (client.getOutputBuffer().size() + message.size() > IRC_MAX_OUTPUT_BUFFER_SIZE)
+    {
+        std::cerr << Console::CLIENT << " Output buffer limit exceeded ("
+            << IRC_MAX_OUTPUT_BUFFER_SIZE << " bytes): fd=" << client.getSocketFd()
+            << std::endl;
+        client.requestDisconnect();
+        return;
+    }
 
     client.appendToOutputBuffer(message);
     updateClientPollEvents(client.getSocketFd());
@@ -706,10 +740,13 @@ bool Server::processClientBuffer(Client &client)
 
     while (true)
     {
+        if (client.isDisconnectRequested())
+            return false;
+
         const Client::LineReadStatus status = client.extractNextLine(completeLine);
 
         if (status == Client::LINE_INCOMPLETE)
-            return true;
+            return !client.isDisconnectRequested();
 
         if (status == Client::LINE_TOO_LONG)
         {
@@ -735,6 +772,9 @@ bool Server::processClientBuffer(Client &client)
             std::cerr << Console::CLIENT << " Parse error: fd=" << client.getSocketFd()
                 << ", reason=" << error.what() << std::endl;
         }
+
+        if (client.isDisconnectRequested())
+            return false;
     }
 }
 

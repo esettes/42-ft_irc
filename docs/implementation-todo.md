@@ -15,7 +15,7 @@ envíos parciales. Quedan los siguientes trabajos.
 - [x] Devolver errores desde el dispatcher en vez de ignorar comandos desconocidos, parámetros ausentes o clientes no registrados.
 - [x] Implementar los numerics documentados: `001–005`, `324`, `331`, `332`, `341`, `353`, `366`, `401`, `403`, `404`, `409`, `411`, `412`, `421`, `431`, `432`, `433`, `441`, `442`, `443`, `451`, `461`, `462`, `464`, `471`, `472`, `473`, `475` y `482`.
 - [x] Limitar cada línea IRC a 512 bytes, incluyendo `\r\n`.
-- [ ] Limitar los buffers de entrada y salida; desconectar limpiamente clientes abusivos o demasiado lentos.
+- [x] Limitar los buffers de entrada y salida; desconectar limpiamente clientes abusivos o demasiado lentos.
 - [ ] Implementar casemapping IRC para nicknames y canales: conservar el nombre original, pero buscar mediante una clave normalizada.
 
 Referencias: [fase 0](phases/phase_0.md) y [fase 8](phases/phase_8.md).

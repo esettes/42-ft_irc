@@ -40,6 +40,7 @@ class Client
         bool registered;
         std::set<std::string> joinedChannels;
         bool isOperator;
+        bool disconnectRequested;
 
         Client(const Client &other);
         Client &operator=(const Client &other);
@@ -75,6 +76,9 @@ class Client
         void setRegistered(bool registered);
         void setIsOperator(bool isOperator);
         bool getIsOperator() const;
+
+        void requestDisconnect();
+        bool isDisconnectRequested() const;
 
         void joinChannel(const std::string &channelName);
         void leaveChannel(const std::string &channelName);
