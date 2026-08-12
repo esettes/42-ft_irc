@@ -261,6 +261,69 @@ std::string Server::getClientPrefix(const Client &client) const
     return ":" + client.getNickname() + "!" + client.getUsername() + "@" + client.getHost();
 }
 
+std::string Server::getReplyTarget(const Client &client) const
+{
+    if (client.getNickname().empty())
+        return "*";
+    return client.getNickname();
+}
+
+std::string Server::buildNumericReply(
+    int numericCode,
+    const Client &client,
+    const std::string &trailingMessage
+) const
+{
+    return buildNumericReply(
+        numericCode,
+        client,
+        std::vector<std::string>(),
+        trailingMessage
+    );
+}
+
+std::string Server::buildNumericReply(
+    int numericCode,
+    const Client &client,
+    const std::string &parameter,
+    const std::string &trailingMessage
+) const
+{
+    std::vector<std::string> parameters;
+
+    if (!parameter.empty())
+        parameters.push_back(parameter);
+
+    return buildNumericReply(numericCode, client, parameters, trailingMessage);
+}
+
+std::string Server::buildNumericReply(
+    int numericCode,
+    const Client &client,
+    const std::vector<std::string> &parameters,
+    const std::string &trailingMessage
+) const
+{
+    std::vector<std::string> replyParameters;
+
+    replyParameters.push_back(getReplyTarget(client));
+    replyParameters.insert(
+        replyParameters.end(),
+        parameters.begin(),
+        parameters.end()
+    );
+    replyParameters.push_back(trailingMessage);
+
+    const IrcMessage reply(
+        NumericReply::formatCode(numericCode),
+        replyParameters,
+        serverName,
+        true
+    );
+
+    return reply.serialize();
+}
+
 bool Server::receiveClientData(std::size_t descriptorIndex)
 {
     const int clientSocketFd = pollFds[descriptorIndex].fd;
@@ -352,8 +415,11 @@ void Server::tryRegisterClient(Client &client)
 void Server::sendWelcomeMessages(Client &client)
 {
     const std::string clientPrefix = getClientPrefix(client);
-    const std::string welcomeMessage = getServerPrefix() + " 001 " + client.getNickname()
-        + " :Welcome to the IRC Network " + clientPrefix.substr(1) + "\r\n";
+    const std::string welcomeMessage = buildNumericReply(
+        NumericReply::RPL_WELCOME,
+        client,
+        "Welcome to the IRC Network " + clientPrefix.substr(1)
+    );
 
     queueClientOutput(client, welcomeMessage);
 }

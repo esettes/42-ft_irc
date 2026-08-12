@@ -5,6 +5,7 @@
 #include "IrcMessage.hpp"
 #include "Channel.hpp"
 #include "CommandDispatcher.hpp"
+#include "NumericReplies.hpp"
 #include "SignalHandler.hpp"
 
 #include <map>
@@ -80,12 +81,6 @@ class Server
         void closeAllFds();
         void closeFd(int &fd);
 
-        // void queueNumericReply(
-        //     Client &client,
-        //     const std::string &numericCode,
-        //     const std::vector<std::string> &parameters
-        // );
-
         void displayStartupInformation() const;
 
     public:
@@ -99,6 +94,23 @@ class Server
         const std::string &getServerName() const;
         std::string getServerPrefix() const;
         std::string getClientPrefix(const Client &client) const;
+        std::string buildNumericReply(
+            int numericCode,
+            const Client &client,
+            const std::string &trailingMessage
+        ) const;
+        std::string buildNumericReply(
+            int numericCode,
+            const Client &client,
+            const std::string &parameter,
+            const std::string &trailingMessage
+        ) const;
+        std::string buildNumericReply(
+            int numericCode,
+            const Client &client,
+            const std::vector<std::string> &parameters,
+            const std::string &trailingMessage
+        ) const;
 
         /* For send parsed commands to the dispatcher */
         void dispatchCommand(Client &client, const IrcMessage &message);
