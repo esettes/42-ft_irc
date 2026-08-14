@@ -185,6 +185,12 @@ help: ## ❓ Show available targets
 		awk 'BEGIN {FS = ":.*## "}; {printf "  $(CYAN)%-25s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 
+test: ## 🧪 Runs all tests
+	@$(call print_banner,Parser tests)
+	@$(MAKE) test-parser $(NOPRINT)
+	@$(call print_banner,Message tests)
+	@$(MAKE) test-message $(NOPRINT)
+
 test-parser: ## 🧪 Runs message parser test case
 	@$(CXX) $(CXXFLAGS) $(INC) \
 		$(TESTS_SRCS) \
@@ -193,7 +199,7 @@ test-parser: ## 🧪 Runs message parser test case
 		-o $(MSG_PARSER_TEST)
 	@./$(MSG_PARSER_TEST)
 
-test: ## 🧪 Runs the IRC message serialization and casemap tests
+test-message: ## 🧪 Runs the IRC message serialization and casemap tests
 	@mkdir -p $(TEST_DIR)
 	@echo " $(YELLOW)$(TEST_SRC)$(RESET)"
 	@$(CXX) $(CXXFLAGS) $(INC) $(TEST_SRC) $(SRC_DIR)IrcMessage.cpp -o $(IRC_MSG_TEST)
@@ -202,4 +208,4 @@ test: ## 🧪 Runs the IRC message serialization and casemap tests
 	@$(CXX) $(CXXFLAGS) $(INC) $(CASEMAP_TEST_SRC) $(SRC_DIR)IrcCasemap.cpp -o $(CASEMAP_TEST)
 	@$(CASEMAP_TEST)
 
-.PHONY: all obj clean fclean re help test test-parser
+.PHONY: all obj clean fclean re help test test-parser test-message
