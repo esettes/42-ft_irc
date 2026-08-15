@@ -14,6 +14,10 @@ namespace
             return '}';
         if (value == '\\')
             return '|';
+        if (value == '~')
+            return '^';
+        if (value == '^')
+            return '^';
         return static_cast<char>(value);
     }
 }

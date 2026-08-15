@@ -234,8 +234,7 @@ Client::LineReadStatus Client::extractNextLine(std::string &completeLine)
 
     if (newlinePos == std::string::npos)
     {
-        // Content alone cannot leave room for CR-LF within the 512-byte limit.
-        if (inputBuffer.size() > IRC_MAX_MESSAGE_LENGTH - 2)
+        if (inputBuffer.size() > IRC_MAX_MESSAGE_LENGTH - 1)
             return LINE_TOO_LONG;
         return LINE_INCOMPLETE;
     }

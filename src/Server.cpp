@@ -726,7 +726,13 @@ void Server::queueMessage(Client &client, const std::string &message)
         return;
 
     if (message.size() > IRC_MAX_MESSAGE_LENGTH)
-        throw std::runtime_error("IRC message exceeds 512 bytes");
+    {
+        std::cerr << Console::CLIENT << " IRC reply exceeds "
+            << IRC_MAX_MESSAGE_LENGTH << " bytes: fd=" << client.getSocketFd()
+            << std::endl;
+        client.requestDisconnect();
+        return;
+    }
 
     if (client.getOutputBuffer().size() + message.size() > IRC_MAX_OUTPUT_BUFFER_SIZE)
     {
@@ -822,6 +828,13 @@ bool Server::processClientBuffer(Client &client)
         {
             std::cerr << Console::CLIENT << " Parse error: fd=" << client.getSocketFd()
                 << ", reason=" << error.what() << std::endl;
+        }
+        catch (const std::exception &error)
+        {
+            std::cerr << Console::ERROR << " Command dispatch error: fd="
+                << client.getSocketFd() << ", reason=" << error.what() << std::endl;
+            client.requestDisconnect();
+            return false;
         }
 
         if (client.isDisconnectRequested())

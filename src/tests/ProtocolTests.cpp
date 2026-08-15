@@ -1,0 +1,986 @@
+#include "Client.hpp"
+#include "IrcCasemap.hpp"
+#include "IrcMessage.hpp"
+#include "NumericReplies.hpp"
+#include "Console.hpp"
+
+#include <arpa/inet.h>
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
+#include <iostream>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sstream>
+#include <string>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
+
+static int g_failures = 0;
+
+static std::string escapeOutput(const std::string &value)
+{
+    std::string escaped;
+
+    for (std::size_t index = 0; index < value.size(); ++index)
+    {
+        const unsigned char character =
+            static_cast<unsigned char>(value[index]);
+
+        if (character == '\r')
+            escaped += "\\r";
+        else if (character == '\n')
+            escaped += "\\n";
+        else if (character == '\0')
+            escaped += "\\0";
+        else
+            escaped += static_cast<char>(character);
+    }
+
+    return escaped;
+}
+
+static void reportFailure(
+    const std::string &testName,
+    const std::string &expected,
+    const std::string &actual
+)
+{
+    std::cerr << Console::ERROR << testName << std::endl;
+    std::cerr << "  expected: " << escapeOutput(expected) << std::endl;
+    std::cerr << "  actual  : " << escapeOutput(actual) << std::endl;
+    ++g_failures;
+}
+
+static void expectTrue(
+    bool condition,
+    const std::string &testName,
+    const std::string &expected,
+    const std::string &actual
+)
+{
+    if (!condition)
+        reportFailure(testName, expected, actual);
+}
+
+static void expectEqual(
+    const std::string &actual,
+    const std::string &expected,
+    const std::string &testName
+)
+{
+    if (actual != expected)
+        reportFailure(testName, expected, actual);
+}
+
+static void expectContains(
+    const std::string &actual,
+    const std::string &expectedFragment,
+    const std::string &testName
+)
+{
+    if (actual.find(expectedFragment) == std::string::npos)
+    {
+        reportFailure(
+            testName,
+            "output containing: " + expectedFragment,
+            actual
+        );
+    }
+}
+
+static void expectSerializationFailure(
+    const IrcMessage &message,
+    const std::string &testName
+)
+{
+    try
+    {
+        const std::string serializedMessage = message.serialize();
+
+        reportFailure(
+            testName,
+            "std::runtime_error",
+            serializedMessage
+        );
+    }
+    catch (const std::runtime_error &)
+    {
+    }
+}
+
+static int findAvailablePort()
+{
+    const int socketFd = ::socket(AF_INET, SOCK_STREAM, 0);
+
+    if (socketFd == -1)
+        return -1;
+
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(0);
+
+    if (::bind(
+            socketFd,
+            reinterpret_cast<const struct sockaddr *>(&address),
+            sizeof(address)
+        ) == -1)
+    {
+        ::close(socketFd);
+        return -1;
+    }
+
+    socklen_t addressLength = sizeof(address);
+
+    if (::getsockname(
+            socketFd,
+            reinterpret_cast<struct sockaddr *>(&address),
+            &addressLength
+        ) == -1)
+    {
+        ::close(socketFd);
+        return -1;
+    }
+
+    const int availablePort = ntohs(address.sin_port);
+
+    ::close(socketFd);
+    return availablePort;
+}
+
+static int connectToServer(int port)
+{
+    const int socketFd = ::socket(AF_INET, SOCK_STREAM, 0);
+
+    if (socketFd == -1)
+        return -1;
+
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(static_cast<unsigned short>(port));
+
+    if (::connect(
+            socketFd,
+            reinterpret_cast<const struct sockaddr *>(&address),
+            sizeof(address)
+        ) == -1)
+    {
+        ::close(socketFd);
+        return -1;
+    }
+
+    return socketFd;
+}
+
+static bool sendAll(int socketFd, const std::string &data)
+{
+    std::size_t sentByteCount = 0;
+
+    while (sentByteCount < data.size())
+    {
+        const ssize_t result = ::send(
+            socketFd,
+            data.data() + sentByteCount,
+            data.size() - sentByteCount,
+            0
+        );
+
+        if (result > 0)
+        {
+            sentByteCount += static_cast<std::size_t>(result);
+            continue;
+        }
+
+        if (result == -1 && errno == EINTR)
+            continue;
+
+        return false;
+    }
+
+    return true;
+}
+
+static std::string receiveAvailableData(
+    int socketFd,
+    int timeoutMilliseconds
+)
+{
+    std::string response;
+    char buffer[4096];
+
+    while (true)
+    {
+        struct pollfd descriptor;
+
+        descriptor.fd = socketFd;
+        descriptor.events = POLLIN;
+        descriptor.revents = 0;
+
+        const int pollResult = ::poll(
+            &descriptor,
+            1,
+            timeoutMilliseconds
+        );
+
+        if (pollResult <= 0)
+            break;
+
+        if (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))
+        {
+            const ssize_t receivedByteCount = ::recv(
+                socketFd,
+                buffer,
+                sizeof(buffer),
+                0
+            );
+
+            if (receivedByteCount > 0)
+            {
+                response.append(
+                    buffer,
+                    static_cast<std::size_t>(receivedByteCount)
+                );
+            }
+
+            break;
+        }
+
+        if (!(descriptor.revents & POLLIN))
+            break;
+
+        const ssize_t receivedByteCount = ::recv(
+            socketFd,
+            buffer,
+            sizeof(buffer),
+            0
+        );
+
+        if (receivedByteCount <= 0)
+            break;
+
+        response.append(
+            buffer,
+            static_cast<std::size_t>(receivedByteCount)
+        );
+
+        timeoutMilliseconds = 50;
+    }
+
+    return response;
+}
+
+class TestServerProcess
+{
+    private:
+        pid_t processId;
+        int port;
+
+        TestServerProcess(const TestServerProcess &other);
+        TestServerProcess &operator=(const TestServerProcess &other);
+
+        bool waitUntilReady()
+        {
+            for (int attempt = 0; attempt < 100; ++attempt)
+            {
+                const int probeSocket = connectToServer(port);
+
+                if (probeSocket != -1)
+                {
+                    ::close(probeSocket);
+                    return true;
+                }
+
+                if (!isRunning())
+                    return false;
+
+                ::usleep(20000);
+            }
+
+            return false;
+        }
+
+    public:
+        TestServerProcess()
+            : processId(-1),
+              port(findAvailablePort())
+        {
+        }
+
+        ~TestServerProcess()
+        {
+            stop();
+        }
+
+        bool start()
+        {
+            if (port == -1)
+                return false;
+
+            processId = ::fork();
+
+            if (processId == -1)
+                return false;
+
+            if (processId == 0)
+            {
+                const int nullFd = ::open("/dev/null", O_WRONLY);
+
+                if (nullFd != -1)
+                {
+                    ::dup2(nullFd, STDOUT_FILENO);
+                    ::dup2(nullFd, STDERR_FILENO);
+                    ::close(nullFd);
+                }
+
+                std::ostringstream portStream;
+                portStream << port;
+
+                ::execl(
+                    "./ircserv",
+                    "./ircserv",
+                    portStream.str().c_str(),
+                    "secret",
+                    static_cast<char *>(NULL)
+                );
+
+                ::_exit(EXIT_FAILURE);
+            }
+
+            return waitUntilReady();
+        }
+
+        void stop()
+        {
+            if (processId <= 0)
+                return;
+
+            ::kill(processId, SIGINT);
+
+            for (int attempt = 0; attempt < 100; ++attempt)
+            {
+                int status = 0;
+                const pid_t result = ::waitpid(
+                    processId,
+                    &status,
+                    WNOHANG
+                );
+
+                if (result == processId)
+                {
+                    processId = -1;
+                    return;
+                }
+
+                ::usleep(10000);
+            }
+
+            ::kill(processId, SIGKILL);
+            ::waitpid(processId, NULL, 0);
+            processId = -1;
+        }
+
+        bool isRunning()
+        {
+            if (processId <= 0)
+                return false;
+
+            int status = 0;
+            const pid_t result = ::waitpid(
+                processId,
+                &status,
+                WNOHANG
+            );
+
+            if (result == 0)
+                return true;
+
+            if (result == processId)
+                processId = -1;
+
+            return false;
+        }
+
+        int getPort() const
+        {
+            return port;
+        }
+};
+
+static std::string sendCommandAndReceive(
+    int port,
+    const std::string &command
+)
+{
+    const int socketFd = connectToServer(port);
+
+    if (socketFd == -1)
+        return "connection failed";
+
+    if (!sendAll(socketFd, command))
+    {
+        ::close(socketFd);
+        return "send failed";
+    }
+
+    const std::string response =
+        receiveAvailableData(socketFd, 500);
+
+    ::close(socketFd);
+    return response;
+}
+
+static std::string registerClient(
+    int socketFd,
+    const std::string &nickname
+)
+{
+    const std::string registration =
+        "PASS secret\r\n"
+        "NICK " + nickname + "\r\n"
+        "USER " + nickname + " 0 * :" + nickname + "\r\n";
+
+    if (!sendAll(socketFd, registration))
+        return "send failed";
+
+    return receiveAvailableData(socketFd, 500);
+}
+
+static void testIrcMessageSerialization()
+{
+    std::vector<std::string> parameters;
+
+    parameters.push_back("#general");
+    parameters.push_back("Hello world");
+
+    const IrcMessage message(
+        "PRIVMSG",
+        parameters,
+        "nick!user@host",
+        true
+    );
+
+    expectEqual(
+        message.serialize(),
+        ":nick!user@host PRIVMSG #general :Hello world\r\n",
+        "IrcMessage should serialize prefix, command, parameters, trailing and CRLF"
+    );
+}
+
+static void testGeneratedMessagesRejectControlCharacters()
+{
+    std::vector<std::string> parameters;
+
+    parameters.push_back("bad\rvalue");
+
+    expectSerializationFailure(
+        IrcMessage("NOTICE", parameters, "", true),
+        "IrcMessage should reject carriage returns"
+    );
+
+    parameters.clear();
+    parameters.push_back("bad\nvalue");
+
+    expectSerializationFailure(
+        IrcMessage("NOTICE", parameters, "", true),
+        "IrcMessage should reject line feeds"
+    );
+
+    parameters.clear();
+    parameters.push_back(std::string("bad\0value", 9));
+
+    expectSerializationFailure(
+        IrcMessage("NOTICE", parameters, "", true),
+        "IrcMessage should reject NUL bytes"
+    );
+}
+
+static void testSerializedMessageLengthLimit()
+{
+    std::vector<std::string> parameters;
+
+    parameters.push_back(std::string(502, 'A'));
+
+    const IrcMessage maximumLengthMessage(
+        "NOTICE",
+        parameters,
+        "",
+        true
+    );
+
+    const std::string serializedMessage =
+        maximumLengthMessage.serialize();
+
+    expectTrue(
+        serializedMessage.size() == IRC_MAX_MESSAGE_LENGTH,
+        "IrcMessage should allow exactly 512 bytes",
+        "serialized size equal to 512",
+        "serialized size equal to requested limit"
+    );
+
+    parameters.clear();
+    parameters.push_back(std::string(503, 'A'));
+
+    expectSerializationFailure(
+        IrcMessage("NOTICE", parameters, "", true),
+        "IrcMessage should reject messages longer than 512 bytes"
+    );
+}
+
+static void testNumericCodeFormatting()
+{
+    const int requiredCodes[] = {
+        1, 2, 3, 4, 5,
+        324, 331, 332, 341, 353, 366,
+        401, 403, 404, 409, 411, 412, 421,
+        431, 432, 433, 441, 442, 443, 451,
+        461, 462, 464, 471, 472, 473, 475, 482
+    };
+
+    const std::size_t codeCount =
+        sizeof(requiredCodes) / sizeof(requiredCodes[0]);
+
+    for (std::size_t index = 0; index < codeCount; ++index)
+    {
+        const std::string formattedCode =
+            NumericReply::formatCode(requiredCodes[index]);
+
+        std::ostringstream expectedCode;
+        expectedCode.width(3);
+        expectedCode.fill('0');
+        expectedCode << requiredCodes[index];
+
+        expectEqual(
+            formattedCode,
+            expectedCode.str(),
+            "Numeric reply code should always contain three digits"
+        );
+    }
+}
+
+static void testRfc1459Casemapping()
+{
+    expectEqual(
+        IrcCasemap::normalize("Roxana"),
+        "roxana",
+        "Casemapping should normalize ASCII letters"
+    );
+
+    expectTrue(
+        IrcCasemap::equal("Nick[Test]", "nick{test}"),
+        "Casemapping should treat brackets and braces as equivalent",
+        "equivalent values",
+        "different values"
+    );
+
+    expectTrue(
+        IrcCasemap::equal("Nick\\Path", "nick|path"),
+        "Casemapping should treat backslash and pipe as equivalent",
+        "equivalent values",
+        "different values"
+    );
+
+    expectTrue(
+        IrcCasemap::equal("Nick~Name", "nick^name"),
+        "RFC1459 casemapping should treat tilde and caret as equivalent",
+        "equivalent values",
+        "different values"
+    );
+}
+
+static void testClientLineLengthBoundaries()
+{
+    Client exactLengthClient(-1, "localhost");
+
+    const std::string exactLengthLine =
+        "PASS " + std::string(505, 'A') + "\r\n";
+
+    exactLengthClient.appendToInputBuffer(exactLengthLine);
+
+    std::string completeLine;
+
+    expectTrue(
+        exactLengthClient.extractNextLine(completeLine)
+            == Client::LINE_COMPLETE,
+        "Client should accept a CRLF line of exactly 512 bytes",
+        "LINE_COMPLETE",
+        "status different from LINE_COMPLETE"
+    );
+
+    Client excessiveLengthClient(-1, "localhost");
+
+    const std::string excessiveLengthLine =
+        "PASS " + std::string(506, 'A') + "\r\n";
+
+    excessiveLengthClient.appendToInputBuffer(
+        excessiveLengthLine
+    );
+
+    expectTrue(
+        excessiveLengthClient.extractNextLine(completeLine)
+            == Client::LINE_TOO_LONG,
+        "Client should reject a CRLF line longer than 512 bytes",
+        "LINE_TOO_LONG",
+        "status different from LINE_TOO_LONG"
+    );
+}
+
+static void testFragmentedLfBoundary()
+{
+    Client client(-1, "localhost");
+    std::string completeLine;
+
+    client.appendToInputBuffer(
+        "PASS " + std::string(506, 'A')
+    );
+
+    expectTrue(
+        client.extractNextLine(completeLine)
+            == Client::LINE_INCOMPLETE,
+        "A fragmented 512-byte LF line should remain incomplete before LF arrives",
+        "LINE_INCOMPLETE",
+        "LINE_TOO_LONG"
+    );
+
+    client.appendToInputBuffer("\n");
+
+    expectTrue(
+        client.extractNextLine(completeLine)
+            == Client::LINE_COMPLETE,
+        "A fragmented LF line of exactly 512 bytes should be accepted",
+        "LINE_COMPLETE",
+        "status different from LINE_COMPLETE"
+    );
+}
+
+static void testServerPrefixAndUnknownCommand()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for protocol tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const std::string response = sendCommandAndReceive(
+        server.getPort(),
+        "UNKNOWN\r\n"
+    );
+
+    expectEqual(
+        response,
+        ":irc.42.local 421 * UNKNOWN :Unknown command\r\n",
+        "Unknown commands should return 421 with server prefix and target *"
+    );
+}
+
+static void testWelcomeNumerics()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for welcome tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for welcome tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string response =
+        registerClient(socketFd, "roxana");
+
+    expectContains(
+        response,
+        ":irc.42.local 001 roxana :Welcome to the IRC Network roxana!roxana@",
+        "Welcome numeric should contain the server and complete client prefix"
+    );
+
+    expectContains(
+        response,
+        ":irc.42.local 002 roxana ",
+        "Registration should send numeric 002"
+    );
+
+    expectContains(
+        response,
+        ":irc.42.local 003 roxana ",
+        "Registration should send numeric 003"
+    );
+
+    expectContains(
+        response,
+        ":irc.42.local 004 roxana ",
+        "Registration should send numeric 004"
+    );
+
+    expectContains(
+        response,
+        ":irc.42.local 005 roxana ",
+        "Registration should send numeric 005"
+    );
+
+    ::close(socketFd);
+}
+
+static void testSpecificMissingParameterNumerics()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for dispatcher tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "NICK\r\n"
+        ),
+        ":irc.42.local 431 * :No nickname given\r\n",
+        "NICK without a parameter should return 431"
+    );
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "PING\r\n"
+        ),
+        ":irc.42.local 409 * :No origin specified\r\n",
+        "PING without a token should return 409"
+    );
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "PRIVMSG target :hello\r\n"
+        ),
+        ":irc.42.local 451 * :You have not registered\r\n",
+        "PRIVMSG before registration should return 451"
+    );
+}
+
+static void testPrivateMessageParameterNumerics()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for PRIVMSG tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for PRIVMSG tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    registerClient(socketFd, "roxana");
+
+    sendAll(socketFd, "PRIVMSG\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 411 roxana :No recipient given (PRIVMSG)\r\n",
+        "PRIVMSG without a recipient should return 411"
+    );
+
+    sendAll(socketFd, "PRIVMSG nobody\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 412 roxana :No text to send\r\n",
+        "PRIVMSG without text should return 412"
+    );
+
+    ::close(socketFd);
+}
+
+static void testOversizedErrorDoesNotStopServer()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for oversized reply test",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for oversized reply test",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    sendAll(
+        socketFd,
+        std::string(490, 'X') + "\r\n"
+    );
+
+    ::usleep(200000);
+
+    expectTrue(
+        server.isRunning(),
+        "A valid long command should not terminate the entire server",
+        "ircserv remains running",
+        "ircserv exited"
+    );
+
+    ::close(socketFd);
+}
+
+static void testSlowClientDoesNotStopServer()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for output buffer test",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int slowSocket = connectToServer(server.getPort());
+
+    if (slowSocket == -1)
+    {
+        reportFailure(
+            "Slow client should connect",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    int receiveBufferSize = 1024;
+
+    ::setsockopt(
+        slowSocket,
+        SOL_SOCKET,
+        SO_RCVBUF,
+        &receiveBufferSize,
+        sizeof(receiveBufferSize)
+    );
+
+    std::string commandBurst;
+
+    for (int commandIndex = 0;
+         commandIndex < 50000;
+         ++commandIndex)
+    {
+        commandBurst += "X\r\n";
+    }
+
+    sendAll(slowSocket, commandBurst);
+    ::usleep(300000);
+
+    expectTrue(
+        server.isRunning(),
+        "A slow client exceeding the output buffer should not stop the server",
+        "ircserv remains running",
+        "ircserv exited"
+    );
+
+    const std::string probeResponse = sendCommandAndReceive(
+        server.getPort(),
+        "UNKNOWN\r\n"
+    );
+
+    expectEqual(
+        probeResponse,
+        ":irc.42.local 421 * UNKNOWN :Unknown command\r\n",
+        "Server should continue serving other clients after removing a slow client"
+    );
+
+    ::close(slowSocket);
+}
+
+int main()
+{
+    testIrcMessageSerialization();
+    testGeneratedMessagesRejectControlCharacters();
+    testSerializedMessageLengthLimit();
+    testNumericCodeFormatting();
+    testRfc1459Casemapping();
+    testClientLineLengthBoundaries();
+    testFragmentedLfBoundary();
+    testServerPrefixAndUnknownCommand();
+    testWelcomeNumerics();
+    testSpecificMissingParameterNumerics();
+    testPrivateMessageParameterNumerics();
+    testOversizedErrorDoesNotStopServer();
+    testSlowClientDoesNotStopServer();
+
+    if (g_failures != 0)
+    {
+        std::cerr
+            << g_failures
+            << " protocol checklist test(s) failed"
+            << std::endl;
+
+        return EXIT_FAILURE;
+    }
+
+    std::cout
+        << "All point 1 protocol checklist tests passed"
+        << std::endl;
+
+    return EXIT_SUCCESS;
+}

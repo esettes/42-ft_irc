@@ -35,6 +35,11 @@ void CommandDispatcher::registerCommands()
     );
     cmmds.insert(
         std::make_pair(
+            "PING",
+            CommandDefinition(&CommandDispatcher::handlePing, 0, false))
+    );
+    cmmds.insert(
+        std::make_pair(
             "JOIN",
             CommandDefinition(&CommandDispatcher::handleJoin, 1, true))
     );
@@ -71,6 +76,49 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
             NumericReply::MSG_NOTREGISTERED
         );
         return;
+    }
+
+    if (message.getCommand() == "NICK" && message.params.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NONICKNAMEGIVEN,
+            NumericReply::MSG_NONICKNAMEGIVEN
+        );
+        return;
+    }
+
+    if (message.getCommand() == "PING" && message.params.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOORIGIN,
+            NumericReply::MSG_NOORIGIN
+        );
+        return;
+    }
+
+    if (message.getCommand() == "PRIVMSG")
+    {
+        if (message.params.empty())
+        {
+            server.queueNumericReply(
+                client,
+                NumericReply::ERR_NORECIPIENT,
+                NumericReply::noRecipientMessage(message.getCommand())
+            );
+            return;
+        }
+
+        if (message.params.size() == 1)
+        {
+            server.queueNumericReply(
+                client,
+                NumericReply::ERR_NOTEXTTOSEND,
+                NumericReply::MSG_NOTEXTTOSEND
+            );
+            return;
+        }
     }
 
     if (message.params.size() < definition.minParams)
@@ -111,6 +159,12 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
     client.setUsername(message.params[0]);
     client.setRealname(message.params[3]);
     client.setUsernameReceived(true);
+}
+
+void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
+{
+    (void)client;
+    (void)message;
 }
 
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
