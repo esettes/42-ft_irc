@@ -90,6 +90,7 @@ class Server
 
         int getPort() const;
         const std::string &getServerName() const;
+        bool isPasswordCorrect(const std::string &providedPassword) const;
         std::string getServerPrefix() const;
         std::string getClientPrefix(const Client &client) const;
         std::string normalizeNickname(const std::string &nickname) const;

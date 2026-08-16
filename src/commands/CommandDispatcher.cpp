@@ -141,9 +141,30 @@ CommandDispatcher::~CommandDispatcher()
 
 void CommandDispatcher::handlePass(Client &client, const IrcMessage &message)
 {
-    // do something with client
+    if (client.isRegistered())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_ALREADYREGISTERED,
+            NumericReply::MSG_ALREADYREGISTRED
+        );
+        return;
+    }
+
+    const std::string &providedPassword = message.params[0];
+
+    if (!server.isPasswordCorrect(providedPassword))
+    {
+        client.setPasswordAccepted(false);
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_PASSWDMISMATCH,
+            NumericReply::MSG_PASSWDMISMATCH
+        );
+        return;
+    }
+
     client.setPasswordAccepted(true);
-    message.params[0]; // Access the password parameter
 }
 
 void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)

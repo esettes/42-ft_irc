@@ -884,3 +884,8 @@ const std::string &Server::getServerName() const
 {
     return serverName;
 }
+
+bool Server::isPasswordCorrect(const std::string &providedPassword) const
+{
+    return providedPassword == password;
+}
