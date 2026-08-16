@@ -258,7 +258,7 @@ std::string Server::getServerPrefix() const
 
 std::string Server::getClientPrefix(const Client &client) const
 {
-    return ":" + client.getNickname() + "!" + client.getUsername() + "@" + client.getHost();
+    return client.getNickname() + "!" + client.getUsername() + "@" + client.getHost();
 }
 
 std::string Server::normalizeNickname(const std::string &nickname) const
@@ -491,7 +491,7 @@ void Server::tryRegisterClient(Client &client)
 
 void Server::sendWelcomeMessages(Client &client)
 {
-    const std::string clientIdentity = getClientPrefix(client).substr(1);
+    const std::string clientIdentity = getClientPrefix(client);
 
     queueNumericReply(
         client,

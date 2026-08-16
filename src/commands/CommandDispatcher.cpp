@@ -188,7 +188,7 @@ void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &m
     const IrcMessage privateMessage(
         "PRIVMSG",
         privateMessageParameters,
-        server.getClientPrefix(client).substr(1),
+        server.getClientPrefix(client),
         true
     );
 
