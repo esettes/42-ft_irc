@@ -180,8 +180,17 @@ void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &m
     const std::string &target = message.params[0];
     const std::string &msg = message.params[1];
 
-    server.queueMessage(
-        client,
-        server.getClientPrefix(client) + " PRIVMSG " + target + " :" + msg + "\r\n"
+    std::vector<std::string> privateMessageParameters;
+
+    privateMessageParameters.push_back(target);
+    privateMessageParameters.push_back(msg);
+
+    const IrcMessage privateMessage(
+        "PRIVMSG",
+        privateMessageParameters,
+        server.getClientPrefix(client).substr(1),
+        true
     );
+
+    server.queueMessage(client, privateMessage.serialize());
 }

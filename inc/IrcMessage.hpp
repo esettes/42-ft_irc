@@ -27,7 +27,7 @@ const std::size_t IRC_MAX_OUTPUT_BUFFER_SIZE = 65536;
  * @file IrcMessage.hpp
  * @brief Declares the parsed IRC message representation shared across the server.
  * 
- * @param prefix The optional prefix of the message, typically indicating the sender.
+ * @param prefix Message author (:nickname!username@host)
  * @param cmd The command of the message, which can be a standard IRC command or a numeric reply.
  * @param params The parameters of the message, which can include channel names, usernames, and message text.
  */
