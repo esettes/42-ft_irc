@@ -253,7 +253,7 @@ std::string Server::resolveClientHost(
 
 std::string Server::getServerPrefix() const
 {
-    return ":" + serverName;
+    return serverName;
 }
 
 std::string Server::getClientPrefix(const Client &client) const
@@ -321,8 +321,7 @@ std::string Server::getReplyTarget(const Client &client) const
 std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
-    const std::string &trailingMessage
-) const
+    const std::string &trailingMessage) const
 {
     return buildNumericReply(
         numericCode,
@@ -336,8 +335,7 @@ std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
     const std::string &parameter,
-    const std::string &trailingMessage
-) const
+    const std::string &trailingMessage) const
 {
     std::vector<std::string> parameters;
 
@@ -351,8 +349,7 @@ std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
     const std::vector<std::string> &parameters,
-    const std::string &trailingMessage
-) const
+    const std::string &trailingMessage) const
 {
     std::vector<std::string> replyParameters;
 
@@ -367,7 +364,7 @@ std::string Server::buildNumericReply(
     const IrcMessage reply(
         NumericReply::formatCode(numericCode),
         replyParameters,
-        serverName,
+        getServerPrefix(),
         true
     );
 
@@ -377,8 +374,7 @@ std::string Server::buildNumericReply(
 std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
-    const std::vector<std::string> &parameters
-) const
+    const std::vector<std::string> &parameters) const
 {
     std::vector<std::string> replyParameters;
 
@@ -392,7 +388,7 @@ std::string Server::buildNumericReply(
     const IrcMessage reply(
         NumericReply::formatCode(numericCode),
         replyParameters,
-        serverName,
+        getServerPrefix(),
         false
     );
 
