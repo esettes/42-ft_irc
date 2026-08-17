@@ -37,6 +37,7 @@
  * @param pollFds A vector of pollfd structures used for monitoring multiple file descriptors for events.
  * @param clients A mapping of client socket file descriptors to their corresponding Client objects.
  * @param channels A mapping of normalized channel names to their corresponding Channel objects.
+ * @param clientsByNickname Client objects for quick lookup. Allows detecting duplicates and searching for users.
  */
 class Server
 {
@@ -49,6 +50,7 @@ class Server
 
         std::vector<struct pollfd> pollFds;
         std::map<int, Client *> clients;
+        std::map<std::string, Client *> clientsByNickname;
         std::map<std::string, Channel> channels;
 
         void createListeningSocket();
@@ -59,6 +61,7 @@ class Server
 
         bool receiveClientData(std::size_t descriptorIndex);
         void removeClient(std::size_t descriptorIndex);
+        void removeNicknameIndexEntry(const Client &client);
 
         bool processClientBuffer(Client &client);
 
@@ -94,6 +97,7 @@ class Server
         std::string getServerPrefix() const;
         std::string getClientPrefix(const Client &client) const;
         std::string normalizeNickname(const std::string &nickname) const;
+        bool assignNickname(Client &client, const std::string &nickname);
         bool isValidNickname(const std::string &nickname) const;
         std::string normalizeChannelName(const std::string &channelName) const;
         Client *findClientByNickname(const std::string &nickname);

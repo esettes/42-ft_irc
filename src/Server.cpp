@@ -323,6 +323,47 @@ bool Server::isValidNickname(const std::string &nickname) const
     return true;
 }
 
+/**
+ * The only operation that will simultaneously modify:
+ * The nickname stored in Client.
+ * The nicknameReceived state.
+ * The global index.
+ * 
+ * Ownership verification takes place before the previous nickname is removed.
+ * Therefore, if the new one is taken, the client retains their current nickname unchanged.
+ */
+bool Server::assignNickname(Client &client, const std::string &nickname)
+{
+    const std::string normalizedNickname = normalizeNickname(nickname);
+
+    if (normalizedNickname.empty())
+        return false;
+
+    std::map<std::string, Client *>::iterator nicknameIt =
+        clientsByNickname.find(normalizedNickname);
+
+    if (nicknameIt != clientsByNickname.end()
+        && nicknameIt->second != &client)
+    {
+        return false;
+    }
+
+    if (client.isNicknameReceived())
+    {
+        const std::string previousNormalizedNickname =
+            normalizeNickname(client.getNickname());
+
+        if (previousNormalizedNickname != normalizedNickname)
+            removeNicknameIndexEntry(client);
+    }
+
+    client.setNickname(nickname);
+    client.setNicknameReceived(true);
+    clientsByNickname[normalizedNickname] = &client;
+
+    return true;
+}
+
 std::string Server::normalizeChannelName(const std::string &channelName) const
 {
     return IrcCasemap::normalize(channelName);
@@ -503,6 +544,28 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         << ", error=" << std::strerror(receiveErrno) << std::endl;
 
     return false;
+}
+
+/**
+ * The pointer check prevents the accidental deletion of an entry 
+ * belonging to another client if the state were out of sync.
+ */
+void Server::removeNicknameIndexEntry(const Client &client)
+{
+    if (!client.isNicknameReceived())
+        return;
+
+    const std::string normalizedNickname =
+        normalizeNickname(client.getNickname());
+
+    std::map<std::string, Client *>::iterator nicknameIterator =
+        clientsByNickname.find(normalizedNickname);
+
+    if (nicknameIterator != clientsByNickname.end()
+        && nicknameIterator->second == &client)
+    {
+        clientsByNickname.erase(nicknameIterator);
+    }
 }
 
 void Server::removeClient(std::size_t descriptorIndex)
