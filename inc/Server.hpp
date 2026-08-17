@@ -94,6 +94,7 @@ class Server
         std::string getServerPrefix() const;
         std::string getClientPrefix(const Client &client) const;
         std::string normalizeNickname(const std::string &nickname) const;
+        bool isValidNickname(const std::string &nickname) const;
         std::string normalizeChannelName(const std::string &channelName) const;
         Client *findClientByNickname(const std::string &nickname);
         Channel *findChannel(const std::string &channelName);

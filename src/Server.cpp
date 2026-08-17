@@ -266,6 +266,63 @@ std::string Server::normalizeNickname(const std::string &nickname) const
     return IrcCasemap::normalize(nickname);
 }
 
+/**
+ * Nickname format rules:
+ * It cannot be empty.
+ * The first character must be a letter or a special character allowed by IRC.
+ * Subsequent characters can be letters, numbers, special characters, or -.
+ * Spaces, :, ,, *, ?, !, @, and control characters are not allowed.
+ * Special characters allowed are: []\`_^{|}
+ * The maximum length of a nickname is 9 characters.
+ * 
+ * Strict ASCII validation.
+ */
+bool Server::isValidNickname(const std::string &nickname) const
+{
+    if (nickname.empty())
+        return false;
+
+    const std::string validSpecialChars = "[]\\`_^{|}";
+    const char firstChar = nickname[0];
+
+    const bool firstCharIsLetter =
+        (firstChar >= 'A' && firstChar <= 'Z')
+        || (firstChar >= 'a' && firstChar <= 'z');
+
+    const bool firstCharIsSpecial =
+        validSpecialChars.find(firstChar)
+        != std::string::npos;
+
+    if (!firstCharIsLetter && !firstCharIsSpecial)
+        return false;
+
+    for (std::string::size_type i = 1; i < nickname.size(); ++i)
+    {
+        const char currentChar = nickname[i];
+
+        const bool currentCharIsLetter =
+            (currentChar >= 'A' && currentChar <= 'Z')
+            || (currentChar >= 'a' && currentChar <= 'z');
+
+        const bool currentCharIsDigit =
+            currentChar >= '0' && currentChar <= '9';
+
+        const bool currentCharIsSpecial =
+            validSpecialChars.find(currentChar)
+            != std::string::npos;
+
+        if (!currentCharIsLetter
+            && !currentCharIsDigit
+            && !currentCharIsSpecial
+            && currentChar != '-')
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 std::string Server::normalizeChannelName(const std::string &channelName) const
 {
     return IrcCasemap::normalize(channelName);

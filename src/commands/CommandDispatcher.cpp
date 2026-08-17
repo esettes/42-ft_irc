@@ -169,8 +169,30 @@ void CommandDispatcher::handlePass(Client &client, const IrcMessage &message)
 
 void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
 {
-    // do something with client and message
-    client.setNickname(message.params[0]);
+    const std::string &requested = message.params[0];
+
+    if (requested.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NONICKNAMEGIVEN,
+            NumericReply::MSG_NONICKNAMEGIVEN
+        );
+        return;
+    }
+
+    if (!server.isValidNickname(requested))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_ERRONEUSNICKNAME,
+            requested,
+            NumericReply::MSG_ERRONEUSNICKNAME
+        );
+        return;
+    }
+
+    client.setNickname(requested);
     client.setNicknameReceived(true);
 }
 
