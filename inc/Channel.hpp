@@ -35,6 +35,12 @@ class Channel
         const std::string &getName() const;
         const std::string &getTopic() const;
         void setTopic(const std::string &newTopic);
+        void addMember(Client *client);
+        void removeMember(Client *client);
+        bool hasMember(const Client *client) const;
+        std::size_t getMemberCount() const;
+        bool isEmpty() const;
+        const std::set<Client *> &getMembers() const;
 };
 
 #endif
