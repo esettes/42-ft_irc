@@ -2,7 +2,7 @@
 #include "Console.hpp"
 #include "MessageParser.hpp"
 #include <netdb.h>
-
+#include <set>
 
 /** por el momento debe:
  * 
@@ -867,6 +867,58 @@ void Server::queueMessage(Client &client, const std::string &message)
 
     client.appendToOutputBuffer(message);
     updateClientPollEvents(client.getSocketFd());
+}
+
+/**
+ * @brief Queues an IRC message for the source client and once for every other
+ * client sharing at least one channel with it, avoiding duplicate delivery
+ * when multiple channels are shared.
+ */
+void Server::queueMessageToRelatedClients(
+    Client &sourceClient,
+    const std::string &message)
+{
+    queueMessage(sourceClient, message);
+
+    const std::set<std::string> &sourceChannels =
+        sourceClient.getJoinedChannels();
+
+    std::map<int, Client *>::iterator clientIterator = clients.begin();
+
+    while (clientIterator != clients.end())
+    {
+        Client *relatedClient = clientIterator->second;
+
+        if (relatedClient == &sourceClient)
+        {
+            ++clientIterator;
+            continue;
+        }
+
+        const std::set<std::string> &relatedClientChannels =
+            relatedClient->getJoinedChannels();
+
+        bool sharesChannel = false;
+        std::set<std::string>::const_iterator channelIterator =
+            sourceChannels.begin();
+
+        while (channelIterator != sourceChannels.end())
+        {
+            if (relatedClientChannels.find(*channelIterator)
+                != relatedClientChannels.end())
+            {
+                sharesChannel = true;
+                break;
+            }
+
+            ++channelIterator;
+        }
+
+        if (sharesChannel)
+            queueMessage(*relatedClient, message);
+
+        ++clientIterator;
+    }
 }
 
 void Server::queueNumericReply(

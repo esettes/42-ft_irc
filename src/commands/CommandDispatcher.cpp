@@ -167,11 +167,16 @@ void CommandDispatcher::handlePass(Client &client, const IrcMessage &message)
     client.setPasswordAccepted(true);
 }
 
+/**
+ * @brief Validates and assigns a requested nickname, rejects missing, invalid
+ * or occupied names, and broadcasts registered nickname changes using the
+ * client's previous prefix; initial and identical assignments are not announced.
+ */
 void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
 {
-    const std::string &requested = message.params[0];
+    const std::string &requestedNickname = message.params[0];
 
-    if (requested.empty())
+    if (requestedNickname.empty())
     {
         server.queueNumericReply(
             client,
@@ -181,19 +186,50 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
         return;
     }
 
-    if (!server.isValidNickname(requested))
+    if (!server.isValidNickname(requestedNickname))
     {
         server.queueNumericReply(
             client,
             NumericReply::ERR_ERRONEUSNICKNAME,
-            requested,
+            requestedNickname,
             NumericReply::MSG_ERRONEUSNICKNAME
         );
         return;
     }
 
-    client.setNickname(requested);
-    client.setNicknameReceived(true);
+    const bool clientWasRegistered = client.isRegistered();
+    const std::string previousNickname = client.getNickname();
+    const std::string previousClientPrefix =
+        server.getClientPrefix(client);
+
+    if (!server.assignNickname(client, requestedNickname))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NICKNAMEINUSE,
+            requestedNickname,
+            NumericReply::MSG_NICKNAMEINUSE
+        );
+        return;
+    }
+
+    if (!clientWasRegistered || previousNickname == requestedNickname)
+        return;
+
+    std::vector<std::string> nicknameParameters;
+    nicknameParameters.push_back(requestedNickname);
+
+    const IrcMessage nicknameMessage(
+        "NICK",
+        nicknameParameters,
+        previousClientPrefix,
+        true
+    );
+
+    server.queueMessageToRelatedClients(
+        client,
+        nicknameMessage.serialize()
+    );
 }
 
 void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)

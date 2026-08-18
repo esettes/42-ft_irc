@@ -126,6 +126,10 @@ class Server
         ) const;
 
         void queueMessage(Client &client, const std::string &message);
+        void queueMessageToRelatedClients(
+            Client &sourceClient,
+            const std::string &message
+        );
         void queueNumericReply(
             Client &client,
             int numericCode,
