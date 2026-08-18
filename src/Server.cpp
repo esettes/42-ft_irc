@@ -568,6 +568,9 @@ void Server::removeNicknameIndexEntry(const Client &client)
     }
 }
 
+/**
+ * 
+ */
 void Server::removeClient(std::size_t descriptorIndex)
 {
     const int clientSocketFd = pollFds[descriptorIndex].fd;
@@ -575,7 +578,10 @@ void Server::removeClient(std::size_t descriptorIndex)
 
     if (clientIterator != clients.end())
     {
-        delete clientIterator->second;
+        Client *client = clientIterator->second;
+
+        removeNicknameIndexEntry(*client);
+        delete client;
         clients.erase(clientIterator);
     }
     if (::close(clientSocketFd) == -1)
@@ -979,11 +985,13 @@ void Server::closeAllFds()
 
     while (clientIterator != clients.end())
     {
+        removeNicknameIndexEntry(*clientIterator->second);
         delete clientIterator->second;
         ++clientIterator;
     }
 
     clients.clear();
+    clientsByNickname.clear();
 
     for (std::size_t i = 0; i < pollFds.size(); ++i)
     {
