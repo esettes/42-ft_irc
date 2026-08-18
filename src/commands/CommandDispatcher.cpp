@@ -44,6 +44,11 @@ void CommandDispatcher::registerCommands()
     );
     cmmds.insert(
         std::make_pair(
+            "PONG",
+            CommandDefinition(&CommandDispatcher::handlePong, 0, false))
+    );
+    cmmds.insert(
+        std::make_pair(
             "QUIT",
             CommandDefinition(&CommandDispatcher::handleQuit, 0, false))
     );
@@ -59,6 +64,12 @@ void CommandDispatcher::registerCommands()
     );
 }
 
+/**
+ * @brief Dispatches a parsed IRC command after verifying that it is
+ * supported, that the client satisfies its registration requirement, and
+ * that its required parameters are present. Queues the corresponding numeric
+ * error when validation fails and invokes the registered handler otherwise.
+ */
 void CommandDispatcher::execute(Client &client, const IrcMessage &message)
 {
     CommandMap::iterator it;
@@ -97,7 +108,9 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
         return;
     }
 
-    if (message.getCommand() == "PING" && message.params.empty())
+    if ((message.getCommand() == "PING"
+            || message.getCommand() == "PONG")
+        && message.params.empty())
     {
         server.queueNumericReply(
             client,
@@ -295,6 +308,16 @@ void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
     );
 
     server.queueMessage(client, pongMessage.serialize());
+}
+
+/**
+ * @brief Accepts a valid PONG response from a client. No state is updated
+ * because the server does not currently track keepalive tokens or deadlines.
+ */
+void CommandDispatcher::handlePong(Client &client, const IrcMessage &message)
+{
+    (void)client;
+    (void)message;
 }
 
 /**
