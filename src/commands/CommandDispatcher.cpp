@@ -3,6 +3,8 @@
 #include "Client.hpp"
 #include "IrcMessage.hpp"
 
+#include <cctype>
+
 CommandDispatcher::CommandDefinition::CommandDefinition(
     CommandHandler handler,
     std::size_t minParams,
@@ -51,6 +53,11 @@ void CommandDispatcher::registerCommands()
         std::make_pair(
             "QUIT",
             CommandDefinition(&CommandDispatcher::handleQuit, 0, false))
+    );
+    cmmds.insert(
+        std::make_pair(
+            "CAP",
+            CommandDefinition(&CommandDispatcher::handleCap, 1, false))
     );
     cmmds.insert(
         std::make_pair(
@@ -354,6 +361,54 @@ void CommandDispatcher::handleQuit(
     server.queueMessageToRelatedClients(
         client,
         serializedQuitMessage
+    );
+}
+
+/**
+ * @brief Processes CAP LS before or after client registration and replies
+ * through the output queue with an empty capability list.
+ */
+void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
+{
+    std::string capabilitySubcommand = message.params[0];
+
+    for (std::size_t characterIndex = 0;
+        characterIndex < capabilitySubcommand.size();
+        ++characterIndex)
+    {
+        capabilitySubcommand[characterIndex] = static_cast<char>(
+            std::toupper(
+                static_cast<unsigned char>(
+                    capabilitySubcommand[characterIndex]
+                )
+            )
+        );
+    }
+
+    if (capabilitySubcommand != "LS")
+        return;
+
+    std::string clientIdentifier = client.getNickname();
+
+    if (clientIdentifier.empty())
+        clientIdentifier = "*";
+
+    std::vector<std::string> capabilityParameters;
+
+    capabilityParameters.push_back(clientIdentifier);
+    capabilityParameters.push_back("LS");
+    capabilityParameters.push_back("");
+
+    const IrcMessage capabilityMessage(
+        "CAP",
+        capabilityParameters,
+        server.getServerName(),
+        true
+    );
+
+    server.queueMessage(
+        client,
+        capabilityMessage.serialize()
     );
 }
 

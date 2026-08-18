@@ -57,6 +57,7 @@ class CommandDispatcher
         void handlePing(Client &client, const IrcMessage &message);
         void handlePong(Client &client, const IrcMessage &message);
         void handleQuit(Client &client, const IrcMessage &message);
+        void handleCap(Client &client, const IrcMessage &message);
         void handleJoin(Client &client, const IrcMessage &message);
         void handlePrivateMessage(Client &client, const IrcMessage &message);
 
