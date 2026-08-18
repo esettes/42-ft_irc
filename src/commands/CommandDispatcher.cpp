@@ -365,7 +365,7 @@ void CommandDispatcher::handleQuit(
 }
 
 /**
- * @brief Processes CAP LS, CAP LIST and CAP REQ before or after client
+ * @brief Processes CAP LS, CAP LIST, CAP REQ and CAP ENDbefore or after client
  * registration, returning empty capability lists for LS and LIST and rejecting
  * requested capabilities through NAK.
  */
@@ -385,7 +385,9 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
             )
         );
     }
-
+    if (capabilitySubcommand == "END")
+        return;
+    
     std::string responseSubcommand;
     std::string responseCapabilityList;
 
