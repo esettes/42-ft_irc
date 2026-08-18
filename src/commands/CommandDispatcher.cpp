@@ -365,8 +365,9 @@ void CommandDispatcher::handleQuit(
 }
 
 /**
- * @brief Processes CAP LS before or after client registration and replies
- * through the output queue with an empty capability list.
+ * @brief Processes CAP LS, CAP LIST and CAP REQ before or after client
+ * registration, returning empty capability lists for LS and LIST and rejecting
+ * requested capabilities through NAK.
  */
 void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
 {
@@ -385,8 +386,33 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
         );
     }
 
-    if (capabilitySubcommand != "LS")
+    std::string responseSubcommand;
+    std::string responseCapabilityList;
+
+    if (capabilitySubcommand == "LS" || capabilitySubcommand == "LIST")
+    {
+        responseSubcommand = capabilitySubcommand;
+    }
+    else if (capabilitySubcommand == "REQ")
+    {
+        if (message.params.size() < 2 || message.params[1].empty())
+        {
+            server.queueNumericReply(
+                client,
+                NumericReply::ERR_NEEDMOREPARAMS,
+                message.getCommand(),
+                NumericReply::MSG_NEEDMOREPARAMS
+            );
+            return;
+        }
+
+        responseSubcommand = "NAK";
+        responseCapabilityList = message.params[1];
+    }
+    else
+    {
         return;
+    }
 
     std::string clientIdentifier = client.getNickname();
 
@@ -396,8 +422,8 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
     std::vector<std::string> capabilityParameters;
 
     capabilityParameters.push_back(clientIdentifier);
-    capabilityParameters.push_back("LS");
-    capabilityParameters.push_back("");
+    capabilityParameters.push_back(responseSubcommand);
+    capabilityParameters.push_back(responseCapabilityList);
 
     const IrcMessage capabilityMessage(
         "CAP",
