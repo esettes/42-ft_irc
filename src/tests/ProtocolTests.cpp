@@ -280,6 +280,71 @@ static std::string receiveAvailableData(
     return response;
 }
 
+/**
+ * @brief Waits for the remote peer to close a connected socket and returns
+ * true when EOF, a hangup, or a connection reset is detected.
+ */
+static bool waitForSocketClosure(
+    int socketFd,
+    int timeoutMilliseconds
+)
+{
+    struct pollfd descriptor;
+
+    descriptor.fd = socketFd;
+    descriptor.events = POLLIN;
+    descriptor.revents = 0;
+
+    int pollResult;
+
+    do
+    {
+        pollResult = ::poll(
+            &descriptor,
+            1,
+            timeoutMilliseconds
+        );
+    }
+    while (pollResult == -1 && errno == EINTR);
+
+    if (pollResult <= 0)
+        return false;
+
+    if (descriptor.revents & POLLNVAL)
+        return false;
+
+    if (descriptor.revents & (POLLHUP | POLLERR))
+        return true;
+
+    if (!(descriptor.revents & POLLIN))
+        return false;
+
+    char receivedByte;
+    ssize_t receivedByteCount;
+
+    do
+    {
+        receivedByteCount = ::recv(
+            socketFd,
+            &receivedByte,
+            sizeof(receivedByte),
+            0
+        );
+    }
+    while (receivedByteCount == -1 && errno == EINTR);
+
+    if (receivedByteCount == 0)
+        return true;
+
+    if (receivedByteCount == -1
+        && (errno == ECONNRESET || errno == ENOTCONN))
+    {
+        return true;
+    }
+
+    return false;
+}
+
 class TestServerProcess
 {
     private:
@@ -1076,6 +1141,277 @@ static void testSlowClientDoesNotStopServer()
     ::close(slowSocket);
 }
 
+/**
+ * @brief Verifies PING responses, missing-origin errors, PONG acceptance,
+ * token preservation, and availability before client registration.
+ */
+static void testPhase10PingAndPong()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for PING and PONG tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for PING and PONG tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string commands =
+        "PING :phase10 token\r\n"
+        "PING\r\n"
+        "PONG :client token\r\n"
+        "PING :still-connected\r\n"
+        "PONG\r\n";
+
+    if (!sendAll(socketFd, commands))
+    {
+        reportFailure(
+            "PING and PONG commands should be sent",
+            "successful send",
+            "send failed"
+        );
+        ::close(socketFd);
+        return;
+    }
+
+    const std::string response =
+        receiveAvailableData(socketFd, 500);
+
+    const std::string expectedResponse =
+        "PONG :phase10 token\r\n"
+        ":irc.42.local 409 * :No origin specified\r\n"
+        "PONG :still-connected\r\n"
+        ":irc.42.local 409 * :No origin specified\r\n";
+
+    expectEqual(
+        response,
+        expectedResponse,
+        "PING and PONG should work before registration"
+    );
+
+    ::close(socketFd);
+}
+
+/**
+ * @brief Verifies CAP LS, LIST, REQ and END, case-insensitive subcommands,
+ * missing-parameter errors, empty capability lists, NAK responses, and the
+ * correct client identifier before and after NICK.
+ */
+static void testPhase10CapabilityNegotiation()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for CAP tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for CAP tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string commands =
+        "CAP ls 302\r\n"
+        "CAP LIST\r\n"
+        "CAP req :multi-prefix sasl\r\n"
+        "CAP end\r\n"
+        "CAP\r\n"
+        "CAP REQ\r\n"
+        "CAP REQ :\r\n"
+        "NICK capclient\r\n"
+        "CAP list\r\n"
+        "PING :cap-ended\r\n";
+
+    if (!sendAll(socketFd, commands))
+    {
+        reportFailure(
+            "CAP commands should be sent",
+            "successful send",
+            "send failed"
+        );
+        ::close(socketFd);
+        return;
+    }
+
+    const std::string response =
+        receiveAvailableData(socketFd, 500);
+
+    const std::string expectedResponse =
+        ":irc.42.local CAP * LS :\r\n"
+        ":irc.42.local CAP * LIST :\r\n"
+        ":irc.42.local CAP * NAK :multi-prefix sasl\r\n"
+        ":irc.42.local 461 * CAP :Not enough parameters\r\n"
+        ":irc.42.local 461 * CAP :Not enough parameters\r\n"
+        ":irc.42.local 461 * CAP :Not enough parameters\r\n"
+        ":irc.42.local CAP capclient LIST :\r\n"
+        "PONG :cap-ended\r\n";
+
+    expectEqual(
+        response,
+        expectedResponse,
+        "CAP negotiation commands should produce the expected responses"
+    );
+
+    ::close(socketFd);
+}
+
+/**
+ * @brief Verifies QUIT before registration, QUIT with a reason after
+ * registration, TCP connection closure, and nickname release.
+ */
+static void testPhase10QuitAndNicknameRelease()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for QUIT tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int unregisteredSocketFd =
+        connectToServer(server.getPort());
+
+    if (unregisteredSocketFd == -1)
+    {
+        reportFailure(
+            "Unregistered client should connect for QUIT test",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    if (!sendAll(unregisteredSocketFd, "QUIT\r\n"))
+    {
+        reportFailure(
+            "QUIT without a reason should be sent",
+            "successful send",
+            "send failed"
+        );
+        ::close(unregisteredSocketFd);
+        return;
+    }
+
+    expectTrue(
+        waitForSocketClosure(unregisteredSocketFd, 1000),
+        "QUIT should close an unregistered client connection",
+        "closed TCP connection",
+        "connection remained open"
+    );
+
+    ::close(unregisteredSocketFd);
+
+    const int registeredSocketFd =
+        connectToServer(server.getPort());
+
+    if (registeredSocketFd == -1)
+    {
+        reportFailure(
+            "Registered client should connect for QUIT test",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string registrationResponse =
+        registerClient(registeredSocketFd, "quitclient");
+
+    expectContains(
+        registrationResponse,
+        ":irc.42.local 001 quitclient ",
+        "Client should register before testing QUIT with a reason"
+    );
+
+    if (!sendAll(
+            registeredSocketFd,
+            "QUIT :Phase 10 complete\r\n"
+        ))
+    {
+        reportFailure(
+            "QUIT with a reason should be sent",
+            "successful send",
+            "send failed"
+        );
+        ::close(registeredSocketFd);
+        return;
+    }
+
+    expectTrue(
+        waitForSocketClosure(registeredSocketFd, 1000),
+        "QUIT with a reason should close the client connection",
+        "closed TCP connection",
+        "connection remained open"
+    );
+
+    ::close(registeredSocketFd);
+
+    const int reusedNicknameSocketFd =
+        connectToServer(server.getPort());
+
+    if (reusedNicknameSocketFd == -1)
+    {
+        reportFailure(
+            "A new client should connect after QUIT",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string reusedNicknameResponse =
+        registerClient(reusedNicknameSocketFd, "quitclient");
+
+    expectContains(
+        reusedNicknameResponse,
+        ":irc.42.local 001 quitclient ",
+        "QUIT should release the client's nickname"
+    );
+
+    expectTrue(
+        reusedNicknameResponse.find(" 433 ")
+            == std::string::npos,
+        "A nickname should be reusable after QUIT",
+        "registration without numeric 433",
+        reusedNicknameResponse
+    );
+
+    ::close(reusedNicknameSocketFd);
+}
+
 int main()
 {
     testIrcMessageSerialization();
@@ -1090,6 +1426,9 @@ int main()
     testPassRegistrationRules();
     testSpecificMissingParameterNumerics();
     testPrivateMessageParameterNumerics();
+    testPhase10PingAndPong();
+    testPhase10CapabilityNegotiation();
+    testPhase10QuitAndNicknameRelease();
     testOversizedErrorDoesNotStopServer();
     testSlowClientDoesNotStopServer();
 
