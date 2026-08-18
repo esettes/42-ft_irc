@@ -751,6 +751,130 @@ static void testWelcomeNumerics()
     ::close(socketFd);
 }
 
+/**
+ * This function tests:
+ * 
+ * PASS without parameter → 461.
+ * Incorrect password → 464.
+ * An incorrect password resets passwordAccepted to false.
+ * Without an accepted password, 001 does not appear.
+ * PASS after registration → 462.
+ */
+static void testPassRegistrationRules()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for PASS tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "PASS\r\n"
+        ),
+        ":irc.42.local 461 * PASS :Not enough parameters\r\n",
+        "PASS without a password should return 461"
+    );
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "PASS incorrect\r\n"
+        ),
+        ":irc.42.local 464 * :Password incorrect\r\n",
+        "An incorrect password should return 464"
+    );
+
+    const int resetPasswordSocketFd =
+        connectToServer(server.getPort());
+
+    if (resetPasswordSocketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for password reset test",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string passwordResetCommands =
+        "PASS secret\r\n"
+        "PASS incorrect\r\n"
+        "NICK resetpass\r\n"
+        "USER resetpass 0 * :Reset Pass\r\n";
+
+    if (!sendAll(resetPasswordSocketFd, passwordResetCommands))
+    {
+        reportFailure(
+            "Password reset commands should be sent",
+            "successful send",
+            "send failed"
+        );
+        ::close(resetPasswordSocketFd);
+        return;
+    }
+
+    const std::string passwordResetResponse =
+        receiveAvailableData(resetPasswordSocketFd, 500);
+
+    expectContains(
+        passwordResetResponse,
+        ":irc.42.local 464 * :Password incorrect\r\n",
+        "An incorrect PASS should reject the supplied password"
+    );
+
+    expectTrue(
+        passwordResetResponse.find(" 001 ") == std::string::npos,
+        "An incorrect PASS after a correct PASS should prevent registration",
+        "output without numeric 001",
+        passwordResetResponse
+    );
+
+    ::close(resetPasswordSocketFd);
+
+    const int registeredClientSocketFd =
+        connectToServer(server.getPort());
+
+    if (registeredClientSocketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for repeated PASS test",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    registerClient(registeredClientSocketFd, "passclient");
+
+    if (!sendAll(registeredClientSocketFd, "PASS secret\r\n"))
+    {
+        reportFailure(
+            "Repeated PASS command should be sent",
+            "successful send",
+            "send failed"
+        );
+        ::close(registeredClientSocketFd);
+        return;
+    }
+
+    expectEqual(
+        receiveAvailableData(registeredClientSocketFd, 500),
+        ":irc.42.local 462 passclient :You may not reregister\r\n",
+        "PASS after registration should return 462"
+    );
+
+    ::close(registeredClientSocketFd);
+}
+
 static void testSpecificMissingParameterNumerics()
 {
     TestServerProcess server;
@@ -963,6 +1087,7 @@ int main()
     testFragmentedLfBoundary();
     testServerPrefixAndUnknownCommand();
     testWelcomeNumerics();
+    testPassRegistrationRules();
     testSpecificMissingParameterNumerics();
     testPrivateMessageParameterNumerics();
     testOversizedErrorDoesNotStopServer();
