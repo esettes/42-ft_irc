@@ -108,7 +108,8 @@ SRC_SRCS		= $(addprefix $(SRC_DIR), \
 					IrcMessage.cpp \
 					IrcCasemap.cpp \
 					MessageParser.cpp \
-					Console.cpp)
+					Console.cpp \
+					Channel.cpp)
 
 TEST_DIR = ./src/tests/
 MSG_PARSER_TEST = message_parser.test
