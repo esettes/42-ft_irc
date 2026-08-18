@@ -268,10 +268,24 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
     client.setUsernameReceived(true);
 }
 
+/**
+ * @brief Responds to a valid PING command with a PONG message containing
+ * the same token, queued through the server's non-blocking output system.
+ */
 void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
 {
-    (void)client;
-    (void)message;
+    std::vector<std::string> pongParameters;
+
+    pongParameters.push_back(message.params[0]);
+
+    const IrcMessage pongMessage(
+        "PONG",
+        pongParameters,
+        "",
+        true
+    );
+
+    server.queueMessage(client, pongMessage.serialize());
 }
 
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
