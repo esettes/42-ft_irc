@@ -232,11 +232,39 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
     );
 }
 
+/**
+ * @brief Processes USER during registration, rejecting registered clients or
+ * missing required data, then stores the username and real name and marks the
+ * USER registration step as completed.
+ */
 void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
 {
-    // do something with client and message
-    client.setUsername(message.params[0]);
-    client.setRealname(message.params[3]);
+    if (client.isRegistered())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_ALREADYREGISTERED,
+            NumericReply::MSG_ALREADYREGISTRED
+        );
+        return;
+    }
+
+    const std::string &requestedUsername = message.params[0];
+    const std::string &requestedRealname = message.params[3];
+
+    if (requestedUsername.empty() || requestedRealname.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    client.setUsername(requestedUsername);
+    client.setRealname(requestedRealname);
     client.setUsernameReceived(true);
 }
 

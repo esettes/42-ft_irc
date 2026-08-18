@@ -603,6 +603,11 @@ void Server::dispatchCommand(Client &client, const IrcMessage &msg)
     tryRegisterClient(client);
 }
 
+/**
+ * @brief First call with incomplete data, does nothing.
+ * First call with complete data, registers and sends welcome message.
+ * Subsequent calls with complete data, does nothing.
+ */
 void Server::tryRegisterClient(Client &client)
 {
     if (client.isRegistered())
