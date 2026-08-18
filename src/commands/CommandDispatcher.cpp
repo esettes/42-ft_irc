@@ -16,6 +16,10 @@ CommandDispatcher::CommandDispatcher(Server &server) : server(server)
     registerCommands();
 }
 
+/**
+ * @brief Registers every supported IRC command with its handler, minimum
+ * parameter count, and client registration requirement.
+ */
 void CommandDispatcher::registerCommands()
 {
     cmmds.insert(
@@ -37,6 +41,11 @@ void CommandDispatcher::registerCommands()
         std::make_pair(
             "PING",
             CommandDefinition(&CommandDispatcher::handlePing, 0, false))
+    );
+    cmmds.insert(
+        std::make_pair(
+            "QUIT",
+            CommandDefinition(&CommandDispatcher::handleQuit, 0, false))
     );
     cmmds.insert(
         std::make_pair(
@@ -286,6 +295,43 @@ void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
     );
 
     server.queueMessage(client, pongMessage.serialize());
+}
+
+/**
+ * @brief Processes a intentioned client disconnection, using the supplied
+ * reason or a default one, notifying related clients and requesting the
+ * source client's removal from the server.
+ */
+void CommandDispatcher::handleQuit(
+    Client &client,
+    const IrcMessage &message
+)
+{
+    std::string quitReason = "Client Quit";
+
+    if (!message.params.empty() && !message.params[0].empty())
+        quitReason = message.params[0];
+
+    std::vector<std::string> quitParameters;
+
+    quitParameters.push_back(quitReason);
+
+    const IrcMessage quitMessage(
+        "QUIT",
+        quitParameters,
+        server.getClientPrefix(client),
+        true
+    );
+
+    const std::string serializedQuitMessage =
+        quitMessage.serialize();
+
+    client.requestDisconnect();
+
+    server.queueMessageToRelatedClients(
+        client,
+        serializedQuitMessage
+    );
 }
 
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
