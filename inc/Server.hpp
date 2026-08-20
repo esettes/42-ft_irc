@@ -107,6 +107,7 @@ class Server
         Client *findClientByNickname(const std::string &nickname);
         Channel *findChannel(const std::string &channelName);
         Channel *findOrCreateChannel(const std::string &channelName);
+        void addClientToChannel(Client &client, Channel &channel);
         std::string buildNumericReply(
             int numericCode,
             const Client &client,

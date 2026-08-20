@@ -487,6 +487,33 @@ Channel *Server::findOrCreateChannel(const std::string &channelName)
     return &insertionResult.first->second;
 }
 
+/**
+ * @brief Adds a client to a channel while keeping the membership state stored
+ * by Client and Channel synchronized. Duplicate joins have no effect, a
+ * pending invitation is consumed after joining, and the first member becomes
+ * a channel operator.
+ *
+ * This function assumes that all channel access restrictions have already
+ * been validated by the caller.
+ *
+ * @param client The client joining the channel.
+ * @param channel The channel the client is joining.
+ */
+void Server::addClientToChannel(Client &client, Channel &channel)
+{
+    if (channel.hasMember(&client))
+        return;
+
+    const bool channelWasEmpty = channel.isEmpty();
+
+    channel.addMember(&client);
+    client.joinChannel(channel.getName());
+    channel.removeInvitation(&client);
+
+    if (channelWasEmpty)
+        channel.addOperator(&client);
+}
+
 std::string Server::getReplyTarget(const Client &client) const
 {
     if (client.getNickname().empty())
