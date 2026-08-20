@@ -132,7 +132,7 @@ bool Channel::hasOperator(const Client *client) const
 }
 
 /**
- * @brief Adds a non-member client to the channel invitation list(MODE +i).
+ * @brief Adds a non-member client to the channel invitation list.
  */
 void Channel::inviteClient(Client *client)
 {
@@ -143,7 +143,7 @@ void Channel::inviteClient(Client *client)
 }
 
 /**
- * @brief Removes a client's pending invitation to the channel(MODE -i).
+ * @brief Removes a client's pending invitation to the channel.
  * Its a pending invitation not a permanent privilege.
  */
 void Channel::removeInvitation(Client *client)

@@ -117,6 +117,8 @@ IRC_MSG_TEST = $(TEST_DIR)irc_message_tests.test
 CASEMAP_TEST = $(TEST_DIR)irc_casemap_tests.test
 TEST_SRC = $(TEST_DIR)IrcMessageTests.cpp
 CASEMAP_TEST_SRC = $(TEST_DIR)IrcCasemapTests.cpp
+CHANNEL_TEST = $(TEST_DIR)channel_tests.test
+CHANNEL_TEST_SRC = $(TEST_DIR)ChannelTests.cpp
 PROTOCOL_TEST = $(TEST_DIR)protocol_tests.test
 PROTOCOL_TEST_SRC = $(TEST_DIR)ProtocolTests.cpp
 
@@ -175,7 +177,7 @@ clean: ## 🧹 Removes the object files
 	$(call RUN_AND_LOG,$(RM) $(OBJ_DIR),$(IRC) $(RED)Object files removed $(RESET))
 fclean: ## 🗑️  Removes both object and executable files
 # 	@$(RM) $(NAME)
-	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST) $(CASEMAP_TEST) $(PROTOCOL_TEST),$(IRC) $(RED)Removed $(RESET))
+	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST) $(CASEMAP_TEST) $(CHANNEL_TEST) $(PROTOCOL_TEST),$(IRC) $(RED)Removed $(RESET))
 
 re: ## 🔁 Rebuilds the library
 # 	@echo "$(GREEN)$(NAME) [OK]$(RESET)"
@@ -195,6 +197,7 @@ test: ## 🧪 Runs all tests
 	@$(MAKE) test-message $(NOPRINT)
 	@$(call print_banner,Protocol checklist tests)
 	@$(MAKE) test-protocol $(NOPRINT)
+	@$(MAKE) test-channel $(NOPRINT)
 
 test-parser: ## 🧪 Runs message parser test case
 	@$(CXX) $(CXXFLAGS) $(INC) \
@@ -213,6 +216,17 @@ test-message: ## 🧪 Runs the IRC message serialization and casemap tests
 	@$(CXX) $(CXXFLAGS) $(INC) $(CASEMAP_TEST_SRC) $(SRC_DIR)IrcCasemap.cpp -o $(CASEMAP_TEST)
 	@$(CASEMAP_TEST)
 
+test-channel: ## 🧪 Runs Channel model tests
+	@mkdir -p $(TEST_DIR)
+	@echo " $(YELLOW)$(CHANNEL_TEST_SRC)$(RESET)"
+	@$(CXX) $(CXXFLAGS) $(INC) \
+		$(CHANNEL_TEST_SRC) \
+		$(SRC_DIR)Channel.cpp \
+		$(SRC_DIR)Client.cpp \
+		$(SRC_DIR)IrcCasemap.cpp \
+		-o $(CHANNEL_TEST)
+	@$(CHANNEL_TEST)
+
 test-protocol: $(NAME) ## 🧪 Runs point 1 protocol checklist tests
 	@mkdir -p $(TEST_DIR)
 	@echo " $(YELLOW)$(PROTOCOL_TEST_SRC)$(RESET)"
@@ -225,4 +239,4 @@ test-protocol: $(NAME) ## 🧪 Runs point 1 protocol checklist tests
 		-o $(PROTOCOL_TEST)
 	@$(PROTOCOL_TEST)
 
-.PHONY: all obj clean fclean re help test test-parser test-message test-protocol
+.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol
