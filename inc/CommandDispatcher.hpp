@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <map>
 #include <string>
+#include <vector>
 
 class Server;
 class Client;
@@ -58,6 +59,12 @@ class CommandDispatcher
         void handlePong(Client &client, const IrcMessage &message);
         void handleQuit(Client &client, const IrcMessage &message);
         void handleCap(Client &client, const IrcMessage &message);
+        static std::vector<std::string> splitCommaSeparatedValues(
+            const std::string &valueList);
+        void joinClientToSingleChannel(
+            Client &client,
+            const std::string &channelName,
+            const std::string &providedKey);
         void handleJoin(Client &client, const IrcMessage &message);
         void handlePrivateMessage(Client &client, const IrcMessage &message);
 

@@ -5,6 +5,7 @@
 
 #include <cctype>
 
+
 CommandDispatcher::CommandDefinition::CommandDefinition(
     CommandHandler handler,
     std::size_t minParams,
@@ -441,32 +442,60 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
 }
 
 /**
- * @brief Processes JOIN for a registered client. It rejects an empty or
- * invalid channel name, ignores duplicate joins, obtains or creates the
- * channel, synchronizes membership, and broadcasts the successful JOIN to
- * every channel member, including the joining client.
+ * @brief Splits a comma-separated IRC parameter into individual values while
+ * preserving empty entries so positional relationships, such as channels and
+ * their corresponding keys, remain intact.
  *
- * Registration and missing parameter counts are validated by execute() before
- * this handler is called.
- *
- * @param client The registered client requesting to join the channel.
- * @param message The parsed JOIN message containing the channel name.
+ * @param valueList The comma-separated parameter to split.
+ * @return A vector containing each value in its original order.
  */
-void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
+std::vector<std::string>
+CommandDispatcher::splitCommaSeparatedValues(const std::string &valueList)
 {
-    const std::string &channelName = message.params[0];
+    std::vector<std::string> values;
+    std::string::size_type valueStart = 0;
 
-    if (channelName.empty())
+    while (true)
     {
-        server.queueNumericReply(
-            client,
-            NumericReply::ERR_NEEDMOREPARAMS,
-            message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
+        const std::string::size_type commaPosition =
+            valueList.find(',', valueStart);
+
+        if (commaPosition == std::string::npos)
+        {
+            values.push_back(valueList.substr(valueStart));
+            break;
+        }
+
+        values.push_back(
+            valueList.substr(
+                valueStart,
+                commaPosition - valueStart
+            )
         );
-        return;
+
+        valueStart = commaPosition + 1;
     }
 
+    return values;
+}
+
+/**
+ * @brief Processes a JOIN attempt for one channel. It validates the channel
+ * name and access restrictions, ignores duplicate membership, obtains or
+ * creates the channel, adds the client, broadcasts JOIN, and sends the topic
+ * and member list to the joining client.
+ *
+ * @param client The registered client requesting to join.
+ * @param channelName The individual channel name to process.
+ * @param providedKey The corresponding channel key, or an empty string when
+ * no key was supplied for this channel.
+ */
+void CommandDispatcher::joinClientToSingleChannel(
+    Client &client,
+    const std::string &channelName,
+    const std::string &providedKey
+)
+{
     Channel *channel = server.findOrCreateChannel(channelName);
 
     if (channel == NULL)
@@ -482,11 +511,6 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 
     if (channel->hasMember(&client))
         return;
-    
-    std::string providedKey;
-
-    if (message.params.size() > 1)
-        providedKey = message.params[1];
 
     if (!server.validateChannelJoinAccess(
             client,
@@ -517,6 +541,65 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 
     server.sendChannelTopic(client, *channel);
     server.sendChannelNames(client, *channel);
+}
+
+/**
+ * @brief Processes JOIN for a registered client. It separates the requested
+ * channel and key lists, associates keys with channels by position, and
+ * processes every channel independently.
+ *
+ * An empty channel parameter produces ERR_NEEDMOREPARAMS. Failure to join one
+ * channel does not prevent later channels in the same command from being
+ * processed.
+ *
+ * Registration and missing parameter counts are validated by execute() before
+ * this handler is called.
+ *
+ * @param client The registered client requesting to join.
+ * @param message The parsed JOIN message containing a comma-separated channel
+ * list and an optional comma-separated key list.
+ */
+void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
+{
+   const std::string &channelList = message.params[0];
+
+    if (channelList.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    const std::vector<std::string> requestedChannels =
+        splitCommaSeparatedValues(channelList);
+
+    std::vector<std::string> providedKeys;
+
+    if (message.params.size() > 1)
+    {
+        providedKeys =
+            splitCommaSeparatedValues(message.params[1]);
+    }
+
+    for (std::size_t channelIndex = 0;
+        channelIndex < requestedChannels.size();
+        ++channelIndex)
+    {
+        std::string providedKey;
+
+        if (channelIndex < providedKeys.size())
+            providedKey = providedKeys[channelIndex];
+
+        joinClientToSingleChannel(
+            client,
+            requestedChannels[channelIndex],
+            providedKey
+        );
+    }
 }
 
 void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)
