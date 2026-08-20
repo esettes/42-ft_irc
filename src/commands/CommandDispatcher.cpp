@@ -1,6 +1,7 @@
 #include "CommandDispatcher.hpp"
 #include "Server.hpp"
 #include "Client.hpp"
+#include "Channel.hpp"
 #include "IrcMessage.hpp"
 
 #include <cctype>
@@ -68,6 +69,16 @@ void CommandDispatcher::registerCommands()
         std::make_pair(
             "PRIVMSG",
             CommandDefinition(&CommandDispatcher::handlePrivateMessage, 2, true))
+    );
+    cmmds.insert(
+        std::make_pair(
+            "TOPIC",
+            CommandDefinition(&CommandDispatcher::handleTopic, 1, true))
+    );
+    cmmds.insert(
+        std::make_pair(
+            "MODE",
+            CommandDefinition(&CommandDispatcher::handleMode, 1, true))
     );
 }
 
@@ -501,6 +512,226 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
         *channel,
         joinMessage.serialize()
     );
+}
+
+/**
+ * @brief Processes TOPIC for a registered client. With only a channel name
+ * it reports the current topic through RPL_TOPIC or RPL_NOTOPIC. With a
+ * topic parameter, including an empty trailing parameter, it updates the
+ * stored topic when the client is allowed to do so and broadcasts the
+ * change to every channel member, including the sender.
+ *
+ * Registration and a missing channel name are validated by execute() before
+ * this handler is called.
+ */
+void CommandDispatcher::handleTopic(
+    Client &client,
+    const IrcMessage &message
+)
+{
+    const std::string &channelName = message.params[0];
+
+    if (channelName.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    Channel *channel = server.findChannel(channelName);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            channelName,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTONCHANNEL,
+            channel->getName(),
+            NumericReply::MSG_NOTONCHANNEL
+        );
+        return;
+    }
+
+    const bool topicProvided =
+        message.hasTrailingParameter || message.params.size() >= 2;
+
+    if (!topicProvided)
+    {
+        sendTopicReply(client, *channel);
+        return;
+    }
+
+    if (channel->isTopicRestricted() && !channel->hasOperator(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_CHANOPRIVSNEEDED,
+            channel->getName(),
+            NumericReply::MSG_CHANOPRIVSNEEDED
+        );
+        return;
+    }
+
+    const std::string newTopic =
+        message.params.size() >= 2 ? message.params[1] : "";
+
+    applyTopicChange(client, *channel, newTopic);
+}
+
+/**
+ * @brief Replies with the current channel topic. An empty stored topic
+ * produces RPL_NOTOPIC; otherwise the stored text is sent as RPL_TOPIC.
+ */
+void CommandDispatcher::sendTopicReply(
+    Client &client,
+    const Channel &channel
+)
+{
+    if (channel.getTopic().empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::RPL_NOTOPIC,
+            channel.getName(),
+            NumericReply::MSG_NOTOPIC
+        );
+        return;
+    }
+
+    server.queueNumericReply(
+        client,
+        NumericReply::RPL_TOPIC,
+        channel.getName(),
+        channel.getTopic()
+    );
+}
+
+/**
+ * @brief Stores a new channel topic and notifies every member, including
+ * the client that requested the change. An empty topic clears the current
+ * one and is still broadcast with an explicit trailing parameter.
+ */
+void CommandDispatcher::applyTopicChange(
+    Client &client,
+    Channel &channel,
+    const std::string &newTopic
+)
+{
+    channel.setTopic(newTopic);
+
+    std::vector<std::string> topicParameters;
+
+    topicParameters.push_back(channel.getName());
+    topicParameters.push_back(newTopic);
+
+    const IrcMessage topicMessage(
+        "TOPIC",
+        topicParameters,
+        server.getClientPrefix(client),
+        true
+    );
+
+    server.queueMessageToChannel(channel, topicMessage.serialize());
+}
+
+/**
+ * @brief Applies the topic-restriction flags required by TOPIC. Full MODE
+ * handling belongs to a later phase; this handler only understands +t and
+ * -t so the restriction can be enabled and tested. Mode queries and other
+ * flags are ignored until the complete MODE command is implemented.
+ */
+void CommandDispatcher::handleMode(
+    Client &client,
+    const IrcMessage &message
+)
+{
+    const std::string &target = message.params[0];
+
+    if (target.empty() || !isChannelTarget(target))
+        return;
+
+    Channel *channel = server.findChannel(target);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            target,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTONCHANNEL,
+            channel->getName(),
+            NumericReply::MSG_NOTONCHANNEL
+        );
+        return;
+    }
+
+    if (message.params.size() < 2)
+        return;
+
+    if (!channel->hasOperator(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_CHANOPRIVSNEEDED,
+            channel->getName(),
+            NumericReply::MSG_CHANOPRIVSNEEDED
+        );
+        return;
+    }
+
+    const std::string &modeString = message.params[1];
+    bool topicRestrictionChanged = false;
+
+    if (modeString == "+t")
+    {
+        channel->setTopicRestricted(true);
+        topicRestrictionChanged = true;
+    }
+    else if (modeString == "-t")
+    {
+        channel->setTopicRestricted(false);
+        topicRestrictionChanged = true;
+    }
+
+    if (!topicRestrictionChanged)
+        return;
+
+    std::vector<std::string> modeParameters;
+
+    modeParameters.push_back(channel->getName());
+    modeParameters.push_back(modeString);
+
+    const IrcMessage modeMessage(
+        "MODE",
+        modeParameters,
+        server.getClientPrefix(client),
+        false
+    );
+
+    server.queueMessageToChannel(*channel, modeMessage.serialize());
 }
 
 /**

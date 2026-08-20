@@ -1693,6 +1693,461 @@ static void testPhase10QuitAndNicknameRelease()
     ::close(reusedNicknameSocketFd);
 }
 
+/**
+ * @brief Joins a channel and discards the JOIN confirmation so later
+ * assertions can inspect only the command under test.
+ */
+static bool joinChannelAndDrain(
+    int socketFd,
+    const std::string &channelName
+)
+{
+    if (!sendAll(socketFd, "JOIN " + channelName + "\r\n"))
+        return false;
+
+    receiveAvailableData(socketFd, 500);
+    return true;
+}
+
+/**
+ * @brief Phase 14 — verifies every documented TOPIC error path: 451 before
+ * registration, 461 without a channel, 403 for unknown channels, 442 when
+ * the client is not a member, and that the server stays usable afterwards.
+ */
+static void testPhase14TopicErrors()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 14 TOPIC error tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "TOPIC #general\r\n"
+        ),
+        ":irc.42.local 451 * :You have not registered\r\n",
+        "Phase 14: TOPIC before registration should return 451"
+    );
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for phase 14 TOPIC error tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    registerClient(socketFd, "roxana");
+
+    sendAll(socketFd, "TOPIC\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 461 roxana TOPIC :Not enough parameters\r\n",
+        "Phase 14: TOPIC without a channel should return 461"
+    );
+
+    sendAll(socketFd, "TOPIC #inexistente\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 403 roxana #inexistente :No such channel\r\n",
+        "Phase 14: TOPIC for an unknown channel should return 403"
+    );
+
+    const int outsiderSocketFd = connectToServer(server.getPort());
+
+    if (outsiderSocketFd == -1)
+    {
+        reportFailure(
+            "Outsider client should connect for phase 14 TOPIC tests",
+            "successful connection",
+            "connection failed"
+        );
+        ::close(socketFd);
+        return;
+    }
+
+    registerClient(outsiderSocketFd, "outsider");
+
+    if (!joinChannelAndDrain(socketFd, "#general"))
+    {
+        reportFailure(
+            "Roxana should join #general for the not-on-channel test",
+            "successful JOIN",
+            "JOIN failed"
+        );
+        ::close(outsiderSocketFd);
+        ::close(socketFd);
+        return;
+    }
+
+    sendAll(outsiderSocketFd, "TOPIC #general\r\n");
+    expectEqual(
+        receiveAvailableData(outsiderSocketFd, 500),
+        ":irc.42.local 442 outsider #general :You're not on that channel\r\n",
+        "Phase 14: TOPIC from a non-member should return 442"
+    );
+
+    sendAll(outsiderSocketFd, "TOPIC #general :Hijack\r\n");
+    expectEqual(
+        receiveAvailableData(outsiderSocketFd, 500),
+        ":irc.42.local 442 outsider #general :You're not on that channel\r\n",
+        "Phase 14: setting TOPIC from outside the channel should return 442"
+    );
+
+    sendAll(socketFd, "TOPIC #general\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 331 roxana #general :No topic is set\r\n",
+        "Phase 14: a failed outsider TOPIC must not change the channel topic"
+    );
+
+    expectTrue(
+        server.isRunning(),
+        "Phase 14: invalid TOPIC commands should not stop the server",
+        "ircserv remains running",
+        "ircserv exited"
+    );
+
+    ::close(outsiderSocketFd);
+    ::close(socketFd);
+}
+
+/**
+ * @brief Phase 14 — verifies querying, setting, replacing and clearing a
+ * channel topic, including broadcast to every member, trailing spaces,
+ * casemapped channel names, and that a regular member may change the topic
+ * while +t is disabled.
+ */
+static void testPhase14TopicManagement()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 14 TOPIC management tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int aliceSocketFd = connectToServer(server.getPort());
+    const int bobSocketFd = connectToServer(server.getPort());
+
+    if (aliceSocketFd == -1 || bobSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 14 TOPIC management tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (aliceSocketFd != -1)
+            ::close(aliceSocketFd);
+        if (bobSocketFd != -1)
+            ::close(bobSocketFd);
+        return;
+    }
+
+    const std::string aliceWelcome =
+        registerClient(aliceSocketFd, "alice");
+    const std::string bobWelcome =
+        registerClient(bobSocketFd, "bob");
+
+    std::string alicePrefix;
+    std::string bobPrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            aliceWelcome,
+            "alice",
+            alicePrefix
+        )
+        || !extractClientPrefixFromWelcome(
+            bobWelcome,
+            "bob",
+            bobPrefix
+        ))
+    {
+        reportFailure(
+            "Welcome replies should expose usable client prefixes",
+            "welcome containing nick!nick@",
+            aliceWelcome + bobWelcome
+        );
+        ::close(aliceSocketFd);
+        ::close(bobSocketFd);
+        return;
+    }
+
+    if (!joinChannelAndDrain(aliceSocketFd, "#general"))
+    {
+        reportFailure(
+            "Alice should join #general",
+            "successful JOIN",
+            "JOIN failed"
+        );
+        ::close(aliceSocketFd);
+        ::close(bobSocketFd);
+        return;
+    }
+
+    sendAll(aliceSocketFd, "TOPIC #general\r\n");
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        ":irc.42.local 331 alice #general :No topic is set\r\n",
+        "Phase 14: querying an unset topic should return 331"
+    );
+
+    sendAll(bobSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+
+    sendAll(aliceSocketFd, "TOPIC #general :Nuevo tema del canal\r\n");
+
+    const std::string expectedSetTopic =
+        ":" + alicePrefix + " TOPIC #general :Nuevo tema del canal\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedSetTopic,
+        "Phase 14: setting the topic should notify the sender"
+    );
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedSetTopic,
+        "Phase 14: setting the topic should notify every channel member"
+    );
+
+    sendAll(bobSocketFd, "TOPIC #general\r\n");
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        ":irc.42.local 332 bob #general :Nuevo tema del canal\r\n",
+        "Phase 14: querying a set topic should return 332"
+    );
+
+    sendAll(aliceSocketFd, "TOPIC #GENERAL\r\n");
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        ":irc.42.local 332 alice #general :Nuevo tema del canal\r\n",
+        "Phase 14: TOPIC should find channels with IRC casemapping"
+    );
+
+    sendAll(bobSocketFd, "TOPIC #general :Tema con espacios  \r\n");
+
+    const std::string expectedMemberTopic =
+        ":" + bobPrefix + " TOPIC #general :Tema con espacios  \r\n";
+
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedMemberTopic,
+        "Phase 14: a regular member should change the topic while +t is off"
+    );
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedMemberTopic,
+        "Phase 14: every member should receive the same TOPIC broadcast"
+    );
+
+    sendAll(aliceSocketFd, "TOPIC #general :\r\n");
+
+    const std::string expectedClearedTopic =
+        ":" + alicePrefix + " TOPIC #general :\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedClearedTopic,
+        "Phase 14: clearing the topic should notify the sender with an empty trailing parameter"
+    );
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedClearedTopic,
+        "Phase 14: clearing the topic should notify every channel member"
+    );
+
+    sendAll(bobSocketFd, "TOPIC #general\r\n");
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        ":irc.42.local 331 bob #general :No topic is set\r\n",
+        "Phase 14: querying after clearing the topic should return 331"
+    );
+
+    ::close(aliceSocketFd);
+    ::close(bobSocketFd);
+}
+
+/**
+ * @brief Phase 14 — verifies MODE +t: regular members receive 482 when they
+ * try to change the topic, operators can still change it, queries remain
+ * allowed, and MODE -t restores member access.
+ */
+static void testPhase14TopicRestriction()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 14 TOPIC restriction tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int aliceSocketFd = connectToServer(server.getPort());
+    const int bobSocketFd = connectToServer(server.getPort());
+
+    if (aliceSocketFd == -1 || bobSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 14 TOPIC restriction tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (aliceSocketFd != -1)
+            ::close(aliceSocketFd);
+        if (bobSocketFd != -1)
+            ::close(bobSocketFd);
+        return;
+    }
+
+    const std::string aliceWelcome =
+        registerClient(aliceSocketFd, "alice");
+    const std::string bobWelcome =
+        registerClient(bobSocketFd, "bob");
+
+    std::string alicePrefix;
+    std::string bobPrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            aliceWelcome,
+            "alice",
+            alicePrefix
+        )
+        || !extractClientPrefixFromWelcome(
+            bobWelcome,
+            "bob",
+            bobPrefix
+        ))
+    {
+        reportFailure(
+            "Welcome replies should expose usable client prefixes",
+            "welcome containing nick!nick@",
+            aliceWelcome + bobWelcome
+        );
+        ::close(aliceSocketFd);
+        ::close(bobSocketFd);
+        return;
+    }
+
+    if (!joinChannelAndDrain(aliceSocketFd, "#general"))
+    {
+        reportFailure(
+            "Alice should join #general for the restriction test",
+            "successful JOIN",
+            "JOIN failed"
+        );
+        ::close(aliceSocketFd);
+        ::close(bobSocketFd);
+        return;
+    }
+
+    sendAll(bobSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+
+    sendAll(aliceSocketFd, "TOPIC #general :Keep me\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+
+    sendAll(aliceSocketFd, "MODE #general +t\r\n");
+
+    const std::string expectedModeOn =
+        ":" + alicePrefix + " MODE #general +t\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedModeOn,
+        "Phase 14: enabling +t should notify the operator"
+    );
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedModeOn,
+        "Phase 14: enabling +t should notify every channel member"
+    );
+
+    sendAll(bobSocketFd, "TOPIC #general :Hijack\r\n");
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        ":irc.42.local 482 bob #general :You're not channel operator\r\n",
+        "Phase 14: a regular member must not change the topic while +t is set"
+    );
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 200),
+        "",
+        "Phase 14: a rejected TOPIC must not be broadcast to the channel"
+    );
+
+    sendAll(bobSocketFd, "TOPIC #general\r\n");
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        ":irc.42.local 332 bob #general :Keep me\r\n",
+        "Phase 14: querying the topic must still work for a regular member"
+    );
+
+    sendAll(aliceSocketFd, "TOPIC #general :Operator topic\r\n");
+
+    const std::string expectedOperatorTopic =
+        ":" + alicePrefix + " TOPIC #general :Operator topic\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedOperatorTopic,
+        "Phase 14: a channel operator should change the topic while +t is set"
+    );
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedOperatorTopic,
+        "Phase 14: operator topic changes should still reach every member"
+    );
+
+    sendAll(aliceSocketFd, "MODE #general -t\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+
+    sendAll(bobSocketFd, "TOPIC #general :Member topic\r\n");
+
+    const std::string expectedRestoredTopic =
+        ":" + bobPrefix + " TOPIC #general :Member topic\r\n";
+
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedRestoredTopic,
+        "Phase 14: disabling +t should allow a regular member to change the topic"
+    );
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedRestoredTopic,
+        "Phase 14: a member topic change after -t should reach every member"
+    );
+
+    ::close(aliceSocketFd);
+    ::close(bobSocketFd);
+}
+
 int main()
 {
     testIrcMessageSerialization();
@@ -1711,6 +2166,9 @@ int main()
     testPhase10PingAndPong();
     testPhase10CapabilityNegotiation();
     testPhase10QuitAndNicknameRelease();
+    testPhase14TopicErrors();
+    testPhase14TopicManagement();
+    testPhase14TopicRestriction();
     testOversizedErrorDoesNotStopServer();
     testSlowClientDoesNotStopServer();
 

@@ -464,6 +464,57 @@ static void testBooleanChannelModes()
 }
 
 /**
+ * @brief Documents the privilege model used by TOPIC: with +t disabled any
+ * member may change the topic; with +t enabled only channel operators may.
+ */
+static void testTopicRestrictionPrivilegeModel()
+{
+    Channel channel("#general");
+    Client channelOperator(70, "localhost");
+    Client regularMember(71, "localhost");
+
+    channel.addMember(&channelOperator);
+    channel.addOperator(&channelOperator);
+    channel.addMember(&regularMember);
+
+    expectFalse(
+        channel.isTopicRestricted(),
+        "A new channel should allow any member to change the topic"
+    );
+
+    expectTrue(
+        channel.hasOperator(&channelOperator),
+        "The first granted operator should keep operator privileges"
+    );
+
+    expectFalse(
+        channel.hasOperator(&regularMember),
+        "A later member should not become an operator automatically"
+    );
+
+    channel.setTopicRestricted(true);
+
+    expectTrue(
+        channel.isTopicRestricted()
+            && channel.hasOperator(&channelOperator),
+        "With +t enabled, a channel operator is allowed to change the topic"
+    );
+
+    expectTrue(
+        channel.isTopicRestricted()
+            && !channel.hasOperator(&regularMember),
+        "With +t enabled, a regular member is not allowed to change the topic"
+    );
+
+    channel.setTopicRestricted(false);
+
+    expectFalse(
+        channel.isTopicRestricted(),
+        "Disabling +t should restore unrestricted topic changes"
+    );
+}
+
+/**
  * @brief Verifies key-mode activation, replacement, invalid empty keys,
  * removal, and state consistency.
  */
@@ -747,6 +798,7 @@ int main()
     testOperatorManagement();
     testInvitationManagement();
     testBooleanChannelModes();
+    testTopicRestrictionPrivilegeModel();
     testKeyMode();
     testUserLimitMode();
     testMemberRemovalCleansRelatedState();

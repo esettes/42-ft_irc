@@ -60,6 +60,30 @@ int main()
         return fail("regular parameter serialization must not add a colon");
     }
 
+    const IrcMessage emptyTopicMessage =
+        MessageParser::parse("TOPIC #general :");
+
+    if (emptyTopicMessage.cmd != "TOPIC")
+    {
+        return fail("TOPIC command must be recognized");
+    }
+    if (emptyTopicMessage.params.size() != 2)
+    {
+        return fail("TOPIC with an empty trailing parameter must keep two parameters");
+    }
+    if (emptyTopicMessage.params[0] != "#general")
+    {
+        return fail("TOPIC must keep the channel name");
+    }
+    if (!emptyTopicMessage.params[1].empty())
+    {
+        return fail("an empty trailing parameter must be preserved as an empty string");
+    }
+    if (!emptyTopicMessage.hasTrailingParameter)
+    {
+        return fail("TOPIC #general : must be marked as having a trailing parameter");
+    }
+
     std::cout << "MessageParser test passed" << std::endl;
     return EXIT_SUCCESS;
 }
