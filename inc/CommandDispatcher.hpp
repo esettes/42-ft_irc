@@ -80,6 +80,43 @@ class CommandDispatcher
         void handleKick(Client &client, const IrcMessage &message);
         void handleMode(Client &client, const IrcMessage &message);
 
+        enum ModeAction
+        {
+            MODE_ADD,
+            MODE_REMOVE
+        };
+
+        struct ModeOperation
+        {
+            ModeAction action;
+            char mode;
+            std::string argument;
+            std::size_t numericArgument;
+
+            ModeOperation();
+        };
+
+        bool parseChannelModeOperations(
+            const std::vector<std::string> &params,
+            std::vector<ModeOperation> &operations,
+            char &unknownMode
+        ) const;
+        bool validateChannelModeOperations(
+            Client &client,
+            Channel &channel,
+            std::vector<ModeOperation> &operations
+        );
+        void applyChannelModeOperations(
+            Channel &channel,
+            const std::vector<ModeOperation> &operations
+        );
+        void sendChannelModeIs(Client &client, const Channel &channel);
+        void notifyChannelModeChanges(
+            Client &client,
+            Channel &channel,
+            const std::vector<ModeOperation> &operations
+        );
+
         bool isChannelTarget(const std::string &target) const;
         bool canJoinChannel(
             Client &client,

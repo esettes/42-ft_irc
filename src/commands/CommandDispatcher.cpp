@@ -5,6 +5,75 @@
 #include "IrcMessage.hpp"
 
 #include <cctype>
+#include <sstream>
+
+namespace
+{
+    bool isSupportedChannelMode(char mode)
+    {
+        return mode == 'i'
+            || mode == 't'
+            || mode == 'k'
+            || mode == 'o'
+            || mode == 'l';
+    }
+
+    bool modeRequiresArgument(char mode, bool adding)
+    {
+        if (mode == 'o')
+            return true;
+
+        if (mode == 'k' && adding)
+            return true;
+
+        if (mode == 'l' && adding)
+            return true;
+
+        return false;
+    }
+
+    bool parsePositiveUserLimit(const std::string &text, std::size_t &limit)
+    {
+        if (text.empty())
+            return false;
+
+        const std::size_t maximumValue = static_cast<std::size_t>(-1);
+        std::size_t value = 0;
+
+        for (std::size_t index = 0; index < text.size(); ++index)
+        {
+            const unsigned char character =
+                static_cast<unsigned char>(text[index]);
+
+            if (!std::isdigit(character))
+                return false;
+
+            const std::size_t digit = static_cast<std::size_t>(character - '0');
+
+            if (value > maximumValue / 10
+                || (value == maximumValue / 10 && digit > maximumValue % 10))
+            {
+                return false;
+            }
+
+            value = value * 10 + digit;
+        }
+
+        if (value == 0)
+            return false;
+
+        limit = value;
+        return true;
+    }
+
+    std::string formatUserLimit(std::size_t limit)
+    {
+        std::ostringstream stream;
+
+        stream << limit;
+        return stream.str();
+    }
+}
 
 
 CommandDispatcher::CommandDefinition::CommandDefinition(
@@ -1158,11 +1227,328 @@ void CommandDispatcher::applyTopicChange(
     server.queueMessageToChannel(channel, topicMessage.serialize());
 }
 
+CommandDispatcher::ModeOperation::ModeOperation()
+    : action(MODE_ADD),
+      mode('\0'),
+      argument(),
+      numericArgument(0)
+{
+}
+
 /**
- * @brief Applies channel mode changes required by TOPIC and INVITE. Full MODE
- * handling belongs to a later phase; this handler understands +t/-t, +i/-i
- * and +k/-k so those restrictions can be enabled and tested. Mode queries and
- * other flags are ignored until the complete MODE command is implemented.
+ * @brief Interprets a MODE parameter list into discrete add/remove operations
+ * without modifying channel state. Unknown letters and missing arguments are
+ * reported so the handler can reject the whole command.
+ */
+bool CommandDispatcher::parseChannelModeOperations(
+    const std::vector<std::string> &params,
+    std::vector<ModeOperation> &operations,
+    char &unknownMode
+) const
+{
+    const std::string &modeString = params[1];
+    ModeAction currentAction = MODE_ADD;
+    std::size_t argumentIndex = 2;
+
+    unknownMode = '\0';
+    operations.clear();
+
+    for (std::size_t index = 0; index < modeString.size(); ++index)
+    {
+        const char character = modeString[index];
+
+        if (character == '+')
+        {
+            currentAction = MODE_ADD;
+            continue;
+        }
+
+        if (character == '-')
+        {
+            currentAction = MODE_REMOVE;
+            continue;
+        }
+
+        if (!isSupportedChannelMode(character))
+        {
+            unknownMode = character;
+            operations.clear();
+            return false;
+        }
+
+        ModeOperation operation;
+
+        operation.action = currentAction;
+        operation.mode = character;
+
+        if (modeRequiresArgument(character, currentAction == MODE_ADD))
+        {
+            if (argumentIndex >= params.size() || params[argumentIndex].empty())
+            {
+                operations.clear();
+                return false;
+            }
+
+            operation.argument = params[argumentIndex];
+            ++argumentIndex;
+        }
+
+        operations.push_back(operation);
+    }
+
+    return true;
+}
+
+/**
+ * @brief Checks that every parsed MODE operation is semantically valid before
+ * any channel state changes. Operator and membership checks for +o/-o, a
+ * non-empty key for +k, and a strictly positive limit for +l are applied in
+ * command order. The first error is queued and later operations are not
+ * examined so a rejected command never applies a prefix of the change list.
+ */
+bool CommandDispatcher::validateChannelModeOperations(
+    Client &client,
+    Channel &channel,
+    std::vector<ModeOperation> &operations
+)
+{
+    for (std::size_t index = 0; index < operations.size(); ++index)
+    {
+        ModeOperation &operation = operations[index];
+
+        if (operation.mode == 'o')
+        {
+            Client *targetClient =
+                server.findClientByNickname(operation.argument);
+
+            if (targetClient == NULL)
+            {
+                server.queueNumericReply(
+                    client,
+                    NumericReply::ERR_NOSUCHNICK,
+                    operation.argument,
+                    NumericReply::MSG_NOSUCHNICK
+                );
+                return false;
+            }
+
+            if (!channel.hasMember(targetClient))
+            {
+                std::vector<std::string> notInChannelParameters;
+
+                notInChannelParameters.push_back(targetClient->getNickname());
+                notInChannelParameters.push_back(channel.getName());
+
+                server.queueNumericReply(
+                    client,
+                    NumericReply::ERR_USERNOTINCHANNEL,
+                    notInChannelParameters,
+                    NumericReply::MSG_USERNOTINCHANNEL
+                );
+                return false;
+            }
+
+            operation.argument = targetClient->getNickname();
+            continue;
+        }
+
+        if (operation.mode == 'k' && operation.action == MODE_ADD)
+        {
+            if (operation.argument.empty())
+            {
+                server.queueNumericReply(
+                    client,
+                    NumericReply::ERR_NEEDMOREPARAMS,
+                    "MODE",
+                    NumericReply::MSG_NEEDMOREPARAMS
+                );
+                return false;
+            }
+
+            continue;
+        }
+
+        if (operation.mode == 'l' && operation.action == MODE_ADD)
+        {
+            if (!parsePositiveUserLimit(
+                    operation.argument,
+                    operation.numericArgument
+                ))
+            {
+                server.queueNumericReply(
+                    client,
+                    NumericReply::ERR_NEEDMOREPARAMS,
+                    "MODE",
+                    NumericReply::MSG_NEEDMOREPARAMS
+                );
+                return false;
+            }
+
+            operation.argument = formatUserLimit(operation.numericArgument);
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @brief Applies already validated MODE operations to the channel. Channel
+ * accessors keep invite, topic, key, limit and operator state consistent.
+ */
+void CommandDispatcher::applyChannelModeOperations(
+    Channel &channel,
+    const std::vector<ModeOperation> &operations
+)
+{
+    for (std::size_t index = 0; index < operations.size(); ++index)
+    {
+        const ModeOperation &operation = operations[index];
+        const bool adding = operation.action == MODE_ADD;
+
+        if (operation.mode == 'i')
+        {
+            channel.setInviteOnly(adding);
+            continue;
+        }
+
+        if (operation.mode == 't')
+        {
+            channel.setTopicRestricted(adding);
+            continue;
+        }
+
+        if (operation.mode == 'k')
+        {
+            if (adding)
+                channel.setKey(operation.argument);
+            else
+                channel.removeKey();
+            continue;
+        }
+
+        if (operation.mode == 'l')
+        {
+            if (adding)
+                channel.setUserLimit(operation.numericArgument);
+            else
+                channel.removeUserLimit();
+            continue;
+        }
+
+        if (operation.mode == 'o')
+        {
+            Client *targetClient =
+                server.findClientByNickname(operation.argument);
+
+            if (adding)
+                channel.addOperator(targetClient);
+            else
+                channel.removeOperator(targetClient);
+        }
+    }
+}
+
+/**
+ * @brief Replies with RPL_CHANNELMODEIS. Active flags are always listed in
+ * itkl order; +o is omitted because it is a per-user privilege. The key and
+ * user limit follow the flag string when those modes are set.
+ */
+void CommandDispatcher::sendChannelModeIs(
+    Client &client,
+    const Channel &channel
+)
+{
+    std::string modeFlags = "+";
+    std::vector<std::string> parameters;
+
+    parameters.push_back(channel.getName());
+
+    if (channel.isInviteOnly())
+        modeFlags += 'i';
+    if (channel.isTopicRestricted())
+        modeFlags += 't';
+    if (channel.isKeyEnabled())
+        modeFlags += 'k';
+    if (channel.isLimitEnabled())
+        modeFlags += 'l';
+
+    parameters.push_back(modeFlags);
+
+    if (channel.isKeyEnabled())
+        parameters.push_back(channel.getKey());
+    if (channel.isLimitEnabled())
+        parameters.push_back(formatUserLimit(channel.getUserLimit()));
+
+    server.queueNumericReply(
+        client,
+        NumericReply::RPL_CHANNELMODEIS,
+        parameters
+    );
+}
+
+/**
+ * @brief Broadcasts the applied MODE operations to every channel member,
+ * including the sender. The reconstructed mode string preserves sign changes
+ * and only includes arguments that were actually consumed.
+ */
+void CommandDispatcher::notifyChannelModeChanges(
+    Client &client,
+    Channel &channel,
+    const std::vector<ModeOperation> &operations
+)
+{
+    if (operations.empty())
+        return;
+
+    std::string modeString;
+    char currentSign = '\0';
+    std::vector<std::string> modeParameters;
+
+    modeParameters.push_back(channel.getName());
+
+    for (std::size_t index = 0; index < operations.size(); ++index)
+    {
+        const ModeOperation &operation = operations[index];
+        const char sign = operation.action == MODE_ADD ? '+' : '-';
+
+        if (sign != currentSign)
+        {
+            modeString += sign;
+            currentSign = sign;
+        }
+
+        modeString += operation.mode;
+    }
+
+    modeParameters.push_back(modeString);
+
+    for (std::size_t index = 0; index < operations.size(); ++index)
+    {
+        const ModeOperation &operation = operations[index];
+
+        if (modeRequiresArgument(operation.mode, operation.action == MODE_ADD))
+            modeParameters.push_back(operation.argument);
+    }
+
+    const IrcMessage modeMessage(
+        "MODE",
+        modeParameters,
+        server.getClientPrefix(client),
+        false
+    );
+
+    server.queueMessageToChannel(channel, modeMessage.serialize());
+}
+
+/**
+ * @brief Processes MODE for a registered client. With only a channel name it
+ * reports the current flags through RPL_CHANNELMODEIS without requiring
+ * operator privileges. With a mode string it parses every operation, validates
+ * membership, operator status, known flags and arguments, then applies the
+ * whole command and notifies the channel.
+ *
+ * Registration and a missing channel parameter are validated by execute()
+ * before this handler is called. User-mode targets are ignored.
  */
 void CommandDispatcher::handleMode(
     Client &client,
@@ -1171,7 +1557,18 @@ void CommandDispatcher::handleMode(
 {
     const std::string &target = message.params[0];
 
-    if (target.empty() || !isChannelTarget(target))
+    if (target.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    if (!isChannelTarget(target))
         return;
 
     Channel *channel = server.findChannel(target);
@@ -1187,6 +1584,12 @@ void CommandDispatcher::handleMode(
         return;
     }
 
+    if (message.params.size() < 2 || message.params[1].empty())
+    {
+        sendChannelModeIs(client, *channel);
+        return;
+    }
+
     if (!channel->hasMember(&client))
     {
         server.queueNumericReply(
@@ -1197,9 +1600,6 @@ void CommandDispatcher::handleMode(
         );
         return;
     }
-
-    if (message.params.size() < 2)
-        return;
 
     if (!channel->hasOperator(&client))
     {
@@ -1212,61 +1612,36 @@ void CommandDispatcher::handleMode(
         return;
     }
 
-    const std::string &modeString = message.params[1];
-    std::vector<std::string> modeParameters;
+    std::vector<ModeOperation> operations;
+    char unknownMode = '\0';
 
-    modeParameters.push_back(channel->getName());
-    modeParameters.push_back(modeString);
-
-    if (modeString == "+t")
+    if (!parseChannelModeOperations(message.params, operations, unknownMode))
     {
-        channel->setTopicRestricted(true);
-    }
-    else if (modeString == "-t")
-    {
-        channel->setTopicRestricted(false);
-    }
-    else if (modeString == "+i")
-    {
-        channel->setInviteOnly(true);
-    }
-    else if (modeString == "-i")
-    {
-        channel->setInviteOnly(false);
-    }
-    else if (modeString == "+k")
-    {
-        if (message.params.size() < 3 || message.params[2].empty())
+        if (unknownMode != '\0')
         {
             server.queueNumericReply(
                 client,
-                NumericReply::ERR_NEEDMOREPARAMS,
-                message.getCommand(),
-                NumericReply::MSG_NEEDMOREPARAMS
+                NumericReply::ERR_UNKNOWNMODE,
+                std::string(1, unknownMode),
+                NumericReply::MSG_UNKNOWNMODE
             );
             return;
         }
 
-        channel->setKey(message.params[2]);
-        modeParameters.push_back(message.params[2]);
-    }
-    else if (modeString == "-k")
-    {
-        channel->removeKey();
-    }
-    else
-    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
         return;
     }
 
-    const IrcMessage modeMessage(
-        "MODE",
-        modeParameters,
-        server.getClientPrefix(client),
-        false
-    );
+    if (!validateChannelModeOperations(client, *channel, operations))
+        return;
 
-    server.queueMessageToChannel(*channel, modeMessage.serialize());
+    applyChannelModeOperations(*channel, operations);
+    notifyChannelModeChanges(client, *channel, operations);
 }
 
 /**

@@ -87,7 +87,7 @@ namespace NumericReply
     /* Version / mode tokens for RPL_MYINFO */
     const char *const SERVER_VERSION = "1.0";
     const char *const AVAILABLE_USER_MODES = "o";
-    const char *const AVAILABLE_CHANNEL_MODES = "itk";
+    const char *const AVAILABLE_CHANNEL_MODES = "itkol";
 
     inline std::string formatCode(int numericCode)
     {
