@@ -205,3 +205,40 @@ void Channel::setTopicRestricted(bool enabled)
 {
     topicRestricted = enabled;
 }
+
+/**
+ * @brief Checks whether joining the channel requires a key.
+ */
+bool Channel::isKeyEnabled() const
+{
+    return keyEnabled;
+}
+
+/**
+ * @brief Returns the key currently required to join the channel.
+ */
+const std::string &Channel::getKey() const
+{
+    return channelKey;
+}
+
+/**
+ * @brief Sets a non-empty channel key and enables key mode.
+ */
+void Channel::setKey(const std::string &newKey)
+{
+    if (newKey.empty())
+        return;
+
+    channelKey = newKey;
+    keyEnabled = true;
+}
+
+/**
+ * @brief Removes the stored channel key and disables key mode.
+ */
+void Channel::removeKey()
+{
+    channelKey.clear();
+    keyEnabled = false;
+}
