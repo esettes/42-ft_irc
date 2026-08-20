@@ -6,6 +6,7 @@
 
 #include <cctype>
 
+
 CommandDispatcher::CommandDefinition::CommandDefinition(
     CommandHandler handler,
     std::size_t minParams,
@@ -463,34 +464,60 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
 }
 
 /**
- * @brief Processes JOIN for a registered client. It rejects an empty or
- * invalid channel name, ignores duplicate joins, enforces invite-only, key
- * and limit restrictions, obtains or creates the channel, synchronizes
- * membership, and broadcasts the successful JOIN to every channel member,
- * including the joining client.
+ * @brief Splits a comma-separated IRC parameter into individual values while
+ * preserving empty entries so positional relationships, such as channels and
+ * their corresponding keys, remain intact.
  *
- * Registration and missing parameter counts are validated by execute() before
- * this handler is called.
- *
- * @param client The registered client requesting to join the channel.
- * @param message The parsed JOIN message containing the channel name and an
- * optional channel key.
+ * @param valueList The comma-separated parameter to split.
+ * @return A vector containing each value in its original order.
  */
-void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
+std::vector<std::string>
+CommandDispatcher::splitCommaSeparatedValues(const std::string &valueList)
 {
-    const std::string &channelName = message.params[0];
+    std::vector<std::string> values;
+    std::string::size_type valueStart = 0;
 
-    if (channelName.empty())
+    while (true)
     {
-        server.queueNumericReply(
-            client,
-            NumericReply::ERR_NEEDMOREPARAMS,
-            message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
+        const std::string::size_type commaPosition =
+            valueList.find(',', valueStart);
+
+        if (commaPosition == std::string::npos)
+        {
+            values.push_back(valueList.substr(valueStart));
+            break;
+        }
+
+        values.push_back(
+            valueList.substr(
+                valueStart,
+                commaPosition - valueStart
+            )
         );
-        return;
+
+        valueStart = commaPosition + 1;
     }
 
+    return values;
+}
+
+/**
+ * @brief Processes a JOIN attempt for one channel. It validates the channel
+ * name and access restrictions, ignores duplicate membership, obtains or
+ * creates the channel, adds the client, broadcasts JOIN, and sends the topic
+ * and member list to the joining client.
+ *
+ * @param client The registered client requesting to join.
+ * @param channelName The individual channel name to process.
+ * @param providedKey The corresponding channel key, or an empty string when
+ * no key was supplied for this channel.
+ */
+void CommandDispatcher::joinClientToSingleChannel(
+    Client &client,
+    const std::string &channelName,
+    const std::string &providedKey
+)
+{
     Channel *channel = server.findOrCreateChannel(channelName);
 
     if (channel == NULL)
@@ -507,11 +534,14 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
     if (channel->hasMember(&client))
         return;
 
-    const std::string providedKey =
-        message.params.size() >= 2 ? message.params[1] : "";
-
-    if (!canJoinChannel(client, *channel, providedKey))
+    if (!server.validateChannelJoinAccess(
+            client,
+            *channel,
+            providedKey
+        ))
+    {
         return;
+    }
 
     server.addClientToChannel(client, *channel);
 
@@ -530,6 +560,182 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
         *channel,
         joinMessage.serialize()
     );
+
+    server.sendChannelTopic(client, *channel);
+    server.sendChannelNames(client, *channel);
+}
+
+/**
+ * @brief Processes JOIN for a registered client. It separates the requested
+ * channel and key lists, associates keys with channels by position, and
+ * processes every channel independently.
+ *
+ * An empty channel parameter produces ERR_NEEDMOREPARAMS. Failure to join one
+ * channel does not prevent later channels in the same command from being
+ * processed.
+ *
+ * Registration and missing parameter counts are validated by execute() before
+ * this handler is called.
+ *
+ * @param client The registered client requesting to join.
+ * @param message The parsed JOIN message containing a comma-separated channel
+ * list and an optional comma-separated key list.
+ */
+void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
+{
+   const std::string &channelList = message.params[0];
+
+    if (channelList.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    const std::vector<std::string> requestedChannels =
+        splitCommaSeparatedValues(channelList);
+
+    std::vector<std::string> providedKeys;
+
+    if (message.params.size() > 1)
+    {
+        providedKeys =
+            splitCommaSeparatedValues(message.params[1]);
+    }
+
+    for (std::size_t channelIndex = 0;
+        channelIndex < requestedChannels.size();
+        ++channelIndex)
+    {
+        std::string providedKey;
+
+        if (channelIndex < providedKeys.size())
+            providedKey = providedKeys[channelIndex];
+
+        joinClientToSingleChannel(
+            client,
+            requestedChannels[channelIndex],
+            providedKey
+        );
+    }
+}
+
+/**
+ * @brief Processes a PART attempt for one channel. It validates that the
+ * channel exists and that the client belongs to it, broadcasts the PART
+ * message before changing membership, and then removes the client while
+ * allowing the server to delete an empty channel.
+ *
+ * @param client The client requesting to leave the channel.
+ * @param channelName The individual channel name to leave.
+ * @param partReason The optional reason included in the PART message.
+ * @param hasPartReason Whether the original command contained a reason,
+ * including an explicitly empty trailing reason.
+ */
+void CommandDispatcher::partClientFromSingleChannel(
+    Client &client,
+    const std::string &channelName,
+    const std::string &partReason,
+    bool hasPartReason)
+{
+    Channel *channel = server.findChannel(channelName);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            channelName,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTONCHANNEL,
+            channel->getName(),
+            NumericReply::MSG_NOTONCHANNEL
+        );
+        return;
+    }
+
+    std::vector<std::string> partParameters;
+
+    partParameters.push_back(channel->getName());
+
+    if (hasPartReason)
+        partParameters.push_back(partReason);
+
+    const IrcMessage partMessage(
+        "PART",
+        partParameters,
+        server.getClientPrefix(client),
+        hasPartReason
+    );
+
+    server.queueMessageToChannel(
+        *channel,
+        partMessage.serialize()
+    );
+
+    server.removeClientFromChannel(client, *channel);
+}
+
+/**
+ * @brief Processes PART for a registered client. It separates the requested
+ * channel list, preserves the optional shared reason, and processes each
+ * channel independently.
+ *
+ * An empty channel parameter produces ERR_NEEDMOREPARAMS. Failure to leave one
+ * channel does not stop the remaining channels from being processed.
+ *
+ * @param client The registered client requesting to leave channels.
+ * @param message The parsed PART message containing a comma-separated channel
+ * list and an optional reason.
+ */
+void CommandDispatcher::handlePart(Client &client, const IrcMessage &message)
+{
+    const std::string &channelList = message.params[0];
+
+    if (channelList.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    const std::vector<std::string> requestedChannels =
+        splitCommaSeparatedValues(channelList);
+
+    const bool hasPartReason = message.params.size() > 1;
+
+    std::string partReason;
+
+    if (hasPartReason)
+        partReason = message.params[1];
+
+    for (std::size_t channelIndex = 0;
+        channelIndex < requestedChannels.size();
+        ++channelIndex)
+    {
+        partClientFromSingleChannel(
+            client,
+            requestedChannels[channelIndex],
+            partReason,
+            hasPartReason
+        );
+    }
 }
 
 /**
@@ -579,80 +785,6 @@ bool CommandDispatcher::canJoinChannel(
     }
 
     return true;
-}
-
-/**
- * @brief Processes PART for a registered client. Validates the channel and
- * membership, notifies every member including the parting client, removes
- * membership and deletes the channel when it becomes empty.
- */
-void CommandDispatcher::handlePart(Client &client, const IrcMessage &message)
-{
-    const std::string &channelName = message.params[0];
-
-    if (channelName.empty())
-    {
-        server.queueNumericReply(
-            client,
-            NumericReply::ERR_NEEDMOREPARAMS,
-            message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
-        return;
-    }
-
-    Channel *channel = server.findChannel(channelName);
-
-    if (channel == NULL)
-    {
-        server.queueNumericReply(
-            client,
-            NumericReply::ERR_NOSUCHCHANNEL,
-            channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
-        return;
-    }
-
-    if (!channel->hasMember(&client))
-    {
-        server.queueNumericReply(
-            client,
-            NumericReply::ERR_NOTONCHANNEL,
-            channel->getName(),
-            NumericReply::MSG_NOTONCHANNEL
-        );
-        return;
-    }
-
-    std::vector<std::string> partParameters;
-
-    partParameters.push_back(channel->getName());
-
-    const bool hasPartReason =
-        message.hasTrailingParameter || message.params.size() >= 2;
-
-    if (hasPartReason)
-    {
-        const std::string partReason =
-            message.params.size() >= 2 ? message.params[1] : "";
-
-        partParameters.push_back(partReason);
-    }
-
-    const IrcMessage partMessage(
-        "PART",
-        partParameters,
-        server.getClientPrefix(client),
-        hasPartReason
-    );
-
-    const std::string serializedPartMessage = partMessage.serialize();
-    const std::string preservedChannelName = channel->getName();
-
-    server.queueMessageToChannel(*channel, serializedPartMessage);
-    server.removeClientFromChannel(client, *channel);
-    server.removeChannelIfEmpty(preservedChannelName);
 }
 
 /**

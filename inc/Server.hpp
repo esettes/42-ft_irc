@@ -111,6 +111,19 @@ class Server
         void removeClientFromChannel(Client &client, Channel &channel);
         void removeChannelIfEmpty(const std::string &channelName);
         void detachClientFromChannels(Client &client);
+        bool validateChannelJoinAccess(
+            Client &client,
+            const Channel &channel,
+            const std::string &providedKey
+        );
+        void sendChannelTopic(
+            Client &client,
+            const Channel &channel
+        );
+        void sendChannelNames(
+            Client &client,
+            const Channel &channel
+        );
         std::string buildNumericReply(
             int numericCode,
             const Client &client,

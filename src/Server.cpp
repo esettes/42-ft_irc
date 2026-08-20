@@ -507,9 +507,17 @@ void Server::addClientToChannel(Client &client, Channel &channel)
 }
 
 /**
- * @brief Removes a client from a channel while keeping Client and Channel
- * membership synchronized. Operator status and pending invitations for that
- * channel are cleared through Channel::removeMember.
+ * @brief Removes a client from a channel while keeping the membership state
+ * stored by Client and Channel synchronized. Channel operator privileges are
+ * removed through Channel::removeMember(), and the channel is erased from the
+ * server when it has no remaining members.
+ *
+ * If the channel is erased, every pointer or reference to that Channel object
+ * becomes invalid. The caller must not access the channel after this function
+ * returns.
+ *
+ * @param client The client leaving the channel.
+ * @param channel The channel the client is leaving.
  */
 void Server::removeClientFromChannel(Client &client, Channel &channel)
 {
@@ -569,6 +577,191 @@ void Server::detachClientFromChannels(Client &client)
         channels.erase(*emptyChannelIterator);
         ++emptyChannelIterator;
     }
+}
+
+/**
+ * @brief Checks whether a client satisfies every access restriction of a
+ * channel before joining. It validates the user limit, pending invitation,
+ * and channel key in that order, queuing the corresponding numeric error
+ * when access is denied.
+ *
+ * This function does not modify channel membership, operator privileges, or
+ * invitations.
+ *
+ * @param client The client requesting access to the channel.
+ * @param channel The channel whose access restrictions will be checked.
+ * @param providedKey The key supplied in JOIN, or an empty string when none
+ * was supplied.
+ * @return true when the client may join, false when access is denied.
+ */
+bool Server::validateChannelJoinAccess(
+    Client &client,
+    const Channel &channel,
+    const std::string &providedKey
+)
+{
+    if (channel.isLimitEnabled()
+        && channel.getMemberCount() >= channel.getUserLimit())
+    {
+        queueNumericReply(
+            client,
+            NumericReply::ERR_CHANNELISFULL,
+            channel.getName(),
+            NumericReply::MSG_CHANNELISFULL
+        );
+        return false;
+    }
+
+    if (channel.isInviteOnly()
+        && !channel.hasInvitation(&client))
+    {
+        queueNumericReply(
+            client,
+            NumericReply::ERR_INVITEONLYCHAN,
+            channel.getName(),
+            NumericReply::MSG_INVITEONLYCHAN
+        );
+        return false;
+    }
+
+    if (channel.isKeyEnabled()
+        && channel.getKey() != providedKey)
+    {
+        queueNumericReply(
+            client,
+            NumericReply::ERR_BADCHANNELKEY,
+            channel.getName(),
+            NumericReply::MSG_BADCHANNELKEY
+        );
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Queues the current topic state of a channel for one client. It sends
+ * RPL_NOTOPIC when the channel has no topic and RPL_TOPIC containing the
+ * stored topic otherwise.
+ *
+ * @param client The client that will receive the numeric reply.
+ * @param channel The channel whose topic state will be reported.
+ */
+void Server::sendChannelTopic(Client &client, const Channel &channel)
+{
+    if (channel.getTopic().empty())
+    {
+        queueNumericReply(
+            client,
+            NumericReply::RPL_NOTOPIC,
+            channel.getName(),
+            NumericReply::MSG_NOTOPIC
+        );
+        return;
+    }
+
+    queueNumericReply(
+        client,
+        NumericReply::RPL_TOPIC,
+        channel.getName(),
+        channel.getTopic()
+    );
+}
+
+/**
+ * @brief Queues the channel member list for one client using one or more
+ * RPL_NAMREPLY replies, prefixing channel operators with '@', and finishes
+ * the sequence with RPL_ENDOFNAMES.
+ *
+ * Member names are divided between multiple RPL_NAMREPLY messages when
+ * necessary so that every serialized IRC message remains within the
+ * 512-byte protocol limit.
+ *
+ * @param client The client that will receive the member list.
+ * @param channel The channel whose members will be listed.
+ */
+void Server::sendChannelNames(Client &client, const Channel &channel)
+{
+    std::vector<std::string> nameReplyParameters;
+
+    nameReplyParameters.push_back("=");
+    nameReplyParameters.push_back(channel.getName());
+
+    const std::string emptyNamesReply = buildNumericReply(
+        NumericReply::RPL_NAMREPLY,
+        client,
+        nameReplyParameters,
+        ""
+    );
+
+    const std::size_t maximumNamesLength =
+        IRC_MAX_MESSAGE_LENGTH - emptyNamesReply.size();
+
+    std::string currentNames;
+
+    const std::set<Client *> &channelMembers = channel.getMembers();
+
+    std::set<Client *>::const_iterator memberIterator =
+        channelMembers.begin();
+
+    while (memberIterator != channelMembers.end())
+    {
+        Client *channelMember = *memberIterator;
+
+        if (channelMember != NULL
+            && !channelMember->getNickname().empty())
+        {
+            std::string displayedNickname;
+
+            if (channel.hasOperator(channelMember))
+                displayedNickname += '@';
+
+            displayedNickname += channelMember->getNickname();
+
+            const std::size_t separatorLength =
+                currentNames.empty() ? 0 : 1;
+
+            if (!currentNames.empty()
+                && currentNames.size()
+                    + separatorLength
+                    + displayedNickname.size()
+                    > maximumNamesLength)
+            {
+                queueNumericReply(
+                    client,
+                    NumericReply::RPL_NAMREPLY,
+                    nameReplyParameters,
+                    currentNames
+                );
+
+                currentNames.clear();
+            }
+
+            if (!currentNames.empty())
+                currentNames += ' ';
+
+            currentNames += displayedNickname;
+        }
+
+        ++memberIterator;
+    }
+
+    if (!currentNames.empty())
+    {
+        queueNumericReply(
+            client,
+            NumericReply::RPL_NAMREPLY,
+            nameReplyParameters,
+            currentNames
+        );
+    }
+
+    queueNumericReply(
+        client,
+        NumericReply::RPL_ENDOFNAMES,
+        channel.getName(),
+        NumericReply::MSG_ENDOFNAMES
+    );
 }
 
 std::string Server::getReplyTarget(const Client &client) const
