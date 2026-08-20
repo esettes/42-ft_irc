@@ -66,6 +66,13 @@ class CommandDispatcher
             const std::string &channelName,
             const std::string &providedKey);
         void handleJoin(Client &client, const IrcMessage &message);
+        void partClientFromSingleChannel(
+            Client &client,
+            const std::string &channelName,
+            const std::string &partReason,
+            bool hasPartReason
+        );
+        void handlePart(Client &client, const IrcMessage &message);
         void handlePrivateMessage(Client &client, const IrcMessage &message);
 
     public:
