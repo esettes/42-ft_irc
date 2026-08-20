@@ -482,6 +482,20 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 
     if (channel->hasMember(&client))
         return;
+    
+    std::string providedKey;
+
+    if (message.params.size() > 1)
+        providedKey = message.params[1];
+
+    if (!server.validateChannelJoinAccess(
+            client,
+            *channel,
+            providedKey
+        ))
+    {
+        return;
+    }
 
     server.addClientToChannel(client, *channel);
 

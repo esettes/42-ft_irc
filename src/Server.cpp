@@ -515,6 +515,66 @@ void Server::addClientToChannel(Client &client, Channel &channel)
 }
 
 /**
+ * @brief Checks whether a client satisfies every access restriction of a
+ * channel before joining. It validates the user limit, pending invitation,
+ * and channel key in that order, queuing the corresponding numeric error
+ * when access is denied.
+ *
+ * This function does not modify channel membership, operator privileges, or
+ * invitations.
+ *
+ * @param client The client requesting access to the channel.
+ * @param channel The channel whose access restrictions will be checked.
+ * @param providedKey The key supplied in JOIN, or an empty string when none
+ * was supplied.
+ * @return true when the client may join, false when access is denied.
+ */
+bool Server::validateChannelJoinAccess(
+    Client &client,
+    const Channel &channel,
+    const std::string &providedKey
+)
+{
+    if (channel.isLimitEnabled()
+        && channel.getMemberCount() >= channel.getUserLimit())
+    {
+        queueNumericReply(
+            client,
+            NumericReply::ERR_CHANNELISFULL,
+            channel.getName(),
+            NumericReply::MSG_CHANNELISFULL
+        );
+        return false;
+    }
+
+    if (channel.isInviteOnly()
+        && !channel.hasInvitation(&client))
+    {
+        queueNumericReply(
+            client,
+            NumericReply::ERR_INVITEONLYCHAN,
+            channel.getName(),
+            NumericReply::MSG_INVITEONLYCHAN
+        );
+        return false;
+    }
+
+    if (channel.isKeyEnabled()
+        && channel.getKey() != providedKey)
+    {
+        queueNumericReply(
+            client,
+            NumericReply::ERR_BADCHANNELKEY,
+            channel.getName(),
+            NumericReply::MSG_BADCHANNELKEY
+        );
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * @brief Queues the current topic state of a channel for one client. It sends
  * RPL_NOTOPIC when the channel has no topic and RPL_TOPIC containing the
  * stored topic otherwise.
