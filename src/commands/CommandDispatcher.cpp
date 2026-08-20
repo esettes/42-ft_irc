@@ -500,6 +500,8 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
         *channel,
         joinMessage.serialize()
     );
+
+    server.sendChannelTopic(client, *channel);
 }
 
 void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)

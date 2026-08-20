@@ -514,6 +514,35 @@ void Server::addClientToChannel(Client &client, Channel &channel)
         channel.addOperator(&client);
 }
 
+/**
+ * @brief Queues the current topic state of a channel for one client. It sends
+ * RPL_NOTOPIC when the channel has no topic and RPL_TOPIC containing the
+ * stored topic otherwise.
+ *
+ * @param client The client that will receive the numeric reply.
+ * @param channel The channel whose topic state will be reported.
+ */
+void Server::sendChannelTopic(Client &client, const Channel &channel)
+{
+    if (channel.getTopic().empty())
+    {
+        queueNumericReply(
+            client,
+            NumericReply::RPL_NOTOPIC,
+            channel.getName(),
+            NumericReply::MSG_NOTOPIC
+        );
+        return;
+    }
+
+    queueNumericReply(
+        client,
+        NumericReply::RPL_TOPIC,
+        channel.getName(),
+        channel.getTopic()
+    );
+}
+
 std::string Server::getReplyTarget(const Client &client) const
 {
     if (client.getNickname().empty())
