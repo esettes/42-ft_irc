@@ -66,6 +66,11 @@ class Channel
         const std::string &getKey() const;
         void setKey(const std::string &newKey);
         void removeKey();
+
+        bool isLimitEnabled() const;
+        std::size_t getUserLimit() const;
+        void setUserLimit(std::size_t newLimit);
+        void removeUserLimit();
 };
 
 #endif

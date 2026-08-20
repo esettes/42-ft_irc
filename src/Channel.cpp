@@ -242,3 +242,46 @@ void Channel::removeKey()
     channelKey.clear();
     keyEnabled = false;
 }
+
+/**
+ * @brief Checks whether the channel has a member limit.
+ */
+bool Channel::isLimitEnabled() const
+{
+    return limitEnabled;
+}
+
+/**
+ * @brief Returns the maximum number of members allowed in the channel.
+ */
+std::size_t Channel::getUserLimit() const
+{
+    return userLimit;
+}
+
+/**
+ * @brief Sets a positive member limit and enables user-limit mode.
+ * 
+ * MODE +l: The channel will not accept new members if the limit is reached.
+ */
+void Channel::setUserLimit(std::size_t newLimit)
+{
+    if (newLimit == 0)
+        return;
+
+    userLimit = newLimit;
+    limitEnabled = true;
+}
+
+/**
+ * @brief Removes the member limit and disables user-limit mode.
+ * 
+ * MODE -l: The channel will accept new members regardless of the current count.
+ * 
+ * userLimit = 0 means that there is no limit on the number of members in the channel.
+ */
+void Channel::removeUserLimit()
+{
+    userLimit = 0;
+    limitEnabled = false;
+}
