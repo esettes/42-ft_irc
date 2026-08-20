@@ -94,3 +94,39 @@ const std::set<Client *> &Channel::getMembers() const
 {
     return members;
 }
+
+/**
+ * @brief Grants channel operator privileges to an existing member (MODE +o).
+ */
+void Channel::addOperator(Client *client)
+{
+    if (client == NULL || !hasMember(client))
+        return;
+
+    operators.insert(client);
+}
+
+/**
+ * @brief Revokes a client's channel operator privileges without removing
+ * channel membership (MODE -o).
+ */
+void Channel::removeOperator(Client *client)
+{
+    if (client == NULL)
+        return;
+
+    operators.erase(client);
+}
+
+/**
+ * @brief Checks whether a client has operator privileges in this channel.
+ * @param client The client to check.
+ * @return true if the client has operator privileges, false otherwise.
+ */
+bool Channel::hasOperator(const Client *client) const
+{
+    if (client == NULL)
+        return false;
+
+    return operators.find(const_cast<Client *>(client)) != operators.end();
+}

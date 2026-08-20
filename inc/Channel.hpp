@@ -41,6 +41,9 @@ class Channel
         std::size_t getMemberCount() const;
         bool isEmpty() const;
         const std::set<Client *> &getMembers() const;
+        void addOperator(Client *client);
+        void removeOperator(Client *client);
+        bool hasOperator(const Client *client) const;
 };
 
 #endif
