@@ -77,6 +77,7 @@ class CommandDispatcher
         void handlePrivateMessage(Client &client, const IrcMessage &message);
         void handleTopic(Client &client, const IrcMessage &message);
         void handleInvite(Client &client, const IrcMessage &message);
+        void handleKick(Client &client, const IrcMessage &message);
         void handleMode(Client &client, const IrcMessage &message);
 
         bool isChannelTarget(const std::string &target) const;

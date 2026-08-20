@@ -524,8 +524,11 @@ void Server::removeClientFromChannel(Client &client, Channel &channel)
     if (!channel.hasMember(&client))
         return;
 
+    const std::string channelName = channel.getName();
+
     channel.removeMember(&client);
-    client.leaveChannel(channel.getName());
+    client.leaveChannel(channelName);
+    removeChannelIfEmpty(channelName);
 }
 
 /**

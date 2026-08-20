@@ -88,6 +88,11 @@ void CommandDispatcher::registerCommands()
     );
     cmmds.insert(
         std::make_pair(
+            "KICK",
+            CommandDefinition(&CommandDispatcher::handleKick, 2, true))
+    );
+    cmmds.insert(
+        std::make_pair(
             "MODE",
             CommandDefinition(&CommandDispatcher::handleMode, 1, true))
     );
@@ -901,6 +906,122 @@ void CommandDispatcher::handleInvite(
     );
 
     server.queueMessage(*targetClient, inviteMessage.serialize());
+}
+
+/**
+ * @brief Processes KICK for a registered channel operator. It validates the
+ * channel, the target nickname, membership and operator privileges before
+ * changing any state, broadcasts the KICK to every current member including
+ * the target, then removes the target from the channel without disconnecting
+ * them. An omitted or empty reason defaults to the operator's nickname.
+ */
+void CommandDispatcher::handleKick(
+    Client &client,
+    const IrcMessage &message
+)
+{
+    const std::string &channelName = message.params[0];
+    const std::string &targetNickname = message.params[1];
+
+    if (channelName.empty() || targetNickname.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    Channel *channel = server.findChannel(channelName);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            channelName,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    Client *targetClient = server.findClientByNickname(targetNickname);
+
+    if (targetClient == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHNICK,
+            targetNickname,
+            NumericReply::MSG_NOSUCHNICK
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTONCHANNEL,
+            channel->getName(),
+            NumericReply::MSG_NOTONCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasOperator(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_CHANOPRIVSNEEDED,
+            channel->getName(),
+            NumericReply::MSG_CHANOPRIVSNEEDED
+        );
+        return;
+    }
+
+    if (!channel->hasMember(targetClient))
+    {
+        std::vector<std::string> notInChannelParameters;
+
+        notInChannelParameters.push_back(targetClient->getNickname());
+        notInChannelParameters.push_back(channel->getName());
+
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_USERNOTINCHANNEL,
+            notInChannelParameters,
+            NumericReply::MSG_USERNOTINCHANNEL
+        );
+        return;
+    }
+
+    std::string kickReason = client.getNickname();
+
+    if (message.params.size() >= 3 && !message.params[2].empty())
+        kickReason = message.params[2];
+
+    std::vector<std::string> kickParameters;
+
+    kickParameters.push_back(channel->getName());
+    kickParameters.push_back(targetClient->getNickname());
+    kickParameters.push_back(kickReason);
+
+    const IrcMessage kickMessage(
+        "KICK",
+        kickParameters,
+        server.getClientPrefix(client),
+        true
+    );
+
+    server.queueMessageToChannel(
+        *channel,
+        kickMessage.serialize()
+    );
+
+    server.removeClientFromChannel(*targetClient, *channel);
 }
 
 /**
