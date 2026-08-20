@@ -441,10 +441,10 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
 }
 
 /**
- * @brief Processes the initial membership stage of JOIN. It rejects an empty
- * channel parameter or an invalid channel name, ignores duplicate joins,
- * obtains or creates the requested channel, and synchronizes the membership
- * state stored by Client and Channel.
+ * @brief Processes JOIN for a registered client. It rejects an empty or
+ * invalid channel name, ignores duplicate joins, obtains or creates the
+ * channel, synchronizes membership, and broadcasts the successful JOIN to
+ * every channel member, including the joining client.
  *
  * Registration and missing parameter counts are validated by execute() before
  * this handler is called.
@@ -484,6 +484,22 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
         return;
 
     server.addClientToChannel(client, *channel);
+
+    std::vector<std::string> joinParameters;
+
+    joinParameters.push_back(channel->getName());
+
+    const IrcMessage joinMessage(
+        "JOIN",
+        joinParameters,
+        server.getClientPrefix(client),
+        true
+    );
+
+    server.queueMessageToChannel(
+        *channel,
+        joinMessage.serialize()
+    );
 }
 
 void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)

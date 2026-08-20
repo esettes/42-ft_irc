@@ -980,6 +980,36 @@ void Server::queueMessage(Client &client, const std::string &message)
 }
 
 /**
+ * @brief Queues an IRC message once for every current member of a channel.
+ * Null member pointers are ignored defensively. Delivery is performed through
+ * queueMessage() so each recipient's output buffer and POLLOUT state remain
+ * synchronized.
+ *
+ * @param channel The channel whose members will receive the message.
+ * @param message The complete serialized IRC message to queue.
+ */
+void Server::queueMessageToChannel(
+    const Channel &channel,
+    const std::string &message
+)
+{
+    const std::set<Client *> &channelMembers = channel.getMembers();
+
+    std::set<Client *>::const_iterator memberIterator =
+        channelMembers.begin();
+
+    while (memberIterator != channelMembers.end())
+    {
+        Client *channelMember = *memberIterator;
+
+        if (channelMember != NULL)
+            queueMessage(*channelMember, message);
+
+        ++memberIterator;
+    }
+}
+
+/**
  * @brief Queues an IRC message for the source client and once for every other
  * client sharing at least one channel with it, avoiding duplicate delivery
  * when multiple channels are shared.

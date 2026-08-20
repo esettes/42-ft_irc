@@ -132,6 +132,10 @@ class Server
         ) const;
 
         void queueMessage(Client &client, const std::string &message);
+        void queueMessageToChannel(
+            const Channel &channel,
+            const std::string &message
+        );
         void queueMessageToRelatedClients(
             Client &sourceClient,
             const std::string &message
