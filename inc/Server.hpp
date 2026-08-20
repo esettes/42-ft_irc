@@ -108,6 +108,10 @@ class Server
         Channel *findChannel(const std::string &channelName);
         Channel *findOrCreateChannel(const std::string &channelName);
         void addClientToChannel(Client &client, Channel &channel);
+        void removeClientFromChannel(
+            Client &client,
+            Channel &channel
+        );
         bool validateChannelJoinAccess(
             Client &client,
             const Channel &channel,

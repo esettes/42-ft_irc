@@ -515,6 +515,35 @@ void Server::addClientToChannel(Client &client, Channel &channel)
 }
 
 /**
+ * @brief Removes a client from a channel while keeping the membership state
+ * stored by Client and Channel synchronized. Channel operator privileges are
+ * removed through Channel::removeMember(), and the channel is erased from the
+ * server when it has no remaining members.
+ *
+ * If the channel is erased, every pointer or reference to that Channel object
+ * becomes invalid. The caller must not access the channel after this function
+ * returns.
+ *
+ * @param client The client leaving the channel.
+ * @param channel The channel the client is leaving.
+ */
+void Server::removeClientFromChannel(Client &client, Channel &channel)
+{
+    if (!channel.hasMember(&client))
+        return;
+
+    const std::string channelName = channel.getName();
+    const std::string normalizedChannelName =
+        normalizeChannelName(channelName);
+
+    channel.removeMember(&client);
+    client.leaveChannel(channelName);
+
+    if (channel.isEmpty())
+        channels.erase(normalizedChannelName);
+}
+
+/**
  * @brief Checks whether a client satisfies every access restriction of a
  * channel before joining. It validates the user limit, pending invitation,
  * and channel key in that order, queuing the corresponding numeric error
