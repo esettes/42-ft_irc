@@ -121,6 +121,16 @@ CHANNEL_TEST = $(TEST_DIR)channel_tests.test
 CHANNEL_TEST_SRC = $(TEST_DIR)ChannelTests.cpp
 PROTOCOL_TEST = $(TEST_DIR)protocol_tests.test
 PROTOCOL_TEST_SRC = $(TEST_DIR)ProtocolTests.cpp
+# Independent protocol suites (one main() per Protocol*Tests.cpp except
+# ProtocolTests.cpp). Adding a new file matching that pattern is enough; the
+# Makefile does not need a new target, which avoids merge conflicts.
+PROTOCOL_SUITE_SRCS := $(filter-out $(TEST_DIR)ProtocolTests.cpp,$(wildcard $(TEST_DIR)Protocol*Tests.cpp))
+PROTOCOL_SUITE_BINS := $(PROTOCOL_SUITE_SRCS:.cpp=.test)
+PROTOCOL_SUITE_COMMON_SRCS = \
+	$(SRC_DIR)Client.cpp \
+	$(SRC_DIR)IrcMessage.cpp \
+	$(SRC_DIR)IrcCasemap.cpp \
+	$(SRC_DIR)Console.cpp
 
 SRCS 			= $(SRC_SRCS)
 
@@ -177,7 +187,7 @@ clean: ## 🧹 Removes the object files
 	$(call RUN_AND_LOG,$(RM) $(OBJ_DIR),$(IRC) $(RED)Object files removed $(RESET))
 fclean: ## 🗑️  Removes both object and executable files
 # 	@$(RM) $(NAME)
-	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST) $(CASEMAP_TEST) $(CHANNEL_TEST) $(PROTOCOL_TEST),$(IRC) $(RED)Removed $(RESET))
+	$(call RUN_AND_LOG,$(MAKE) clean $(NOPRINT); $(RM) $(NAME) $(MSG_PARSER_TEST) $(IRC_MSG_TEST) $(CASEMAP_TEST) $(CHANNEL_TEST) $(PROTOCOL_TEST) $(PROTOCOL_SUITE_BINS),$(IRC) $(RED)Removed $(RESET))
 
 re: ## 🔁 Rebuilds the library
 # 	@echo "$(GREEN)$(NAME) [OK]$(RESET)"
@@ -232,11 +242,24 @@ test-protocol: $(NAME) ## 🧪 Runs point 1 protocol checklist tests
 	@echo " $(YELLOW)$(PROTOCOL_TEST_SRC)$(RESET)"
 	@$(CXX) $(CXXFLAGS) $(INC) \
 		$(PROTOCOL_TEST_SRC) \
-		$(SRC_DIR)Client.cpp \
-		$(SRC_DIR)IrcMessage.cpp \
-		$(SRC_DIR)IrcCasemap.cpp \
-		$(SRC_DIR)Console.cpp \
+		$(PROTOCOL_SUITE_COMMON_SRCS) \
 		-o $(PROTOCOL_TEST)
 	@$(PROTOCOL_TEST)
+	@$(MAKE) test-protocol-suites $(NOPRINT)
 
-.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol
+test-protocol-suites: $(NAME) ## 🧪 Runs split protocol suites (TOPIC, INVITE, ...)
+	@$(call print_banner,Phase protocol suites)
+	@if [ -z "$(PROTOCOL_SUITE_SRCS)" ]; then \
+		printf "%b\n" "$(IRC) $(CYAN)No extra protocol suite tests$(RESET)"; \
+	else \
+		for src in $(PROTOCOL_SUITE_SRCS); do \
+			bin=$${src%.cpp}.test; \
+			echo " $(YELLOW)$$src$(RESET)"; \
+			$(CXX) $(CXXFLAGS) $(INC) $$src \
+				$(PROTOCOL_SUITE_COMMON_SRCS) \
+				-o $$bin || exit 1; \
+			$$bin || exit 1; \
+		done; \
+	fi
+
+.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites
