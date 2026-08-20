@@ -3,6 +3,7 @@
 #include "MessageParser.hpp"
 #include <netdb.h>
 #include <set>
+#include <utility>
 
 /** por el momento debe:
  * 
@@ -369,6 +370,46 @@ std::string Server::normalizeChannelName(const std::string &channelName) const
     return IrcCasemap::normalize(channelName);
 }
 
+/**
+ * @brief Checks whether a channel name follows the format accepted by this
+ * server: a '#' prefix, a total length between 2 and 50 bytes, and no spaces,
+ * control characters, commas, or colons.
+ *
+ * @param channelName The channel name to validate.
+ * @return true if the channel name is valid, false otherwise.
+ */
+bool Server::isValidChannelName(const std::string &channelName) const
+{
+    const std::size_t maximumChannelNameLength = 50;
+
+    if (channelName.size() < 2
+        || channelName.size() > maximumChannelNameLength)
+    {
+        return false;
+    }
+
+    if (channelName[0] != '#')
+        return false;
+
+    for (std::string::size_type characterIndex = 1;
+        characterIndex < channelName.size();
+        ++characterIndex)
+    {
+        const unsigned char currentCharacter =
+            static_cast<unsigned char>(channelName[characterIndex]);
+
+        if (currentCharacter <= 32
+            || currentCharacter == 127
+            || currentCharacter == ','
+            || currentCharacter == ':')
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 Client *Server::findClientByNickname(const std::string &nickname)
 {
     const std::string normalizedNickname = normalizeNickname(nickname);
@@ -407,6 +448,43 @@ Channel *Server::findChannel(const std::string &channelName)
         return NULL;
 
     return &channelIterator->second;
+}
+
+/**
+ * @brief Returns the channel identified by the supplied name, creating and
+ * storing it when it does not already exist. Invalid channel names return
+ * NULL without modifying the server state.
+ *
+ * The channel map uses the normalized name as its key while the Channel
+ * object preserves the original spelling used when it was created.
+ *
+ * @param channelName The original channel name requested by the client.
+ * @return A pointer to the existing or newly created channel, or NULL when
+ * the supplied name is invalid.
+ */
+Channel *Server::findOrCreateChannel(const std::string &channelName)
+{
+    if (!isValidChannelName(channelName))
+        return NULL;
+
+    const std::string normalizedChannelName =
+        normalizeChannelName(channelName);
+
+    std::map<std::string, Channel>::iterator channelIterator =
+        channels.find(normalizedChannelName);
+
+    if (channelIterator != channels.end())
+        return &channelIterator->second;
+
+    const std::pair<std::map<std::string, Channel>::iterator, bool>
+        insertionResult = channels.insert(
+            std::make_pair(
+                normalizedChannelName,
+                Channel(channelName)
+            )
+        );
+
+    return &insertionResult.first->second;
 }
 
 std::string Server::getReplyTarget(const Client &client) const

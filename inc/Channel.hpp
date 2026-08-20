@@ -7,15 +7,24 @@
 class Client;
 
 /**
- * @file Channel.hpp
- * @brief Declares the model that stores the state, membership, privileges,
- * invitations, and modes of an IRC channel.
- * 
- * @param keyEnabled Allow channel protection with password (MODE +k).
- * @param limitEnabled Allow channel user limit (MODE +l).
- * @param topicRestricted Allow only channel operators to set the channel topic (MODE +t).
- * @param inviteOnly Allow only invited clients to join the channel (MODE +i).
- */
+* @brief Declares the model that stores the state, membership, privileges,
+* invitations, and modes of an IRC channel.
+* 
+*  Valid channels:
+*
+*    - Start with #.
+*
+*    - Be between 2 and 50 bytes in length.
+*
+*    - Contain no spaces or control characters.
+*
+*    - Contain no commas (,) or colons (:).
+*
+* @param keyEnabled Allow channel protection with password (MODE +k).
+* @param limitEnabled Allow channel user limit (MODE +l).
+* @param topicRestricted Allow only channel operators to set the channel topic (MODE +t).
+* @param inviteOnly Allow only invited clients to join the channel (MODE +i).
+*/
 class Channel
 {
     private:

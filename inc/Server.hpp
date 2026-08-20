@@ -94,14 +94,19 @@ class Server
         int getPort() const;
         const std::string &getServerName() const;
         bool isPasswordCorrect(const std::string &providedPassword) const;
+
         std::string getServerPrefix() const;
         std::string getClientPrefix(const Client &client) const;
+
         std::string normalizeNickname(const std::string &nickname) const;
         bool assignNickname(Client &client, const std::string &nickname);
         bool isValidNickname(const std::string &nickname) const;
+
         std::string normalizeChannelName(const std::string &channelName) const;
+        bool isValidChannelName(const std::string &channelName) const;
         Client *findClientByNickname(const std::string &nickname);
         Channel *findChannel(const std::string &channelName);
+        Channel *findOrCreateChannel(const std::string &channelName);
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
