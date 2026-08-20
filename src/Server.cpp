@@ -417,21 +417,13 @@ Client *Server::findClientByNickname(const std::string &nickname)
     if (normalizedNickname.empty())
         return NULL;
 
-    std::map<int, Client *>::iterator clientIterator = clients.begin();
+    std::map<std::string, Client *>::iterator nicknameIterator =
+        clientsByNickname.find(normalizedNickname);
 
-    while (clientIterator != clients.end())
-    {
-        Client *client = clientIterator->second;
+    if (nicknameIterator == clientsByNickname.end())
+        return NULL;
 
-        if (client->isNicknameReceived()
-            && normalizeNickname(client->getNickname()) == normalizedNickname)
-        {
-            return client;
-        }
-        ++clientIterator;
-    }
-
-    return NULL;
+    return nicknameIterator->second;
 }
 
 Channel *Server::findChannel(const std::string &channelName)

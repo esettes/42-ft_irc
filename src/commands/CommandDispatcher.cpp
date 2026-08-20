@@ -139,7 +139,8 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message)
             return;
         }
 
-        if (message.params.size() == 1)
+        if (message.params.size() == 1
+            || message.params[1].empty())
         {
             server.queueNumericReply(
                 client,
@@ -502,22 +503,142 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
     );
 }
 
-void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)
+/**
+ * @brief Delivers PRIVMSG to a nickname or channel after registration and
+ * parameter checks performed by execute(). Empty message text is rejected
+ * with 412; routing then depends on whether the target begins with '#'.
+ */
+void CommandDispatcher::handlePrivateMessage(
+    Client &client,
+    const IrcMessage &message
+)
 {
     const std::string &target = message.params[0];
-    const std::string &msg = message.params[1];
+    const std::string &messageText = message.params[1];
+
+    if (messageText.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTEXTTOSEND,
+            NumericReply::MSG_NOTEXTTOSEND
+        );
+        return;
+    }
+
+    if (isChannelTarget(target))
+    {
+        sendMessageToChannel(client, target, messageText);
+        return;
+    }
+
+    sendMessageToUser(client, target, messageText);
+}
+
+bool CommandDispatcher::isChannelTarget(const std::string &target) const
+{
+    return !target.empty() && target[0] == '#';
+}
+
+/**
+ * @brief Delivers a private message to a single nickname when it exists,
+ * otherwise replies with ERR_NOSUCHNICK. The sender's full prefix is preserved
+ * and delivery uses the non-blocking output buffer.
+ */
+void CommandDispatcher::sendMessageToUser(
+    Client &sender,
+    const std::string &nickname,
+    const std::string &messageText
+)
+{
+    Client *recipient = server.findClientByNickname(nickname);
+
+    if (recipient == NULL)
+    {
+        server.queueNumericReply(
+            sender,
+            NumericReply::ERR_NOSUCHNICK,
+            nickname,
+            NumericReply::MSG_NOSUCHNICK
+        );
+        return;
+    }
 
     std::vector<std::string> privateMessageParameters;
 
-    privateMessageParameters.push_back(target);
-    privateMessageParameters.push_back(msg);
+    privateMessageParameters.push_back(nickname);
+    privateMessageParameters.push_back(messageText);
 
     const IrcMessage privateMessage(
         "PRIVMSG",
         privateMessageParameters,
-        server.getClientPrefix(client),
+        server.getClientPrefix(sender),
         true
     );
 
-    server.queueMessage(client, privateMessage.serialize());
+    server.queueMessage(*recipient, privateMessage.serialize());
+}
+
+/**
+ * @brief Delivers a channel message to every member except the sender when
+ * the channel exists and the sender belongs to it. Missing channels yield
+ * ERR_NOSUCHCHANNEL; non-members yield ERR_CANNOTSENDTOCHAN.
+ */
+void CommandDispatcher::sendMessageToChannel(
+    Client &sender,
+    const std::string &channelName,
+    const std::string &messageText
+)
+{
+    Channel *channel = server.findChannel(channelName);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            sender,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            channelName,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&sender))
+    {
+        server.queueNumericReply(
+            sender,
+            NumericReply::ERR_CANNOTSENDTOCHAN,
+            channelName,
+            NumericReply::MSG_CANNOTSENDTOCHAN
+        );
+        return;
+    }
+
+    std::vector<std::string> privateMessageParameters;
+
+    privateMessageParameters.push_back(channelName);
+    privateMessageParameters.push_back(messageText);
+
+    const IrcMessage privateMessage(
+        "PRIVMSG",
+        privateMessageParameters,
+        server.getClientPrefix(sender),
+        true
+    );
+
+    const std::string serializedMessage = privateMessage.serialize();
+    const std::set<Client *> &channelMembers = channel->getMembers();
+
+    std::set<Client *>::const_iterator memberIterator =
+        channelMembers.begin();
+
+    while (memberIterator != channelMembers.end())
+    {
+        Client *channelMember = *memberIterator;
+
+        if (channelMember != NULL && channelMember != &sender)
+            server.queueMessage(*channelMember, serializedMessage);
+
+        ++memberIterator;
+    }
 }

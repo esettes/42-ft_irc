@@ -982,51 +982,332 @@ static void testSpecificMissingParameterNumerics()
     );
 }
 
-static void testPrivateMessageParameterNumerics()
+/**
+ * @brief Extracts the nick!user@host identity embedded in a welcome (001)
+ * reply so later assertions can compare full PRIVMSG prefixes.
+ */
+static bool extractClientPrefixFromWelcome(
+    const std::string &welcomeResponse,
+    const std::string &nickname,
+    std::string &clientPrefix
+)
+{
+    const std::string prefixMarker = nickname + "!" + nickname + "@";
+    const std::string::size_type prefixStart =
+        welcomeResponse.find(prefixMarker);
+
+    if (prefixStart == std::string::npos)
+        return false;
+
+    const std::string::size_type prefixEnd =
+        welcomeResponse.find("\r\n", prefixStart);
+
+    if (prefixEnd == std::string::npos)
+        return false;
+
+    clientPrefix = welcomeResponse.substr(
+        prefixStart,
+        prefixEnd - prefixStart
+    );
+    return true;
+}
+
+/**
+ * @brief Phase 13 — verifies every documented PRIVMSG error path:
+ * 451 before registration, 411/412 for missing data, 401/403/404 for
+ * unreachable targets, and that invalid commands leave the server usable.
+ */
+static void testPhase13PrivmsgErrors()
 {
     TestServerProcess server;
 
     if (!server.start())
     {
         reportFailure(
-            "Server should start for PRIVMSG tests",
+            "Server should start for phase 13 PRIVMSG error tests",
             "running ircserv",
             "server startup failed"
         );
         return;
     }
 
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "PRIVMSG target :hello\r\n"
+        ),
+        ":irc.42.local 451 * :You have not registered\r\n",
+        "Phase 13: PRIVMSG before registration should return 451"
+    );
+
     const int socketFd = connectToServer(server.getPort());
 
     if (socketFd == -1)
     {
         reportFailure(
-            "Client should connect for PRIVMSG tests",
+            "Client should connect for phase 13 PRIVMSG error tests",
             "successful connection",
             "connection failed"
         );
         return;
     }
 
-    registerClient(socketFd, "roxana");
+    registerClient(socketFd, "alice");
 
     sendAll(socketFd, "PRIVMSG\r\n");
-
     expectEqual(
         receiveAvailableData(socketFd, 500),
-        ":irc.42.local 411 roxana :No recipient given (PRIVMSG)\r\n",
-        "PRIVMSG without a recipient should return 411"
+        ":irc.42.local 411 alice :No recipient given (PRIVMSG)\r\n",
+        "Phase 13: PRIVMSG without a recipient should return 411"
     );
 
-    sendAll(socketFd, "PRIVMSG nobody\r\n");
-
+    sendAll(socketFd, "PRIVMSG roxana\r\n");
     expectEqual(
         receiveAvailableData(socketFd, 500),
-        ":irc.42.local 412 roxana :No text to send\r\n",
-        "PRIVMSG without text should return 412"
+        ":irc.42.local 412 alice :No text to send\r\n",
+        "Phase 13: PRIVMSG without text should return 412"
     );
 
+    sendAll(socketFd, "PRIVMSG roxana :\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 412 alice :No text to send\r\n",
+        "Phase 13: PRIVMSG with empty trailing text should return 412"
+    );
+
+    sendAll(socketFd, "PRIVMSG nadie :Hola\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 401 alice nadie :No such nick\r\n",
+        "Phase 13: PRIVMSG to an unknown nickname should return 401"
+    );
+
+    sendAll(socketFd, "PRIVMSG #inexistente :Hola\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 403 alice #inexistente :No such channel\r\n",
+        "Phase 13: PRIVMSG to an unknown channel should return 403"
+    );
+
+    sendAll(socketFd, "JOIN #general\r\n");
+    receiveAvailableData(socketFd, 500);
+
+    const int outsiderSocketFd = connectToServer(server.getPort());
+
+    if (outsiderSocketFd == -1)
+    {
+        reportFailure(
+            "Outsider client should connect for phase 13 PRIVMSG tests",
+            "successful connection",
+            "connection failed"
+        );
+        ::close(socketFd);
+        return;
+    }
+
+    registerClient(outsiderSocketFd, "outsider");
+    sendAll(outsiderSocketFd, "PRIVMSG #general :Hola\r\n");
+    expectEqual(
+        receiveAvailableData(outsiderSocketFd, 500),
+        ":irc.42.local 404 outsider #general :Cannot send to channel\r\n",
+        "Phase 13: PRIVMSG from a non-member should return 404"
+    );
+
+    sendAll(socketFd, "PRIVMSG nadie :still alive\r\n");
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 401 alice nadie :No such nick\r\n",
+        "Phase 13: server should keep answering after invalid PRIVMSG"
+    );
+
+    expectTrue(
+        server.isRunning(),
+        "Phase 13: invalid PRIVMSG commands should not stop the server",
+        "ircserv remains running",
+        "ircserv exited"
+    );
+
+    ::close(outsiderSocketFd);
     ::close(socketFd);
+}
+
+/**
+ * @brief Phase 13 — verifies successful PRIVMSG delivery between users and
+ * inside a channel: full sender prefix, CRLF termination, no echo to the
+ * sender, casemapped nick lookup, and preserved trailing spaces.
+ */
+static void testPhase13PrivmsgDelivery()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 13 PRIVMSG delivery tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int aliceSocketFd = connectToServer(server.getPort());
+    const int roxanaSocketFd = connectToServer(server.getPort());
+    const int bobSocketFd = connectToServer(server.getPort());
+    const int carolSocketFd = connectToServer(server.getPort());
+
+    if (aliceSocketFd == -1
+        || roxanaSocketFd == -1
+        || bobSocketFd == -1
+        || carolSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 13 PRIVMSG delivery tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (aliceSocketFd != -1)
+            ::close(aliceSocketFd);
+        if (roxanaSocketFd != -1)
+            ::close(roxanaSocketFd);
+        if (bobSocketFd != -1)
+            ::close(bobSocketFd);
+        if (carolSocketFd != -1)
+            ::close(carolSocketFd);
+        return;
+    }
+
+    const std::string aliceWelcome =
+        registerClient(aliceSocketFd, "alice");
+    registerClient(roxanaSocketFd, "roxana");
+    registerClient(bobSocketFd, "bob");
+    registerClient(carolSocketFd, "carol");
+
+    std::string alicePrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            aliceWelcome,
+            "alice",
+            alicePrefix
+        ))
+    {
+        reportFailure(
+            "Alice welcome should expose a usable client prefix",
+            "welcome containing alice!alice@",
+            aliceWelcome
+        );
+        ::close(aliceSocketFd);
+        ::close(roxanaSocketFd);
+        ::close(bobSocketFd);
+        ::close(carolSocketFd);
+        return;
+    }
+
+    expectContains(
+        alicePrefix,
+        "alice!alice@",
+        "Phase 13: sender prefix must include nick!user@host"
+    );
+
+    sendAll(aliceSocketFd, "PRIVMSG roxana :Hola\r\n");
+
+    const std::string userMessage =
+        receiveAvailableData(roxanaSocketFd, 500);
+    const std::string expectedUserMessage =
+        ":" + alicePrefix + " PRIVMSG roxana :Hola\r\n";
+
+    expectEqual(
+        userMessage,
+        expectedUserMessage,
+        "Phase 13: PRIVMSG to a nickname should reach only the recipient"
+    );
+    expectTrue(
+        userMessage.size() >= 2
+            && userMessage[userMessage.size() - 2] == '\r'
+            && userMessage[userMessage.size() - 1] == '\n',
+        "Phase 13: delivered PRIVMSG must end with CRLF",
+        "message ending with \\r\\n",
+        escapeOutput(userMessage)
+    );
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 200),
+        "",
+        "Phase 13: PRIVMSG to a nickname should not echo to the sender"
+    );
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 200),
+        "",
+        "Phase 13: PRIVMSG to a nickname should not reach unrelated clients"
+    );
+    expectEqual(
+        receiveAvailableData(carolSocketFd, 200),
+        "",
+        "Phase 13: PRIVMSG to a nickname should not reach other unrelated clients"
+    );
+
+    sendAll(aliceSocketFd, "PRIVMSG ROXANA :Casemap\r\n");
+    expectEqual(
+        receiveAvailableData(roxanaSocketFd, 500),
+        ":" + alicePrefix + " PRIVMSG ROXANA :Casemap\r\n",
+        "Phase 13: PRIVMSG should find nicknames with IRC casemapping"
+    );
+
+    sendAll(
+        aliceSocketFd,
+        "PRIVMSG roxana :Hola con espacios y CTCP\r\n"
+    );
+    expectEqual(
+        receiveAvailableData(roxanaSocketFd, 500),
+        ":" + alicePrefix
+            + " PRIVMSG roxana :Hola con espacios y CTCP\r\n",
+        "Phase 13: PRIVMSG trailing text must preserve spaces"
+    );
+
+    sendAll(aliceSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    sendAll(roxanaSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(roxanaSocketFd, 500);
+    sendAll(bobSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(roxanaSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+    sendAll(carolSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(roxanaSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+    receiveAvailableData(carolSocketFd, 500);
+
+    sendAll(aliceSocketFd, "PRIVMSG #general :Hola a todos\r\n");
+
+    const std::string expectedChannelMessage =
+        ":" + alicePrefix + " PRIVMSG #general :Hola a todos\r\n";
+
+    expectEqual(
+        receiveAvailableData(roxanaSocketFd, 500),
+        expectedChannelMessage,
+        "Phase 13: channel PRIVMSG should reach roxana"
+    );
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedChannelMessage,
+        "Phase 13: channel PRIVMSG should reach bob"
+    );
+    expectEqual(
+        receiveAvailableData(carolSocketFd, 500),
+        expectedChannelMessage,
+        "Phase 13: channel PRIVMSG should reach carol"
+    );
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 200),
+        "",
+        "Phase 13: channel PRIVMSG should not be echoed to the sender"
+    );
+
+    ::close(aliceSocketFd);
+    ::close(roxanaSocketFd);
+    ::close(bobSocketFd);
+    ::close(carolSocketFd);
 }
 
 static void testOversizedErrorDoesNotStopServer()
@@ -1425,7 +1706,8 @@ int main()
     testWelcomeNumerics();
     testPassRegistrationRules();
     testSpecificMissingParameterNumerics();
-    testPrivateMessageParameterNumerics();
+    testPhase13PrivmsgErrors();
+    testPhase13PrivmsgDelivery();
     testPhase10PingAndPong();
     testPhase10CapabilityNegotiation();
     testPhase10QuitAndNicknameRelease();
