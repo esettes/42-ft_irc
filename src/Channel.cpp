@@ -130,3 +130,38 @@ bool Channel::hasOperator(const Client *client) const
 
     return operators.find(const_cast<Client *>(client)) != operators.end();
 }
+
+/**
+ * @brief Adds a non-member client to the channel invitation list(MODE +i).
+ */
+void Channel::inviteClient(Client *client)
+{
+    if (client == NULL || hasMember(client))
+        return;
+
+    invitedClients.insert(client);
+}
+
+/**
+ * @brief Removes a client's pending invitation to the channel(MODE -i).
+ * Its a pending invitation not a permanent privilege.
+ */
+void Channel::removeInvitation(Client *client)
+{
+    if (client == NULL)
+        return;
+
+    invitedClients.erase(client);
+}
+
+/**
+ * @brief Checks whether a client has a pending invitation to the channel.
+ */
+bool Channel::hasInvitation(const Client *client) const
+{
+    if (client == NULL)
+        return false;
+
+    return invitedClients.find(const_cast<Client *>(client))
+        != invitedClients.end();
+}

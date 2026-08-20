@@ -44,6 +44,9 @@ class Channel
         void addOperator(Client *client);
         void removeOperator(Client *client);
         bool hasOperator(const Client *client) const;
+        void inviteClient(Client *client);
+        void removeInvitation(Client *client);
+        bool hasInvitation(const Client *client) const;
 };
 
 #endif
