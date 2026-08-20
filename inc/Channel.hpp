@@ -47,6 +47,11 @@ class Channel
         void inviteClient(Client *client);
         void removeInvitation(Client *client);
         bool hasInvitation(const Client *client) const;
+        bool isInviteOnly() const;
+        void setInviteOnly(bool enabled);
+
+        bool isTopicRestricted() const;
+        void setTopicRestricted(bool enabled);
 };
 
 #endif

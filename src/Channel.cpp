@@ -165,3 +165,43 @@ bool Channel::hasInvitation(const Client *client) const
     return invitedClients.find(const_cast<Client *>(client))
         != invitedClients.end();
 }
+
+/**
+ * @brief Checks whether the channel only accepts invited clients.
+ */
+bool Channel::isInviteOnly() const
+{
+    return inviteOnly;
+}
+
+/**
+ * @brief Enables or disables the channel invite-only mode.
+ * 
+ * MODE +i: Only invited clients can join the channel.
+ * 
+ * MODE -i: Any client can join the channel.
+ */
+void Channel::setInviteOnly(bool enabled)
+{
+    inviteOnly = enabled;
+}
+
+/**
+ * @brief Checks whether topic changes are restricted to channel operators.
+ */
+bool Channel::isTopicRestricted() const
+{
+    return topicRestricted;
+}
+
+/**
+ * @brief Enables or disables the channel topic restriction.
+ * 
+ * MODE +t: Only channel operators can change the topic.
+ * 
+ * MODE -t: Any channel member can change the topic.
+ */
+void Channel::setTopicRestricted(bool enabled)
+{
+    topicRestricted = enabled;
+}
