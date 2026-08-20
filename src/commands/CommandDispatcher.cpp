@@ -67,6 +67,11 @@ void CommandDispatcher::registerCommands()
     );
     cmmds.insert(
         std::make_pair(
+            "PART",
+            CommandDefinition(&CommandDispatcher::handlePart, 1, true))
+    );
+    cmmds.insert(
+        std::make_pair(
             "PRIVMSG",
             CommandDefinition(&CommandDispatcher::handlePrivateMessage, 2, true))
     );
@@ -74,6 +79,11 @@ void CommandDispatcher::registerCommands()
         std::make_pair(
             "TOPIC",
             CommandDefinition(&CommandDispatcher::handleTopic, 1, true))
+    );
+    cmmds.insert(
+        std::make_pair(
+            "INVITE",
+            CommandDefinition(&CommandDispatcher::handleInvite, 2, true))
     );
     cmmds.insert(
         std::make_pair(
@@ -454,15 +464,17 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
 
 /**
  * @brief Processes JOIN for a registered client. It rejects an empty or
- * invalid channel name, ignores duplicate joins, obtains or creates the
- * channel, synchronizes membership, and broadcasts the successful JOIN to
- * every channel member, including the joining client.
+ * invalid channel name, ignores duplicate joins, enforces invite-only, key
+ * and limit restrictions, obtains or creates the channel, synchronizes
+ * membership, and broadcasts the successful JOIN to every channel member,
+ * including the joining client.
  *
  * Registration and missing parameter counts are validated by execute() before
  * this handler is called.
  *
  * @param client The registered client requesting to join the channel.
- * @param message The parsed JOIN message containing the channel name.
+ * @param message The parsed JOIN message containing the channel name and an
+ * optional channel key.
  */
 void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 {
@@ -495,6 +507,12 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
     if (channel->hasMember(&client))
         return;
 
+    const std::string providedKey =
+        message.params.size() >= 2 ? message.params[1] : "";
+
+    if (!canJoinChannel(client, *channel, providedKey))
+        return;
+
     server.addClientToChannel(client, *channel);
 
     std::vector<std::string> joinParameters;
@@ -512,6 +530,245 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
         *channel,
         joinMessage.serialize()
     );
+}
+
+/**
+ * @brief Validates invite-only, channel-key and user-limit restrictions for
+ * JOIN. A pending invitation only bypasses +i; +k and +l still apply.
+ * Failed checks do not consume invitations.
+ */
+bool CommandDispatcher::canJoinChannel(
+    Client &client,
+    Channel &channel,
+    const std::string &providedKey
+)
+{
+    if (channel.isInviteOnly() && !channel.hasInvitation(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_INVITEONLYCHAN,
+            channel.getName(),
+            NumericReply::MSG_INVITEONLYCHAN
+        );
+        return false;
+    }
+
+    if (channel.isKeyEnabled()
+        && (providedKey.empty() || providedKey != channel.getKey()))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_BADCHANNELKEY,
+            channel.getName(),
+            NumericReply::MSG_BADCHANNELKEY
+        );
+        return false;
+    }
+
+    if (channel.isLimitEnabled()
+        && channel.getMemberCount() >= channel.getUserLimit())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_CHANNELISFULL,
+            channel.getName(),
+            NumericReply::MSG_CHANNELISFULL
+        );
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Processes PART for a registered client. Validates the channel and
+ * membership, notifies every member including the parting client, removes
+ * membership and deletes the channel when it becomes empty.
+ */
+void CommandDispatcher::handlePart(Client &client, const IrcMessage &message)
+{
+    const std::string &channelName = message.params[0];
+
+    if (channelName.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    Channel *channel = server.findChannel(channelName);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            channelName,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTONCHANNEL,
+            channel->getName(),
+            NumericReply::MSG_NOTONCHANNEL
+        );
+        return;
+    }
+
+    std::vector<std::string> partParameters;
+
+    partParameters.push_back(channel->getName());
+
+    const bool hasPartReason =
+        message.hasTrailingParameter || message.params.size() >= 2;
+
+    if (hasPartReason)
+    {
+        const std::string partReason =
+            message.params.size() >= 2 ? message.params[1] : "";
+
+        partParameters.push_back(partReason);
+    }
+
+    const IrcMessage partMessage(
+        "PART",
+        partParameters,
+        server.getClientPrefix(client),
+        hasPartReason
+    );
+
+    const std::string serializedPartMessage = partMessage.serialize();
+    const std::string preservedChannelName = channel->getName();
+
+    server.queueMessageToChannel(*channel, serializedPartMessage);
+    server.removeClientFromChannel(client, *channel);
+    server.removeChannelIfEmpty(preservedChannelName);
+}
+
+/**
+ * @brief Processes INVITE for a registered channel operator. Validates the
+ * target nickname and channel, stores a pending invitation, confirms with
+ * RPL_INVITING and notifies only the invited client.
+ */
+void CommandDispatcher::handleInvite(
+    Client &client,
+    const IrcMessage &message
+)
+{
+    const std::string &targetNickname = message.params[0];
+    const std::string &channelName = message.params[1];
+
+    if (targetNickname.empty() || channelName.empty())
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NEEDMOREPARAMS,
+            message.getCommand(),
+            NumericReply::MSG_NEEDMOREPARAMS
+        );
+        return;
+    }
+
+    Channel *channel = server.findChannel(channelName);
+
+    if (channel == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHCHANNEL,
+            channelName,
+            NumericReply::MSG_NOSUCHCHANNEL
+        );
+        return;
+    }
+
+    Client *targetClient = server.findClientByNickname(targetNickname);
+
+    if (targetClient == NULL)
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOSUCHNICK,
+            targetNickname,
+            NumericReply::MSG_NOSUCHNICK
+        );
+        return;
+    }
+
+    if (!channel->hasMember(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_NOTONCHANNEL,
+            channel->getName(),
+            NumericReply::MSG_NOTONCHANNEL
+        );
+        return;
+    }
+
+    if (channel->hasMember(targetClient))
+    {
+        std::vector<std::string> alreadyOnChannelParameters;
+
+        alreadyOnChannelParameters.push_back(targetClient->getNickname());
+        alreadyOnChannelParameters.push_back(channel->getName());
+
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_USERONCHANNEL,
+            alreadyOnChannelParameters,
+            NumericReply::MSG_USERONCHANNEL
+        );
+        return;
+    }
+
+    if (!channel->hasOperator(&client))
+    {
+        server.queueNumericReply(
+            client,
+            NumericReply::ERR_CHANOPRIVSNEEDED,
+            channel->getName(),
+            NumericReply::MSG_CHANOPRIVSNEEDED
+        );
+        return;
+    }
+
+    channel->inviteClient(targetClient);
+
+    std::vector<std::string> invitingParameters;
+
+    invitingParameters.push_back(targetClient->getNickname());
+    invitingParameters.push_back(channel->getName());
+
+    server.queueNumericReply(
+        client,
+        NumericReply::RPL_INVITING,
+        invitingParameters
+    );
+
+    std::vector<std::string> inviteParameters;
+
+    inviteParameters.push_back(targetClient->getNickname());
+    inviteParameters.push_back(channel->getName());
+
+    const IrcMessage inviteMessage(
+        "INVITE",
+        inviteParameters,
+        server.getClientPrefix(client),
+        true
+    );
+
+    server.queueMessage(*targetClient, inviteMessage.serialize());
 }
 
 /**
@@ -649,10 +906,10 @@ void CommandDispatcher::applyTopicChange(
 }
 
 /**
- * @brief Applies the topic-restriction flags required by TOPIC. Full MODE
- * handling belongs to a later phase; this handler only understands +t and
- * -t so the restriction can be enabled and tested. Mode queries and other
- * flags are ignored until the complete MODE command is implemented.
+ * @brief Applies channel mode changes required by TOPIC and INVITE. Full MODE
+ * handling belongs to a later phase; this handler understands +t/-t, +i/-i
+ * and +k/-k so those restrictions can be enabled and tested. Mode queries and
+ * other flags are ignored until the complete MODE command is implemented.
  */
 void CommandDispatcher::handleMode(
     Client &client,
@@ -703,26 +960,51 @@ void CommandDispatcher::handleMode(
     }
 
     const std::string &modeString = message.params[1];
-    bool topicRestrictionChanged = false;
-
-    if (modeString == "+t")
-    {
-        channel->setTopicRestricted(true);
-        topicRestrictionChanged = true;
-    }
-    else if (modeString == "-t")
-    {
-        channel->setTopicRestricted(false);
-        topicRestrictionChanged = true;
-    }
-
-    if (!topicRestrictionChanged)
-        return;
-
     std::vector<std::string> modeParameters;
 
     modeParameters.push_back(channel->getName());
     modeParameters.push_back(modeString);
+
+    if (modeString == "+t")
+    {
+        channel->setTopicRestricted(true);
+    }
+    else if (modeString == "-t")
+    {
+        channel->setTopicRestricted(false);
+    }
+    else if (modeString == "+i")
+    {
+        channel->setInviteOnly(true);
+    }
+    else if (modeString == "-i")
+    {
+        channel->setInviteOnly(false);
+    }
+    else if (modeString == "+k")
+    {
+        if (message.params.size() < 3 || message.params[2].empty())
+        {
+            server.queueNumericReply(
+                client,
+                NumericReply::ERR_NEEDMOREPARAMS,
+                message.getCommand(),
+                NumericReply::MSG_NEEDMOREPARAMS
+            );
+            return;
+        }
+
+        channel->setKey(message.params[2]);
+        modeParameters.push_back(message.params[2]);
+    }
+    else if (modeString == "-k")
+    {
+        channel->removeKey();
+    }
+    else
+    {
+        return;
+    }
 
     const IrcMessage modeMessage(
         "MODE",

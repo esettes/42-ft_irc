@@ -60,11 +60,18 @@ class CommandDispatcher
         void handleQuit(Client &client, const IrcMessage &message);
         void handleCap(Client &client, const IrcMessage &message);
         void handleJoin(Client &client, const IrcMessage &message);
+        void handlePart(Client &client, const IrcMessage &message);
         void handlePrivateMessage(Client &client, const IrcMessage &message);
         void handleTopic(Client &client, const IrcMessage &message);
+        void handleInvite(Client &client, const IrcMessage &message);
         void handleMode(Client &client, const IrcMessage &message);
 
         bool isChannelTarget(const std::string &target) const;
+        bool canJoinChannel(
+            Client &client,
+            Channel &channel,
+            const std::string &providedKey
+        );
         void sendTopicReply(Client &client, const Channel &channel);
         void applyTopicChange(
             Client &client,

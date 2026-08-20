@@ -506,6 +506,71 @@ void Server::addClientToChannel(Client &client, Channel &channel)
         channel.addOperator(&client);
 }
 
+/**
+ * @brief Removes a client from a channel while keeping Client and Channel
+ * membership synchronized. Operator status and pending invitations for that
+ * channel are cleared through Channel::removeMember.
+ */
+void Server::removeClientFromChannel(Client &client, Channel &channel)
+{
+    if (!channel.hasMember(&client))
+        return;
+
+    channel.removeMember(&client);
+    client.leaveChannel(channel.getName());
+}
+
+/**
+ * @brief Deletes a channel from the server map when it has no members left.
+ */
+void Server::removeChannelIfEmpty(const std::string &channelName)
+{
+    Channel *channel = findChannel(channelName);
+
+    if (channel == NULL || !channel->isEmpty())
+        return;
+
+    channels.erase(normalizeChannelName(channelName));
+}
+
+/**
+ * @brief Removes a disconnecting client from every channel membership and
+ * invitation list, then deletes channels that become empty.
+ */
+void Server::detachClientFromChannels(Client &client)
+{
+    std::vector<std::string> emptyChannelNames;
+    std::map<std::string, Channel>::iterator channelIterator =
+        channels.begin();
+
+    while (channelIterator != channels.end())
+    {
+        Channel &channel = channelIterator->second;
+
+        channel.removeInvitation(&client);
+
+        if (channel.hasMember(&client))
+        {
+            channel.removeMember(&client);
+            client.leaveChannel(channel.getName());
+
+            if (channel.isEmpty())
+                emptyChannelNames.push_back(channelIterator->first);
+        }
+
+        ++channelIterator;
+    }
+
+    std::vector<std::string>::const_iterator emptyChannelIterator =
+        emptyChannelNames.begin();
+
+    while (emptyChannelIterator != emptyChannelNames.end())
+    {
+        channels.erase(*emptyChannelIterator);
+        ++emptyChannelIterator;
+    }
+}
+
 std::string Server::getReplyTarget(const Client &client) const
 {
     if (client.getNickname().empty())
@@ -677,6 +742,7 @@ void Server::removeClient(std::size_t descriptorIndex)
     {
         Client *client = clientIterator->second;
 
+        detachClientFromChannels(*client);
         removeNicknameIndexEntry(*client);
         delete client;
         clients.erase(clientIterator);

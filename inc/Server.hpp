@@ -108,6 +108,9 @@ class Server
         Channel *findChannel(const std::string &channelName);
         Channel *findOrCreateChannel(const std::string &channelName);
         void addClientToChannel(Client &client, Channel &channel);
+        void removeClientFromChannel(Client &client, Channel &channel);
+        void removeChannelIfEmpty(const std::string &channelName);
+        void detachClientFromChannels(Client &client);
         std::string buildNumericReply(
             int numericCode,
             const Client &client,

@@ -2148,6 +2148,417 @@ static void testPhase14TopicRestriction()
     ::close(bobSocketFd);
 }
 
+/**
+ * @brief Phase 15 — verifies INVITE error paths: 451, 461, 403, 401, 442,
+ * 443, 482, and that rejected invites leave the server usable.
+ */
+static void testPhase15InviteErrors()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 15 INVITE error tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "INVITE roxana #privado\r\n"
+        ),
+        ":irc.42.local 451 * :You have not registered\r\n",
+        "Phase 15: INVITE before registration should return 451"
+    );
+
+    const int operatorSocketFd = connectToServer(server.getPort());
+    const int memberSocketFd = connectToServer(server.getPort());
+    const int outsiderSocketFd = connectToServer(server.getPort());
+    const int targetSocketFd = connectToServer(server.getPort());
+
+    if (operatorSocketFd == -1
+        || memberSocketFd == -1
+        || outsiderSocketFd == -1
+        || targetSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 15 INVITE error tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (operatorSocketFd != -1)
+            ::close(operatorSocketFd);
+        if (memberSocketFd != -1)
+            ::close(memberSocketFd);
+        if (outsiderSocketFd != -1)
+            ::close(outsiderSocketFd);
+        if (targetSocketFd != -1)
+            ::close(targetSocketFd);
+        return;
+    }
+
+    registerClient(operatorSocketFd, "operador");
+    registerClient(memberSocketFd, "miembro");
+    registerClient(outsiderSocketFd, "outsider");
+    registerClient(targetSocketFd, "roxana");
+
+    sendAll(operatorSocketFd, "INVITE\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":irc.42.local 461 operador INVITE :Not enough parameters\r\n",
+        "Phase 15: INVITE without parameters should return 461"
+    );
+
+    sendAll(operatorSocketFd, "INVITE roxana\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":irc.42.local 461 operador INVITE :Not enough parameters\r\n",
+        "Phase 15: INVITE without a channel should return 461"
+    );
+
+    sendAll(operatorSocketFd, "INVITE roxana #desconocido\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":irc.42.local 403 operador #desconocido :No such channel\r\n",
+        "Phase 15: INVITE for an unknown channel should return 403"
+    );
+
+    if (!joinChannelAndDrain(operatorSocketFd, "#privado"))
+    {
+        reportFailure(
+            "Operator should create #privado for INVITE error tests",
+            "successful JOIN",
+            "JOIN failed"
+        );
+        ::close(operatorSocketFd);
+        ::close(memberSocketFd);
+        ::close(outsiderSocketFd);
+        ::close(targetSocketFd);
+        return;
+    }
+
+    sendAll(memberSocketFd, "JOIN #privado\r\n");
+    receiveAvailableData(operatorSocketFd, 500);
+    receiveAvailableData(memberSocketFd, 500);
+
+    sendAll(operatorSocketFd, "INVITE desconocido #privado\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":irc.42.local 401 operador desconocido :No such nick\r\n",
+        "Phase 15: INVITE for an unknown nick should return 401"
+    );
+
+    sendAll(outsiderSocketFd, "INVITE roxana #privado\r\n");
+    expectEqual(
+        receiveAvailableData(outsiderSocketFd, 500),
+        ":irc.42.local 442 outsider #privado :You're not on that channel\r\n",
+        "Phase 15: INVITE from outside the channel should return 442"
+    );
+
+    sendAll(operatorSocketFd, "INVITE miembro #privado\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":irc.42.local 443 operador miembro #privado :is already on channel\r\n",
+        "Phase 15: INVITE for a member should return 443"
+    );
+
+    sendAll(memberSocketFd, "INVITE roxana #privado\r\n");
+    expectEqual(
+        receiveAvailableData(memberSocketFd, 500),
+        ":irc.42.local 482 miembro #privado :You're not channel operator\r\n",
+        "Phase 15: INVITE from a non-operator should return 482"
+    );
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 200),
+        "",
+        "Phase 15: a rejected INVITE must not notify the target"
+    );
+
+    sendAll(operatorSocketFd, "MODE #privado +i\r\n");
+    receiveAvailableData(operatorSocketFd, 500);
+    receiveAvailableData(memberSocketFd, 500);
+
+    sendAll(targetSocketFd, "JOIN #privado\r\n");
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":irc.42.local 473 roxana #privado :Cannot join channel (+i)\r\n",
+        "Phase 15: a failed non-operator INVITE must not store an invitation"
+    );
+
+    ::close(operatorSocketFd);
+    ::close(memberSocketFd);
+    ::close(outsiderSocketFd);
+    ::close(targetSocketFd);
+}
+
+/**
+ * @brief Phase 15 — verifies a valid INVITE, invite-only JOIN, invitation
+ * consumption after PART, and that +k still blocks an invited client until
+ * the correct key is supplied.
+ */
+static void testPhase15InviteFlow()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 15 INVITE flow tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int operatorSocketFd = connectToServer(server.getPort());
+    const int targetSocketFd = connectToServer(server.getPort());
+
+    if (operatorSocketFd == -1 || targetSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 15 INVITE flow tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (operatorSocketFd != -1)
+            ::close(operatorSocketFd);
+        if (targetSocketFd != -1)
+            ::close(targetSocketFd);
+        return;
+    }
+
+    const std::string operatorWelcome =
+        registerClient(operatorSocketFd, "operador");
+    registerClient(targetSocketFd, "roxana");
+
+    std::string operatorPrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            operatorWelcome,
+            "operador",
+            operatorPrefix
+        ))
+    {
+        reportFailure(
+            "Operator welcome should expose a usable client prefix",
+            "welcome containing operador!operador@",
+            operatorWelcome
+        );
+        ::close(operatorSocketFd);
+        ::close(targetSocketFd);
+        return;
+    }
+
+    if (!joinChannelAndDrain(operatorSocketFd, "#privado"))
+    {
+        reportFailure(
+            "Operator should create #privado for INVITE flow tests",
+            "successful JOIN",
+            "JOIN failed"
+        );
+        ::close(operatorSocketFd);
+        ::close(targetSocketFd);
+        return;
+    }
+
+    sendAll(operatorSocketFd, "MODE #privado +i\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":" + operatorPrefix + " MODE #privado +i\r\n",
+        "Phase 15: enabling +i should notify the operator"
+    );
+
+    sendAll(targetSocketFd, "JOIN #privado\r\n");
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":irc.42.local 473 roxana #privado :Cannot join channel (+i)\r\n",
+        "Phase 15: JOIN without an invitation should return 473"
+    );
+
+    sendAll(operatorSocketFd, "INVITE roxana #privado\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":irc.42.local 341 operador roxana #privado\r\n",
+        "Phase 15: a valid INVITE should return 341 to the operator"
+    );
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":" + operatorPrefix + " INVITE roxana :#privado\r\n",
+        "Phase 15: a valid INVITE should notify only the target"
+    );
+
+    sendAll(targetSocketFd, "JOIN #privado\r\n");
+    const std::string joinResponse =
+        receiveAvailableData(targetSocketFd, 500);
+    const std::string expectedJoin =
+        ":roxana!roxana@";
+
+    expectContains(
+        joinResponse,
+        " JOIN :#privado\r\n",
+        "Phase 15: an invited client should be able to JOIN +i"
+    );
+    expectContains(
+        joinResponse,
+        expectedJoin,
+        "Phase 15: successful JOIN should use the target client prefix"
+    );
+    receiveAvailableData(operatorSocketFd, 500);
+
+    sendAll(targetSocketFd, "PART #privado\r\n");
+    receiveAvailableData(targetSocketFd, 500);
+    receiveAvailableData(operatorSocketFd, 500);
+
+    sendAll(targetSocketFd, "JOIN #privado\r\n");
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":irc.42.local 473 roxana #privado :Cannot join channel (+i)\r\n",
+        "Phase 15: a consumed invitation must not allow a later JOIN"
+    );
+
+    sendAll(operatorSocketFd, "MODE #privado +k secreto\r\n");
+    expectEqual(
+        receiveAvailableData(operatorSocketFd, 500),
+        ":" + operatorPrefix + " MODE #privado +k secreto\r\n",
+        "Phase 15: enabling +k should notify the operator"
+    );
+
+    sendAll(operatorSocketFd, "INVITE roxana #privado\r\n");
+    receiveAvailableData(operatorSocketFd, 500);
+    receiveAvailableData(targetSocketFd, 500);
+
+    sendAll(targetSocketFd, "JOIN #privado incorrecta\r\n");
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":irc.42.local 475 roxana #privado :Cannot join channel (+k)\r\n",
+        "Phase 15: an invited JOIN with a wrong key should return 475"
+    );
+
+    sendAll(targetSocketFd, "JOIN #privado secreto\r\n");
+    const std::string keyedJoinResponse =
+        receiveAvailableData(targetSocketFd, 500);
+
+    expectContains(
+        keyedJoinResponse,
+        " JOIN :#privado\r\n",
+        "Phase 15: an invited JOIN with the correct key should succeed"
+    );
+    receiveAvailableData(operatorSocketFd, 500);
+
+    sendAll(targetSocketFd, "PART #privado\r\n");
+    receiveAvailableData(targetSocketFd, 500);
+    receiveAvailableData(operatorSocketFd, 500);
+
+    sendAll(targetSocketFd, "JOIN #privado secreto\r\n");
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":irc.42.local 473 roxana #privado :Cannot join channel (+i)\r\n",
+        "Phase 15: a successful keyed JOIN should consume the invitation"
+    );
+
+    ::close(operatorSocketFd);
+    ::close(targetSocketFd);
+}
+
+/**
+ * @brief Phase 15 — verifies that disconnecting an invited client clears the
+ * pending invitation so a reconnected nickname still needs a new INVITE.
+ */
+static void testPhase15InviteCleanupOnDisconnect()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 15 INVITE cleanup tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int operatorSocketFd = connectToServer(server.getPort());
+    int targetSocketFd = connectToServer(server.getPort());
+
+    if (operatorSocketFd == -1 || targetSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 15 INVITE cleanup tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (operatorSocketFd != -1)
+            ::close(operatorSocketFd);
+        if (targetSocketFd != -1)
+            ::close(targetSocketFd);
+        return;
+    }
+
+    registerClient(operatorSocketFd, "operador");
+    registerClient(targetSocketFd, "roxana");
+
+    if (!joinChannelAndDrain(operatorSocketFd, "#privado"))
+    {
+        reportFailure(
+            "Operator should create #privado for INVITE cleanup tests",
+            "successful JOIN",
+            "JOIN failed"
+        );
+        ::close(operatorSocketFd);
+        ::close(targetSocketFd);
+        return;
+    }
+
+    sendAll(operatorSocketFd, "MODE #privado +i\r\n");
+    receiveAvailableData(operatorSocketFd, 500);
+
+    sendAll(operatorSocketFd, "INVITE roxana #privado\r\n");
+    receiveAvailableData(operatorSocketFd, 500);
+    receiveAvailableData(targetSocketFd, 500);
+
+    sendAll(targetSocketFd, "QUIT :bye\r\n");
+    expectTrue(
+        waitForSocketClosure(targetSocketFd, 1000),
+        "Phase 15: invited client QUIT should close the connection",
+        "socket closed by peer",
+        "socket still open"
+    );
+    ::close(targetSocketFd);
+
+    targetSocketFd = connectToServer(server.getPort());
+
+    if (targetSocketFd == -1)
+    {
+        reportFailure(
+            "Target should reconnect after QUIT for INVITE cleanup tests",
+            "successful connection",
+            "connection failed"
+        );
+        ::close(operatorSocketFd);
+        return;
+    }
+
+    registerClient(targetSocketFd, "roxana");
+
+    sendAll(targetSocketFd, "JOIN #privado\r\n");
+    expectEqual(
+        receiveAvailableData(targetSocketFd, 500),
+        ":irc.42.local 473 roxana #privado :Cannot join channel (+i)\r\n",
+        "Phase 15: QUIT should clear pending invitations for the client"
+    );
+
+    ::close(operatorSocketFd);
+    ::close(targetSocketFd);
+}
+
 int main()
 {
     testIrcMessageSerialization();
@@ -2169,6 +2580,9 @@ int main()
     testPhase14TopicErrors();
     testPhase14TopicManagement();
     testPhase14TopicRestriction();
+    testPhase15InviteErrors();
+    testPhase15InviteFlow();
+    testPhase15InviteCleanupOnDisconnect();
     testOversizedErrorDoesNotStopServer();
     testSlowClientDoesNotStopServer();
 
