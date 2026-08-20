@@ -1412,6 +1412,647 @@ static void testPhase10QuitAndNicknameRelease()
     ::close(reusedNicknameSocketFd);
 }
 
+/**
+ * @brief Verifies JOIN registration, parameter, and channel-name errors.
+ */
+static void testPhase12JoinErrors()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 12 JOIN error tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "JOIN #general\r\n"
+        ),
+        ":irc.42.local 451 * :You have not registered\r\n",
+        "Phase 12: JOIN before registration should return 451"
+    );
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for phase 12 JOIN error tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    registerClient(socketFd, "roxana");
+
+    sendAll(socketFd, "JOIN\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 461 roxana JOIN :Not enough parameters\r\n",
+        "Phase 12: JOIN without parameters should return 461"
+    );
+
+    sendAll(socketFd, "JOIN :\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 461 roxana JOIN :Not enough parameters\r\n",
+        "Phase 12: JOIN with an empty channel parameter should return 461"
+    );
+
+    sendAll(socketFd, "JOIN general\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 403 roxana general :No such channel\r\n",
+        "Phase 12: JOIN without a channel prefix should return 403"
+    );
+
+    sendAll(socketFd, "JOIN #\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 403 roxana # :No such channel\r\n",
+        "Phase 12: JOIN with only a channel prefix should return 403"
+    );
+
+    sendAll(socketFd, "JOIN #bad:channel\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 403 roxana #bad:channel :No such channel\r\n",
+        "Phase 12: JOIN with a colon in the channel name should return 403"
+    );
+
+    const std::string excessiveChannelName =
+        "#" + std::string(50, 'a');
+
+    sendAll(
+        socketFd,
+        "JOIN " + excessiveChannelName + "\r\n"
+    );
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        ":irc.42.local 403 roxana "
+            + excessiveChannelName
+            + " :No such channel\r\n",
+        "Phase 12: JOIN with a channel name longer than 50 bytes should return 403"
+    );
+
+    expectTrue(
+        server.isRunning(),
+        "Phase 12: invalid JOIN commands should not stop the server",
+        "ircserv remains running",
+        "ircserv exited"
+    );
+
+    ::close(socketFd);
+}
+
+/**
+ * @brief Verifies channel creation, JOIN broadcasting, topic and NAMES
+ * replies, operator prefixes, duplicate protection, and channel casemapping.
+ */
+static void testPhase12JoinCreationAndMembership()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 12 JOIN membership tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int aliceSocketFd = connectToServer(server.getPort());
+    const int bobSocketFd = connectToServer(server.getPort());
+
+    if (aliceSocketFd == -1 || bobSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 12 JOIN membership tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (aliceSocketFd != -1)
+            ::close(aliceSocketFd);
+        if (bobSocketFd != -1)
+            ::close(bobSocketFd);
+        return;
+    }
+
+    const std::string aliceWelcome =
+        registerClient(aliceSocketFd, "alice");
+
+    const std::string bobWelcome =
+        registerClient(bobSocketFd, "bob");
+
+    std::string alicePrefix;
+    std::string bobPrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            aliceWelcome,
+            "alice",
+            alicePrefix
+        )
+        || !extractClientPrefixFromWelcome(
+            bobWelcome,
+            "bob",
+            bobPrefix
+        ))
+    {
+        reportFailure(
+            "Welcome replies should expose prefixes for phase 12 JOIN tests",
+            "welcome containing nick!nick@host",
+            aliceWelcome + bobWelcome
+        );
+
+        ::close(aliceSocketFd);
+        ::close(bobSocketFd);
+        return;
+    }
+
+    sendAll(aliceSocketFd, "JOIN #General\r\n");
+
+    const std::string aliceJoinResponse =
+        receiveAvailableData(aliceSocketFd, 500);
+
+    const std::string expectedAliceJoinResponse =
+        ":" + alicePrefix + " JOIN :#General\r\n"
+        ":irc.42.local 331 alice #General :No topic is set\r\n"
+        ":irc.42.local 353 alice = #General :@alice\r\n"
+        ":irc.42.local 366 alice #General :End of /NAMES list\r\n";
+
+    expectEqual(
+        aliceJoinResponse,
+        expectedAliceJoinResponse,
+        "Phase 12: creating a channel should return JOIN, 331, 353 and 366 in order"
+    );
+
+    sendAll(bobSocketFd, "JOIN #general\r\n");
+
+    const std::string aliceNotification =
+        receiveAvailableData(aliceSocketFd, 500);
+
+    const std::string bobJoinResponse =
+        receiveAvailableData(bobSocketFd, 500);
+
+    expectEqual(
+        aliceNotification,
+        ":" + bobPrefix + " JOIN :#General\r\n",
+        "Phase 12: an existing member should receive the new member's JOIN"
+    );
+
+    expectContains(
+        bobJoinResponse,
+        ":" + bobPrefix + " JOIN :#General\r\n",
+        "Phase 12: the joining client should receive its own JOIN"
+    );
+
+    expectContains(
+        bobJoinResponse,
+        ":irc.42.local 331 bob #General :No topic is set\r\n",
+        "Phase 12: joining a channel without a topic should return 331"
+    );
+
+    expectContains(
+        bobJoinResponse,
+        ":irc.42.local 353 bob = #General :",
+        "Phase 12: joining an existing channel should return 353"
+    );
+
+    expectContains(
+        bobJoinResponse,
+        "@alice",
+        "Phase 12: NAMES should mark the channel creator as an operator"
+    );
+
+    expectContains(
+        bobJoinResponse,
+        "bob",
+        "Phase 12: NAMES should contain the joining client"
+    );
+
+    expectTrue(
+        bobJoinResponse.find("@bob") == std::string::npos,
+        "Phase 12: a later member should not become a channel operator",
+        "NAMES without @bob",
+        bobJoinResponse
+    );
+
+    expectContains(
+        bobJoinResponse,
+        ":irc.42.local 366 bob #General :End of /NAMES list\r\n",
+        "Phase 12: the NAMES sequence should finish with 366"
+    );
+
+    const std::string::size_type joinPosition =
+        bobJoinResponse.find(" JOIN :#General\r\n");
+
+    const std::string::size_type topicPosition =
+        bobJoinResponse.find(" 331 bob #General ");
+
+    const std::string::size_type namesPosition =
+        bobJoinResponse.find(" 353 bob = #General ");
+
+    const std::string::size_type endNamesPosition =
+        bobJoinResponse.find(" 366 bob #General ");
+
+    expectTrue(
+        joinPosition != std::string::npos
+            && topicPosition != std::string::npos
+            && namesPosition != std::string::npos
+            && endNamesPosition != std::string::npos
+            && joinPosition < topicPosition
+            && topicPosition < namesPosition
+            && namesPosition < endNamesPosition,
+        "Phase 12: JOIN replies should preserve protocol order",
+        "JOIN before 331 before 353 before 366",
+        bobJoinResponse
+    );
+
+    sendAll(bobSocketFd, "JOIN #GENERAL\r\n");
+
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 200),
+        "",
+        "Phase 12: joining the same channel with different case should be ignored"
+    );
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 200),
+        "",
+        "Phase 12: a duplicate JOIN should not be broadcast to other members"
+    );
+
+    ::close(aliceSocketFd);
+    ::close(bobSocketFd);
+}
+
+/**
+ * @brief Verifies comma-separated JOIN lists and independent processing when
+ * one requested channel is invalid.
+ */
+static void testPhase12JoinChannelLists()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 12 JOIN list tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int socketFd = connectToServer(server.getPort());
+
+    if (socketFd == -1)
+    {
+        reportFailure(
+            "Client should connect for phase 12 JOIN list tests",
+            "successful connection",
+            "connection failed"
+        );
+        return;
+    }
+
+    const std::string welcomeResponse =
+        registerClient(socketFd, "roxana");
+
+    std::string clientPrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            welcomeResponse,
+            "roxana",
+            clientPrefix
+        ))
+    {
+        reportFailure(
+            "Welcome should expose a prefix for phase 12 JOIN list tests",
+            "welcome containing roxana!roxana@host",
+            welcomeResponse
+        );
+
+        ::close(socketFd);
+        return;
+    }
+
+    sendAll(socketFd, "JOIN #one,#two\r\n");
+
+    const std::string expectedListResponse =
+        ":" + clientPrefix + " JOIN :#one\r\n"
+        ":irc.42.local 331 roxana #one :No topic is set\r\n"
+        ":irc.42.local 353 roxana = #one :@roxana\r\n"
+        ":irc.42.local 366 roxana #one :End of /NAMES list\r\n"
+        ":" + clientPrefix + " JOIN :#two\r\n"
+        ":irc.42.local 331 roxana #two :No topic is set\r\n"
+        ":irc.42.local 353 roxana = #two :@roxana\r\n"
+        ":irc.42.local 366 roxana #two :End of /NAMES list\r\n";
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        expectedListResponse,
+        "Phase 12: JOIN should process every channel in a comma-separated list"
+    );
+
+    sendAll(socketFd, "JOIN #ONE,#TWO\r\n");
+
+    expectEqual(
+        receiveAvailableData(socketFd, 200),
+        "",
+        "Phase 12: a duplicated case-insensitive JOIN list should be ignored"
+    );
+
+    sendAll(socketFd, "JOIN invalid,#three\r\n");
+
+    const std::string expectedIndependentResponse =
+        ":irc.42.local 403 roxana invalid :No such channel\r\n"
+        ":" + clientPrefix + " JOIN :#three\r\n"
+        ":irc.42.local 331 roxana #three :No topic is set\r\n"
+        ":irc.42.local 353 roxana = #three :@roxana\r\n"
+        ":irc.42.local 366 roxana #three :End of /NAMES list\r\n";
+
+    expectEqual(
+        receiveAvailableData(socketFd, 500),
+        expectedIndependentResponse,
+        "Phase 12: one invalid JOIN list entry should not block later valid channels"
+    );
+
+    ::close(socketFd);
+}
+
+/**
+ * @brief Verifies PART registration, parameter, channel existence, and
+ * membership errors.
+ */
+static void testPhase12PartErrors()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 12 PART error tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    expectEqual(
+        sendCommandAndReceive(
+            server.getPort(),
+            "PART #general\r\n"
+        ),
+        ":irc.42.local 451 * :You have not registered\r\n",
+        "Phase 12: PART before registration should return 451"
+    );
+
+    const int ownerSocketFd = connectToServer(server.getPort());
+    const int outsiderSocketFd = connectToServer(server.getPort());
+
+    if (ownerSocketFd == -1 || outsiderSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 12 PART error tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (ownerSocketFd != -1)
+            ::close(ownerSocketFd);
+        if (outsiderSocketFd != -1)
+            ::close(outsiderSocketFd);
+        return;
+    }
+
+    registerClient(ownerSocketFd, "owner");
+    registerClient(outsiderSocketFd, "outsider");
+
+    sendAll(ownerSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(ownerSocketFd, 500);
+
+    sendAll(ownerSocketFd, "PART\r\n");
+
+    expectEqual(
+        receiveAvailableData(ownerSocketFd, 500),
+        ":irc.42.local 461 owner PART :Not enough parameters\r\n",
+        "Phase 12: PART without parameters should return 461"
+    );
+
+    sendAll(ownerSocketFd, "PART :\r\n");
+
+    expectEqual(
+        receiveAvailableData(ownerSocketFd, 500),
+        ":irc.42.local 461 owner PART :Not enough parameters\r\n",
+        "Phase 12: PART with an empty channel parameter should return 461"
+    );
+
+    sendAll(outsiderSocketFd, "PART #missing\r\n");
+
+    expectEqual(
+        receiveAvailableData(outsiderSocketFd, 500),
+        ":irc.42.local 403 outsider #missing :No such channel\r\n",
+        "Phase 12: PART for an unknown channel should return 403"
+    );
+
+    sendAll(outsiderSocketFd, "PART #general\r\n");
+
+    expectEqual(
+        receiveAvailableData(outsiderSocketFd, 500),
+        ":irc.42.local 442 outsider #general :You're not on that channel\r\n",
+        "Phase 12: PART from outside an existing channel should return 442"
+    );
+
+    expectEqual(
+        receiveAvailableData(ownerSocketFd, 200),
+        "",
+        "Phase 12: rejected PART commands should not notify channel members"
+    );
+
+    expectTrue(
+        server.isRunning(),
+        "Phase 12: invalid PART commands should not stop the server",
+        "ircserv remains running",
+        "ircserv exited"
+    );
+
+    ::close(ownerSocketFd);
+    ::close(outsiderSocketFd);
+}
+
+/**
+ * @brief Verifies PART broadcasting, optional reasons, membership cleanup,
+ * multiple channels, and deletion and recreation of empty channels.
+ */
+static void testPhase12PartFlowAndChannelDeletion()
+{
+    TestServerProcess server;
+
+    if (!server.start())
+    {
+        reportFailure(
+            "Server should start for phase 12 PART flow tests",
+            "running ircserv",
+            "server startup failed"
+        );
+        return;
+    }
+
+    const int aliceSocketFd = connectToServer(server.getPort());
+    const int bobSocketFd = connectToServer(server.getPort());
+
+    if (aliceSocketFd == -1 || bobSocketFd == -1)
+    {
+        reportFailure(
+            "Clients should connect for phase 12 PART flow tests",
+            "successful connections",
+            "connection failed"
+        );
+
+        if (aliceSocketFd != -1)
+            ::close(aliceSocketFd);
+        if (bobSocketFd != -1)
+            ::close(bobSocketFd);
+        return;
+    }
+
+    const std::string aliceWelcome =
+        registerClient(aliceSocketFd, "alice");
+
+    const std::string bobWelcome =
+        registerClient(bobSocketFd, "bob");
+
+    std::string alicePrefix;
+    std::string bobPrefix;
+
+    if (!extractClientPrefixFromWelcome(
+            aliceWelcome,
+            "alice",
+            alicePrefix
+        )
+        || !extractClientPrefixFromWelcome(
+            bobWelcome,
+            "bob",
+            bobPrefix
+        ))
+    {
+        reportFailure(
+            "Welcome replies should expose prefixes for phase 12 PART tests",
+            "welcome containing nick!nick@host",
+            aliceWelcome + bobWelcome
+        );
+
+        ::close(aliceSocketFd);
+        ::close(bobSocketFd);
+        return;
+    }
+
+    sendAll(aliceSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+
+    sendAll(bobSocketFd, "JOIN #general\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+    receiveAvailableData(bobSocketFd, 500);
+
+    sendAll(
+        aliceSocketFd,
+        "PART #general :Hasta luego\r\n"
+    );
+
+    const std::string expectedAlicePart =
+        ":" + alicePrefix
+            + " PART #general :Hasta luego\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedAlicePart,
+        "Phase 12: PART with a reason should notify the leaving client"
+    );
+
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedAlicePart,
+        "Phase 12: PART with a reason should notify remaining members"
+    );
+
+    sendAll(aliceSocketFd, "PART #general\r\n");
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        ":irc.42.local 442 alice #general :You're not on that channel\r\n",
+        "Phase 12: a client removed by PART should no longer belong to the channel"
+    );
+
+    sendAll(bobSocketFd, "PART #general\r\n");
+
+    const std::string expectedBobPart =
+        ":" + bobPrefix + " PART #general\r\n";
+
+    expectEqual(
+        receiveAvailableData(bobSocketFd, 500),
+        expectedBobPart,
+        "Phase 12: PART without a reason should not add a trailing parameter"
+    );
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 200),
+        "",
+        "Phase 12: a former member should not receive later PART broadcasts"
+    );
+
+    sendAll(aliceSocketFd, "JOIN #general\r\n");
+
+    const std::string expectedRecreatedChannel =
+        ":" + alicePrefix + " JOIN :#general\r\n"
+        ":irc.42.local 331 alice #general :No topic is set\r\n"
+        ":irc.42.local 353 alice = #general :@alice\r\n"
+        ":irc.42.local 366 alice #general :End of /NAMES list\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedRecreatedChannel,
+        "Phase 12: joining an emptied channel should recreate it and grant operator status"
+    );
+
+    sendAll(aliceSocketFd, "JOIN #one,#two\r\n");
+    receiveAvailableData(aliceSocketFd, 500);
+
+    sendAll(
+        aliceSocketFd,
+        "PART #one,#two :Leaving both\r\n"
+    );
+
+    const std::string expectedMultiplePart =
+        ":" + alicePrefix + " PART #one :Leaving both\r\n"
+        ":" + alicePrefix + " PART #two :Leaving both\r\n";
+
+    expectEqual(
+        receiveAvailableData(aliceSocketFd, 500),
+        expectedMultiplePart,
+        "Phase 12: PART should process every channel in a comma-separated list"
+    );
+
+    ::close(aliceSocketFd);
+    ::close(bobSocketFd);
+}
+
 int main()
 {
     testIrcMessageSerialization();
@@ -1431,6 +2072,11 @@ int main()
     testPhase10QuitAndNicknameRelease();
     testOversizedErrorDoesNotStopServer();
     testSlowClientDoesNotStopServer();
+    testPhase12JoinErrors();
+    testPhase12JoinCreationAndMembership();
+    testPhase12JoinChannelLists();
+    testPhase12PartErrors();
+    testPhase12PartFlowAndChannelDeletion();
 
     if (g_failures != 0)
     {
