@@ -543,6 +543,102 @@ void Server::sendChannelTopic(Client &client, const Channel &channel)
     );
 }
 
+/**
+ * @brief Queues the channel member list for one client using one or more
+ * RPL_NAMREPLY replies, prefixing channel operators with '@', and finishes
+ * the sequence with RPL_ENDOFNAMES.
+ *
+ * Member names are divided between multiple RPL_NAMREPLY messages when
+ * necessary so that every serialized IRC message remains within the
+ * 512-byte protocol limit.
+ *
+ * @param client The client that will receive the member list.
+ * @param channel The channel whose members will be listed.
+ */
+void Server::sendChannelNames(Client &client, const Channel &channel)
+{
+    std::vector<std::string> nameReplyParameters;
+
+    nameReplyParameters.push_back("=");
+    nameReplyParameters.push_back(channel.getName());
+
+    const std::string emptyNamesReply = buildNumericReply(
+        NumericReply::RPL_NAMREPLY,
+        client,
+        nameReplyParameters,
+        ""
+    );
+
+    const std::size_t maximumNamesLength =
+        IRC_MAX_MESSAGE_LENGTH - emptyNamesReply.size();
+
+    std::string currentNames;
+
+    const std::set<Client *> &channelMembers = channel.getMembers();
+
+    std::set<Client *>::const_iterator memberIterator =
+        channelMembers.begin();
+
+    while (memberIterator != channelMembers.end())
+    {
+        Client *channelMember = *memberIterator;
+
+        if (channelMember != NULL
+            && !channelMember->getNickname().empty())
+        {
+            std::string displayedNickname;
+
+            if (channel.hasOperator(channelMember))
+                displayedNickname += '@';
+
+            displayedNickname += channelMember->getNickname();
+
+            const std::size_t separatorLength =
+                currentNames.empty() ? 0 : 1;
+
+            if (!currentNames.empty()
+                && currentNames.size()
+                    + separatorLength
+                    + displayedNickname.size()
+                    > maximumNamesLength)
+            {
+                queueNumericReply(
+                    client,
+                    NumericReply::RPL_NAMREPLY,
+                    nameReplyParameters,
+                    currentNames
+                );
+
+                currentNames.clear();
+            }
+
+            if (!currentNames.empty())
+                currentNames += ' ';
+
+            currentNames += displayedNickname;
+        }
+
+        ++memberIterator;
+    }
+
+    if (!currentNames.empty())
+    {
+        queueNumericReply(
+            client,
+            NumericReply::RPL_NAMREPLY,
+            nameReplyParameters,
+            currentNames
+        );
+    }
+
+    queueNumericReply(
+        client,
+        NumericReply::RPL_ENDOFNAMES,
+        channel.getName(),
+        NumericReply::MSG_ENDOFNAMES
+    );
+}
+
 std::string Server::getReplyTarget(const Client &client) const
 {
     if (client.getNickname().empty())

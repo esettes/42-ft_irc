@@ -502,6 +502,7 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
     );
 
     server.sendChannelTopic(client, *channel);
+    server.sendChannelNames(client, *channel);
 }
 
 void CommandDispatcher::handlePrivateMessage(Client &client, const IrcMessage &message)

@@ -112,6 +112,10 @@ class Server
             Client &client,
             const Channel &channel
         );
+        void sendChannelNames(
+            Client &client,
+            const Channel &channel
+        );
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
