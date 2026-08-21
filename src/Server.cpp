@@ -927,33 +927,102 @@ void Server::removeNicknameIndexEntry(const Client &client)
 }
 
 /**
- * 
+ * @brief Performs the cleanup of a client connection.
+ * Removes the client from channels, invitations, operator collections,
+ * nickname indexes, the main client map and poll, closes its socket exactly
+ * once, and finally destroys the Client object.
+ *
+ * Calling this function again after the client and descriptor have already
+ * been removed has no effect.
+ *
+ * @param clientSocketFd The socket descriptor that identifies the client.
+ * @param reason The reason why the connection is being closed.
  */
-void Server::removeClient(std::size_t descriptorIndex)
+void Server::disconnectClient(int clientSocketFd, const std::string &reason)
 {
-    const int clientSocketFd = pollFds[descriptorIndex].fd;
-    std::map<int, Client *>::iterator clientIterator = clients.find(clientSocketFd);
+    std::map<int, Client *>::iterator clientIterator =
+        clients.find(clientSocketFd);
+
+    std::vector<struct pollfd>::iterator descriptorIterator =
+        pollFds.begin();
+
+    if (descriptorIterator != pollFds.end())
+        ++descriptorIterator;
+
+    while (descriptorIterator != pollFds.end()
+        && descriptorIterator->fd != clientSocketFd)
+    {
+        ++descriptorIterator;
+    }
+
+    if (clientIterator == clients.end()
+        && descriptorIterator == pollFds.end())
+    {
+        return;
+    }
 
     if (clientIterator != clients.end())
     {
         Client *client = clientIterator->second;
 
-        detachClientFromChannels(*client);
-        removeNicknameIndexEntry(*client);
-        delete client;
+        if (client != NULL)
+        {
+            detachClientFromChannels(*client);
+            removeNicknameIndexEntry(*client);
+        }
+
         clients.erase(clientIterator);
+        delete client;
     }
-    if (::close(clientSocketFd) == -1)
+
+    if (descriptorIterator != pollFds.end())
     {
-        const int closeErrno = errno;
+        closeFd(descriptorIterator->fd);
+        pollFds.erase(descriptorIterator);
+    }
+    else
+    {
+        int unregisteredSocketFd = clientSocketFd;
 
-        std::cerr << Console::CLIENT << " Close error: fd=" << clientSocketFd
-            << ", error=" << std::strerror(closeErrno) << std::endl;
+        closeFd(unregisteredSocketFd);
     }
 
-    pollFds.erase(pollFds.begin() + descriptorIndex);
+    const std::string disconnectReason = reason.empty()
+        ? "Client disconnected"
+        : reason;
 
-    std::cout << Console::CLIENT << " Connection closed: fd=" << clientSocketFd << std::endl;
+    std::cout << Console::CLIENT
+        << " Connection closed: fd=" << clientSocketFd
+        << ", reason=" << disconnectReason << std::endl;
+}
+
+/**
+ * @brief Adapts the existing poll-index removal paths to the centralized
+ * descriptor-based disconnection operation. A stored deferred reason is
+ * used when the client previously requested disconnection.
+ *
+ * @param descriptorIndex The current position of the client in pollFds.
+ */
+void Server::removeClient(std::size_t descriptorIndex)
+{
+    if (descriptorIndex >= pollFds.size())
+        return;
+
+    const int clientSocketFd = pollFds[descriptorIndex].fd;
+    std::string disconnectReason = "Connection closed";
+
+    std::map<int, Client *>::iterator clientIterator =
+        clients.find(clientSocketFd);
+
+    if (clientIterator != clients.end()
+        && clientIterator->second != NULL
+        && clientIterator->second->isDisconnectRequested())
+    {
+        disconnectReason =
+            clientIterator->second->getDisconnectReason();
+    }
+
+    disconnectClient(clientSocketFd, disconnectReason);
 }
 
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)

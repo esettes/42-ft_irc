@@ -60,6 +60,7 @@ class Server
         void configureSocketAsNonBlocking(int socketFd);
 
         bool receiveClientData(std::size_t descriptorIndex);
+        void disconnectClient(int clientSocketFd, const std::string &reason);
         void removeClient(std::size_t descriptorIndex);
         void removeNicknameIndexEntry(const Client &client);
 
