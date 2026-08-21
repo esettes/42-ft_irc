@@ -23,6 +23,8 @@
  * @param registered A flag indicating whether the client has completed the registration process.
  * @param joinedChannels Normalized channel keys for membership lookups.
  * @param isOperator Whether the client has global operator status (legacy; per-channel ops live on Channel).
+ * @param disconnectRequested Whether the client is waiting to be disconnected.
+ * @param disconnectReason The reason associated with the first disconnection request.
  */
 class Client
 {
@@ -43,6 +45,7 @@ class Client
         std::set<std::string> joinedChannels;
         bool isOperator;
         bool disconnectRequested;
+        std::string disconnectReason;
 
         Client(const Client &other);
         Client &operator=(const Client &other);
@@ -80,7 +83,9 @@ class Client
         bool getIsOperator() const;
 
         void requestDisconnect();
+        void requestDisconnect(const std::string &reason);
         bool isDisconnectRequested() const;
+        const std::string &getDisconnectReason() const;
 
         void joinChannel(const std::string &channelName);
         void leaveChannel(const std::string &channelName);

@@ -16,7 +16,8 @@ Client::Client(int socketFd, const std::string &host)
     registered(false),
     joinedChannels(),
     isOperator(false),
-    disconnectRequested(false)
+    disconnectRequested(false),
+    disconnectReason("")
 {
 }
 
@@ -38,7 +39,8 @@ Client::Client(const Client &other)
     registered(other.registered),
     joinedChannels(other.joinedChannels),
     isOperator(other.isOperator),
-    disconnectRequested(other.disconnectRequested)
+    disconnectRequested(other.disconnectRequested),
+    disconnectReason(other.disconnectReason)
 {
 }
 
@@ -60,6 +62,7 @@ Client &Client::operator=(const Client &other)
         joinedChannels = other.joinedChannels;
         isOperator = other.isOperator;
         disconnectRequested = other.disconnectRequested;
+        disconnectReason = other.disconnectReason;
     }
     return *this;
 }
@@ -179,14 +182,51 @@ bool Client::getIsOperator() const
     return isOperator;
 }
 
+/**
+ * @brief Marks the client for deferred disconnection using a generic reason.
+ * It does not close the socket or destroy the client.
+ */
 void Client::requestDisconnect()
 {
+    requestDisconnect("Client disconnected");
+}
+
+/**
+ * @brief Marks the client for deferred disconnection and stores its cause.
+ * The first request wins so later errors cannot overwrite the original
+ * disconnection reason. An empty reason is replaced with a generic one.
+ *
+ * @param reason The reason why the client must be disconnected.
+ */
+void Client::requestDisconnect(const std::string &reason)
+{
+    if (disconnectRequested)
+        return;
+
     disconnectRequested = true;
+
+    if (reason.empty())
+    {
+        disconnectReason = "Client disconnected";
+        return;
+    }
+
+    disconnectReason = reason;
 }
 
 bool Client::isDisconnectRequested() const
 {
     return disconnectRequested;
+}
+
+/**
+ * @brief Returns the cause stored by the first disconnection request.
+ *
+ * @return A read-only reference to the stored disconnection reason.
+ */
+const std::string &Client::getDisconnectReason() const
+{
+    return disconnectReason;
 }
 
 void Client::removeSentOutput(std::size_t sentByteCount)
