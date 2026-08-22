@@ -1662,19 +1662,26 @@ void Server::closeFd(int &fd)
     }
 }
 
+/**
+ * @brief Releases every client and file descriptor still owned by the server.
+ *
+ * Each remaining client is removed through disconnectClient() so channel
+ * memberships, operator privileges, invitations and nickname indexes follow
+ * the same cleanup path used during normal operation. Any descriptors left
+ * in poll after client cleanup, including the listening socket, are then
+ * closed exactly once.
+ */
 void Server::closeAllFds()
 {
-    std::map<int, Client *>::iterator clientIterator = clients.begin();
-
-    while (clientIterator != clients.end())
+    while (!clients.empty())
     {
-        removeNicknameIndexEntry(*clientIterator->second);
-        delete clientIterator->second;
-        ++clientIterator;
+        const int clientSocketFd = clients.begin()->first;
+
+        disconnectClient(clientSocketFd, "Server shutting down");
     }
 
-    clients.clear();
     clientsByNickname.clear();
+    channels.clear();
 
     for (std::size_t i = 0; i < pollFds.size(); ++i)
     {
