@@ -961,9 +961,22 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         return;
     }
 
+    std::string disconnectReason = reason.empty()
+        ? "Client disconnected"
+        : reason;
+
+    Client *client = NULL;
+
     if (clientIterator != clients.end())
     {
-        Client *client = clientIterator->second;
+        client = clientIterator->second;
+
+        if (client != NULL
+            && client->isDisconnectRequested()
+            && !client->getDisconnectReason().empty())
+        {
+            disconnectReason = client->getDisconnectReason();
+        }
 
         if (client != NULL)
         {
@@ -972,7 +985,6 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         }
 
         clients.erase(clientIterator);
-        delete client;
     }
 
     if (descriptorIterator != pollFds.end())
@@ -987,9 +999,7 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         closeFd(unregisteredSocketFd);
     }
 
-    const std::string disconnectReason = reason.empty()
-        ? "Client disconnected"
-        : reason;
+    delete client;
 
     std::cout << Console::CLIENT
         << " Connection closed: fd=" << clientSocketFd
