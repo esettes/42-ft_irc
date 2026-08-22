@@ -851,56 +851,112 @@ std::string Server::buildNumericReply(
     return reply.serialize();
 }
 
+/**
+ * @brief Receives currently available data from client socket.
+ *
+ * Appends successfully received bytes to the client's persistent input
+ * buffer and processes every complete IRC line. Transient socket errors keep
+ * the connection active. Input overflow, an orderly peer shutdown or a fatal
+ * receive error request a deferred disconnection with a specific reason.
+ *
+ * @param descriptorIndex The client's current position in pollFds.
+ * @return true when the connection may continue, false when the client must
+ * be disconnected.
+ */
 bool Server::receiveClientData(std::size_t descriptorIndex)
 {
     const int clientSocketFd = pollFds[descriptorIndex].fd;
 
+    std::map<int, Client *>::iterator clientIterator =
+        clients.find(clientSocketFd);
+
+    if (clientIterator == clients.end()
+        || clientIterator->second == NULL)
+    {
+        throw std::logic_error(
+            "received data from an unregistered client"
+        );
+    }
+
+    Client *client = clientIterator->second;
     char receiveBuffer[RECEIVE_BUFFER_SIZE];
 
-    const ssize_t receivedBytes = ::recv(clientSocketFd, receiveBuffer, sizeof(receiveBuffer), 0);
+    const ssize_t receivedBytes = ::recv(
+        clientSocketFd,
+        receiveBuffer,
+        sizeof(receiveBuffer),
+        0
+    );
 
     if (receivedBytes > 0)
     {
-        std::map<int, Client *>::iterator clientIterator = clients.find(clientSocketFd);
-        if (clientIterator == clients.end())
-        {
-            throw std::logic_error("received data from an unregistered client");
-        }
+        const std::string receivedData(
+            receiveBuffer,
+            static_cast<std::size_t>(receivedBytes)
+        );
 
-        Client *client = clientIterator->second;
-        const std::string receivedData(receiveBuffer, static_cast<std::size_t>(receivedBytes));
-
-        if (client->getInputBuffer().size() + receivedData.size() > IRC_MAX_INPUT_BUFFER_SIZE)
+        if (client->getInputBuffer().size()
+            + receivedData.size()
+            > IRC_MAX_INPUT_BUFFER_SIZE)
         {
-            std::cerr << Console::CLIENT << " Input buffer limit exceeded ("
-                << IRC_MAX_INPUT_BUFFER_SIZE << " bytes): fd=" << clientSocketFd
-                << std::endl;
+            std::cerr << Console::CLIENT
+                << " Input buffer limit exceeded ("
+                << IRC_MAX_INPUT_BUFFER_SIZE
+                << " bytes): fd="
+                << clientSocketFd << std::endl;
+
+            client->requestDisconnect(
+                "Input buffer limit exceeded"
+            );
             return false;
         }
 
         client->appendToInputBuffer(receivedData);
 
         /* Temporary phase 3 echo test. */
-        //queueMessage(*client, receivedData);
+        // queueMessage(*client, receivedData);
 
-        std::cout << Console::CLIENT << " Received " << receivedBytes << " bytes: fd=" << clientSocketFd 
-            << ", buffered=" << client->getInputBuffer().size() << std::endl;
+        std::cout << Console::CLIENT
+            << " Received "
+            << receivedBytes
+            << " bytes: fd="
+            << clientSocketFd
+            << ", buffered="
+            << client->getInputBuffer().size()
+            << std::endl;
 
         return processClientBuffer(*client);
     }
 
     if (receivedBytes == 0)
+    {
+        client->requestDisconnect(
+            "Connection closed by peer"
+        );
         return false;
+    }
 
     const int receiveErrno = errno;
 
-    // no hay datos disponibles o interrumpido por señal
-    if (receiveErrno == EAGAIN || receiveErrno == EWOULDBLOCK || receiveErrno == EINTR)
+    /*
+     * These errors are temporary and do not mean that the connection has
+     * been lost.
+     */
+    if (receiveErrno == EAGAIN
+        || receiveErrno == EWOULDBLOCK
+        || receiveErrno == EINTR)
+    {
         return true;
+    }
 
-    std::cerr << Console::CLIENT << " Receive error: fd=" << clientSocketFd
-        << ", error=" << std::strerror(receiveErrno) << std::endl;
+    std::cerr << Console::CLIENT
+        << " Receive error: fd="
+        << clientSocketFd
+        << ", error="
+        << std::strerror(receiveErrno)
+        << std::endl;
 
+    client->requestDisconnect("Receive error");
     return false;
 }
 
