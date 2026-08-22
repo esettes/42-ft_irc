@@ -1397,14 +1397,23 @@ bool Server::flushClientOutput(int socketFd)
     {
         client->requestDisconnect("Send error");
     }
-    
+
     return false;
 }
 
 /**
  * @brief Queues a complete IRC message for non-blocking delivery.
- * Appends the message to the client's output buffer and enables POLLOUT.
- * Handlers must use this instead of writing to the buffer or calling send().
+ *
+ * Appends a valid message to the client's persistent output buffer and
+ * enables POLLOUT. Empty messages and clients already waiting for
+ * disconnection are ignored. Oversized IRC messages and output-buffer
+ * exhaustion request a deferred disconnection with a specific reason.
+ *
+ * Handlers must use this function instead of modifying the output buffer or
+ * calling send() directly.
+ *
+ * @param client The client that will receive the queued message.
+ * @param message The complete serialized IRC message.
  */
 void Server::queueMessage(Client &client, const std::string &message)
 {
@@ -1416,16 +1425,18 @@ void Server::queueMessage(Client &client, const std::string &message)
         std::cerr << Console::CLIENT << " IRC reply exceeds "
             << IRC_MAX_MESSAGE_LENGTH << " bytes: fd=" << client.getSocketFd()
             << std::endl;
-        client.requestDisconnect();
+        client.requestDisconnect("IRC message length limit exceeded");
         return;
     }
 
-    if (client.getOutputBuffer().size() + message.size() > IRC_MAX_OUTPUT_BUFFER_SIZE)
+    const std::size_t pendingOutputSize = client.getOutputBuffer().size();
+
+    if (pendingOutputSize + message.size() > IRC_MAX_OUTPUT_BUFFER_SIZE)
     {
         std::cerr << Console::CLIENT << " Output buffer limit exceeded ("
             << IRC_MAX_OUTPUT_BUFFER_SIZE << " bytes): fd=" << client.getSocketFd()
             << std::endl;
-        client.requestDisconnect();
+        client.requestDisconnect("Output buffer limit exceeded");
         return;
     }
 
