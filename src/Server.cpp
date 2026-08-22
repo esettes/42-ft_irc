@@ -1006,35 +1006,6 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         << ", reason=" << disconnectReason << std::endl;
 }
 
-/**
- * @brief Adapts the existing poll-index removal paths to the centralized
- * descriptor-based disconnection operation. A stored deferred reason is
- * used when the client previously requested disconnection.
- *
- * @param descriptorIndex The current position of the client in pollFds.
- */
-void Server::removeClient(std::size_t descriptorIndex)
-{
-    if (descriptorIndex >= pollFds.size())
-        return;
-
-    const int clientSocketFd = pollFds[descriptorIndex].fd;
-    std::string disconnectReason = "Connection closed";
-
-    std::map<int, Client *>::iterator clientIterator =
-        clients.find(clientSocketFd);
-
-    if (clientIterator != clients.end()
-        && clientIterator->second != NULL
-        && clientIterator->second->isDisconnectRequested())
-    {
-        disconnectReason =
-            clientIterator->second->getDisconnectReason();
-    }
-
-    disconnectClient(clientSocketFd, disconnectReason);
-}
-
 void Server::dispatchCommand(Client &client, const IrcMessage &msg)
 {
     dispatcher.execute(client, msg);
@@ -1100,6 +1071,14 @@ void Server::sendWelcomeMessages(Client &client)
     );
 }
 
+/**
+ * @brief Runs the non-blocking server event loop.
+ *
+ * Waits for socket events with poll(), accepts new connections, processes
+ * readable and writable client sockets, and routes every definitive client
+ * removal through disconnectClient(). Removing a descriptor does not advance
+ * the current index because the next descriptor moves into that position.
+ */
 void Server::run()
 {
     if (pollFds.empty())
@@ -1109,7 +1088,11 @@ void Server::run()
 
     while (!SignalHandler::isShutdownRequested())
     {
-        const int pollResult = ::poll(&pollFds[0], static_cast<nfds_t>(pollFds.size()), POLL_TIMEOUT_MS);
+        const int pollResult = ::poll(
+            &pollFds[0],
+            static_cast<nfds_t>(pollFds.size()),
+            POLL_TIMEOUT_MS
+        );
 
         if (pollResult == -1)
         {
@@ -1121,74 +1104,121 @@ void Server::run()
 
         if (pollResult == 0)
             continue;
-        
-        const short listeningEvents = pollFds[0].revents; // eventos que ocurrieron en listenSocket
+
+        const short listeningEvents = pollFds[0].revents;
 
         if (listeningEvents & POLLNVAL)
-        {
-            throw std::runtime_error("listening socket descriptor is invalid");
-        }
+            throw std::runtime_error(
+                "listening socket descriptor is invalid"
+            );
 
         if (listeningEvents & (POLLERR | POLLHUP))
-        {
-            throw std::runtime_error("listening socket reported an error");
-        }
+            throw std::runtime_error(
+                "listening socket reported an error"
+            );
 
-        if (listeningEvents & POLLIN) // descriptor tiene datos para leer (nuevo cliente)
+        if (listeningEvents & POLLIN)
             acceptClient();
 
-        std::size_t i = 1;
+        std::size_t descriptorIndex = 1;
 
-        while (i < pollFds.size())
+        while (descriptorIndex < pollFds.size())
         {
-            const short clientEvents = pollFds[i].revents;
+            const short clientEvents =
+                pollFds[descriptorIndex].revents;
 
-            const int clientSocketFd = pollFds[i].fd;
+            const int clientSocketFd =
+                pollFds[descriptorIndex].fd;
 
             if (clientEvents & POLLNVAL)
             {
-                std::cerr << Console::CLIENT << " Invalid descriptor: fd=" << clientSocketFd << std::endl;
-                removeClient(i);
+                std::cerr << Console::CLIENT
+                    << " Invalid descriptor: fd="
+                    << clientSocketFd << std::endl;
+
+                disconnectClient(
+                    clientSocketFd,
+                    "Invalid socket descriptor"
+                );
                 continue;
             }
 
-            bool connectedClient = true;
+            bool clientConnected = true;
+            std::string disconnectReason = "Connection closed";
 
             if (clientEvents & POLLIN)
             {
-                connectedClient = receiveClientData(i);
+                clientConnected =
+                    receiveClientData(descriptorIndex);
+
+                if (!clientConnected)
+                {
+                    disconnectReason =
+                        "Receive failure or connection closed by peer";
+                }
             }
-            if (connectedClient && (clientEvents & POLLOUT))
+
+            if (clientConnected && (clientEvents & POLLOUT))
             {
-                connectedClient = flushClientOutput(clientSocketFd);
+                clientConnected =
+                    flushClientOutput(clientSocketFd);
+
+                if (!clientConnected)
+                    disconnectReason = "Send failure";
             }
-            if (!connectedClient || (clientEvents & (POLLERR | POLLHUP)))
+
+            if (clientEvents & POLLERR)
             {
-                removeClient(i);
+                disconnectReason = "Socket error";
+            }
+            else if (clientEvents & POLLHUP)
+            {
+                disconnectReason = "Connection closed by peer";
+            }
+
+            if (!clientConnected
+                || (clientEvents & (POLLERR | POLLHUP)))
+            {
+                disconnectClient(
+                    clientSocketFd,
+                    disconnectReason
+                );
                 continue;
             }
-            ++i;
+
+            ++descriptorIndex;
         }
 
-        i = 1;
-        while (i < pollFds.size())
+        descriptorIndex = 1;
+
+        while (descriptorIndex < pollFds.size())
         {
-            const int clientSocketFd = pollFds[i].fd;
-            std::map<int, Client *>::iterator clientIterator = clients.find(clientSocketFd);
+            const int clientSocketFd =
+                pollFds[descriptorIndex].fd;
+
+            std::map<int, Client *>::iterator clientIterator =
+                clients.find(clientSocketFd);
 
             if (clientIterator != clients.end()
+                && clientIterator->second != NULL
                 && clientIterator->second->isDisconnectRequested())
             {
-                std::cerr << Console::CLIENT
-                    << " Disconnecting abusive or slow client: fd="
-                    << clientSocketFd << std::endl;
-                removeClient(i);
+                const std::string disconnectReason =
+                    clientIterator->second->getDisconnectReason();
+
+                disconnectClient(
+                    clientSocketFd,
+                    disconnectReason
+                );
                 continue;
             }
-            ++i;
+
+            ++descriptorIndex;
         }
 
-        std::cout << Console::SERVER << " Ready descriptors: " << pollResult << std::endl;
+        std::cout << Console::SERVER
+            << " Ready descriptors: "
+            << pollResult << std::endl;
     }
 }
 
