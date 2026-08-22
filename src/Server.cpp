@@ -983,16 +983,21 @@ void Server::removeNicknameIndexEntry(const Client &client)
 }
 
 /**
- * @brief Performs the cleanup of a client connection.
- * Removes the client from channels, invitations, operator collections,
- * nickname indexes, the main client map and poll, closes its socket exactly
- * once, and finally destroys the Client object.
+ * @brief Notifies related clients and performs the definitive, idempotent
+ * cleanup of a client connection.
+ *
+ * A reason previously stored by the client takes precedence over the fallback
+ * reason supplied by the caller. Before removing channel membership, the
+ * function queues exactly one QUIT notification for every related client.
+ * It then removes the client from channels, invitations, operator
+ * collections, nickname indexes, the client map and poll, closes the socket
+ * exactly once, and finally destroys the Client object.
  *
  * Calling this function again after the client and descriptor have already
  * been removed has no effect.
  *
  * @param clientSocketFd The socket descriptor that identifies the client.
- * @param reason The reason why the connection is being closed.
+ * @param reason The fallback reason why the connection is being closed.
  */
 void Server::disconnectClient(int clientSocketFd, const std::string &reason)
 {
@@ -1036,6 +1041,27 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
 
         if (client != NULL)
         {
+            client->requestDisconnect(disconnectReason);
+
+            if (!client->getJoinedChannels().empty())
+            {
+                std::vector<std::string> quitParameters;
+
+                quitParameters.push_back(disconnectReason);
+
+                const IrcMessage quitMessage(
+                    "QUIT",
+                    quitParameters,
+                    getClientPrefix(*client),
+                    true
+                );
+
+                queueMessageToRelatedClients(
+                    *client,
+                    quitMessage.serialize()
+                );
+            }
+
             detachClientFromChannels(*client);
             removeNicknameIndexEntry(*client);
         }

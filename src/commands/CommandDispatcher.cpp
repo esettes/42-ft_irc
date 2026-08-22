@@ -425,40 +425,24 @@ void CommandDispatcher::handlePong(Client &client, const IrcMessage &message)
 }
 
 /**
- * @brief Processes a intentioned client disconnection, using the supplied
- * reason or a default one, notifying related clients and requesting the
- * source client's removal from the server.
+ * @brief Processes an explicit IRC QUIT command.
+ *
+ * Stores the supplied reason, or a default one when none was provided, and
+ * requests deferred disconnection. QUIT notification, state cleanup, socket
+ * closure and object destruction are performed once by
+ * Server::disconnectClient().
+ *
+ * @param client The client requesting disconnection.
+ * @param message The parsed QUIT command and its optional reason.
  */
-void CommandDispatcher::handleQuit(
-    Client &client,
-    const IrcMessage &message
-)
+void CommandDispatcher::handleQuit(Client &client,const IrcMessage &message)
 {
     std::string quitReason = "Client Quit";
 
     if (!message.params.empty() && !message.params[0].empty())
         quitReason = message.params[0];
 
-    std::vector<std::string> quitParameters;
-
-    quitParameters.push_back(quitReason);
-
-    const IrcMessage quitMessage(
-        "QUIT",
-        quitParameters,
-        server.getClientPrefix(client),
-        true
-    );
-
-    const std::string serializedQuitMessage =
-        quitMessage.serialize();
-
-    client.requestDisconnect();
-
-    server.queueMessageToRelatedClients(
-        client,
-        serializedQuitMessage
-    );
+    client.requestDisconnect(quitReason);
 }
 
 /**
