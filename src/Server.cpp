@@ -1316,11 +1316,24 @@ void Server::updateClientPollEvents(int socketFd)
     throw std::logic_error("client descriptor is not registered in poll");
 }
 
+/**
+ * @brief Sends pending output through a non-blocking client socket.
+ *
+ * Sends at most MAX_SEND_SIZE bytes, removes only the successfully transmitted
+ * portion and keeps POLLOUT enabled while data remains. Temporary send errors
+ * preserve the connection. Zero-byte writes and definitive socket errors
+ * request a deferred disconnection with a specific reason.
+ *
+ * @param socketFd The socket descriptor of the client being written to.
+ * @return true when the connection may continue, false when the client must
+ * be disconnected.
+ */
 bool Server::flushClientOutput(int socketFd)
 {
     std::map<int, Client *>::iterator clientIterator = clients.find(socketFd);
 
-    if (clientIterator == clients.end())
+    if (clientIterator == clients.end()
+        || clientIterator->second == NULL)
     {
         throw std::logic_error("cannot send data to an unregistered client");
     }
@@ -1338,7 +1351,7 @@ bool Server::flushClientOutput(int socketFd)
     const std::size_t bytesToSend = pendingOutput.size() > MAX_SEND_SIZE
         ? MAX_SEND_SIZE : pendingOutput.size();
 
-    const ssize_t bytes = ::send(socketFd, pendingOutput.c_str(), bytesToSend,0);
+    const ssize_t bytes = ::send(socketFd, pendingOutput.c_str(), bytesToSend, 0);
 
     if (bytes > 0)
     {
@@ -1353,16 +1366,38 @@ bool Server::flushClientOutput(int socketFd)
     }
 
     if (bytes == 0)
+    {
+        client->requestDisconnect("Send returned zero bytes");
         return false;
+    }
 
     const int sendErrno = errno;
 
+    /*
+     * These errors are temporary. The pending bytes remain in the output
+     * buffer and POLLOUT stays enabled for a later retry.
+     */
     if (sendErrno == EAGAIN || sendErrno == EWOULDBLOCK || sendErrno == EINTR)
         return true;
 
     std::cerr << Console::CLIENT << " Send error: fd=" << socketFd << ", error="
         << std::strerror(sendErrno) << std::endl;
 
+    if (sendErrno == EPIPE)
+    {
+        client->requestDisconnect("Broken pipe");
+    }
+    else if (sendErrno == ECONNRESET)
+    {
+        client->requestDisconnect(
+            "Connection reset by peer"
+        );
+    }
+    else
+    {
+        client->requestDisconnect("Send error");
+    }
+    
     return false;
 }
 
