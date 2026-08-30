@@ -1615,6 +1615,7 @@ bool Server::processClientBuffer(Client &client)
             std::cerr << Console::CLIENT << " IRC line exceeds "
                 << IRC_MAX_MESSAGE_LENGTH << " bytes: fd=" << client.getSocketFd()
                 << std::endl;
+            client.requestDisconnect("IRC line exceeds maximum length");
             return false;
         }
 

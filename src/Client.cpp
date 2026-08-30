@@ -266,7 +266,8 @@ const std::set<std::string> &Client::getJoinedChannels() const
  * A complete line ends with LF, optionally preceded by CR.
  * The extracted content excludes the terminator.
  * Returns LINE_TOO_LONG when the pending or complete line would exceed
- * IRC_MAX_MESSAGE_LENGTH bytes including the terminator.
+ * IRC_MAX_MESSAGE_LENGTH bytes including the terminator. Oversized data is
+ * discarded so a later extract cannot loop on the same invalid fragment.
  */
 Client::LineReadStatus Client::extractNextLine(std::string &completeLine)
 {
@@ -275,13 +276,19 @@ Client::LineReadStatus Client::extractNextLine(std::string &completeLine)
     if (newlinePos == std::string::npos)
     {
         if (inputBuffer.size() > IRC_MAX_MESSAGE_LENGTH - 1)
+        {
+            inputBuffer.clear();
             return LINE_TOO_LONG;
+        }
         return LINE_INCOMPLETE;
     }
 
     const std::size_t totalLength = newlinePos + 1;
     if (totalLength > IRC_MAX_MESSAGE_LENGTH)
+    {
+        inputBuffer.erase(0, totalLength);
         return LINE_TOO_LONG;
+    }
 
     std::string::size_type contentLength = newlinePos;
     if (contentLength > 0 && inputBuffer[contentLength - 1] == '\r')

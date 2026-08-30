@@ -550,6 +550,67 @@ inline void discardPendingData(int socketFd)
     receiveAvailableData(socketFd, 200);
 }
 
+inline std::size_t countOccurrences(
+    const std::string &haystack,
+    const std::string &needle
+)
+{
+    if (needle.empty())
+        return 0;
+
+    std::size_t count = 0;
+    std::string::size_type position = 0;
+
+    while (true)
+    {
+        position = haystack.find(needle, position);
+
+        if (position == std::string::npos)
+            return count;
+
+        ++count;
+        position += needle.size();
+    }
+}
+
+inline bool sendChunks(
+    int socketFd,
+    const std::string *chunks,
+    std::size_t chunkCount
+)
+{
+    for (std::size_t index = 0; index < chunkCount; ++index)
+    {
+        if (!sendAll(socketFd, chunks[index]))
+            return false;
+
+        if (index + 1 < chunkCount)
+            ::usleep(20000);
+    }
+
+    return true;
+}
+
+inline bool everyLineUsesCrlf(const std::string &data)
+{
+    if (data.empty())
+        return true;
+
+    if (data[data.size() - 1] != '\n')
+        return false;
+
+    for (std::size_t index = 0; index < data.size(); ++index)
+    {
+        if (data[index] == '\n'
+            && (index == 0 || data[index - 1] != '\r'))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 inline bool startServerOrFail(
     TestServerProcess &server,
     const std::string &testName
