@@ -153,6 +153,11 @@ static void testInitialChannelState()
         channel.hasInvitation(NULL),
         "A null client should never have an invitation"
     );
+
+    expectTrue(
+        channel.getMessageHistory().empty(),
+        "A new channel should have no stored messages"
+    );
 }
 
 /**
@@ -790,6 +795,52 @@ static void testChannelDoesNotOwnClients()
     );
 }
 
+/**
+ * @brief Verifies that channel PRIVMSG history ignores empty lines and
+ * preserves insertion order for later JOIN replay.
+ */
+static void testMessageHistory()
+{
+    Channel channel("#general");
+
+    expectTrue(
+        channel.getMessageHistory().empty(),
+        "A new channel should start with an empty message history"
+    );
+
+    channel.addHistoryMessage("");
+
+    expectTrue(
+        channel.getMessageHistory().empty(),
+        "Empty messages should not be stored in channel history"
+    );
+
+    channel.addHistoryMessage(
+        ":alice!alice@localhost PRIVMSG #general :hola\r\n"
+    );
+    channel.addHistoryMessage(
+        ":alice!alice@localhost PRIVMSG #general :adios\r\n"
+    );
+
+    expectSizeEqual(
+        channel.getMessageHistory().size(),
+        2,
+        "Channel history should keep every non-empty stored message"
+    );
+
+    expectEqual(
+        channel.getMessageHistory()[0],
+        ":alice!alice@localhost PRIVMSG #general :hola\r\n",
+        "Channel history should preserve the first stored message"
+    );
+
+    expectEqual(
+        channel.getMessageHistory()[1],
+        ":alice!alice@localhost PRIVMSG #general :adios\r\n",
+        "Channel history should preserve later stored messages in order"
+    );
+}
+
 int main()
 {
     testInitialChannelState();
@@ -803,6 +854,7 @@ int main()
     testUserLimitMode();
     testMemberRemovalCleansRelatedState();
     testChannelDoesNotOwnClients();
+    testMessageHistory();
 
     if (g_failures != 0)
     {

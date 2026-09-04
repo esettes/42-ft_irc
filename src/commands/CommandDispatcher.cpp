@@ -562,8 +562,8 @@ CommandDispatcher::splitCommaSeparatedValues(const std::string &valueList)
 /**
  * @brief Processes a JOIN attempt for one channel. It validates the channel
  * name and access restrictions, ignores duplicate membership, obtains or
- * creates the channel, adds the client, broadcasts JOIN, and sends the topic
- * and member list to the joining client.
+ * creates the channel, adds the client, broadcasts JOIN, and sends the topic,
+ * member list and stored channel messages to the joining client.
  *
  * @param client The registered client requesting to join.
  * @param channelName The individual channel name to process.
@@ -621,6 +621,7 @@ void CommandDispatcher::joinClientToSingleChannel(
 
     server.sendChannelTopic(client, *channel);
     server.sendChannelNames(client, *channel);
+    server.sendChannelHistory(client, *channel);
 }
 
 /**
@@ -1706,8 +1707,9 @@ void CommandDispatcher::sendMessageToUser(
 
 /**
  * @brief Delivers a channel message to every member except the sender when
- * the channel exists and the sender belongs to it. Missing channels yield
- * ERR_NOSUCHCHANNEL; non-members yield ERR_CANNOTSENDTOCHAN.
+ * the channel exists and the sender belongs to it. The serialized line is
+ * also stored on the channel so clients that JOIN later receive it. Missing
+ * channels yield ERR_NOSUCHCHANNEL; non-members yield ERR_CANNOTSENDTOCHAN.
  */
 void CommandDispatcher::sendMessageToChannel(
     Client &sender,
@@ -1752,6 +1754,9 @@ void CommandDispatcher::sendMessageToChannel(
     );
 
     const std::string serializedMessage = privateMessage.serialize();
+
+    channel->addHistoryMessage(serializedMessage);
+
     const std::set<Client *> &channelMembers = channel->getMembers();
 
     std::set<Client *>::const_iterator memberIterator =

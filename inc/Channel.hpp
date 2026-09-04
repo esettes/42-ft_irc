@@ -3,6 +3,7 @@
 
 #include <string>
 #include <set>
+#include <vector>
 
 class Client;
 
@@ -42,6 +43,7 @@ class Channel
 
         std::string channelKey;
         std::size_t userLimit;
+        std::vector<std::string> messageHistory;
 
     public:
         explicit Channel(const std::string &channelName);
@@ -80,6 +82,9 @@ class Channel
         std::size_t getUserLimit() const;
         void setUserLimit(std::size_t newLimit);
         void removeUserLimit();
+
+        void addHistoryMessage(const std::string &serializedMessage);
+        const std::vector<std::string> &getMessageHistory() const;
 };
 
 #endif

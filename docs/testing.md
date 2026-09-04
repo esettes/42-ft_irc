@@ -60,6 +60,7 @@ Si todo va bien, cada suite imprime un mensaje de éxito y el proceso termina co
 | Suite | Requisito del enunciado |
 |---|---|
 | `ProtocolTests.cpp` | Autenticación (`PASS`/`NICK`/`USER`), bienvenida, `JOIN`, `PRIVMSG` de canal y privado, `PING`/`PONG`, `CAP`, `QUIT`. |
+| `ProtocolChannelHistoryTests.cpp` | Historial de `PRIVMSG` de canal reenviado a quien hace `JOIN` después. |
 | `ProtocolFramingTests.cpp` | Reensamblado de comandos partidos (el test de `nc` + `Ctrl+D` del enunciado). |
 | `ProtocolMultiClientTests.cpp` | Varios clientes a la vez: registro, canal, privado, operadores. |
 | `ProtocolPartialWriteTests.cpp` | Escrituras TCP parciales (cliente lento); el servidor no se bloquea. |
@@ -425,7 +426,7 @@ KICK #bravo bob :fuera
 - A debe recibir `341` (`RPL_INVITING`) por cada invitación.
 - Privilegio por canal: si B crea `#charlie` y A entra después, A es miembro normal. `MODE #charlie +i` desde A debe responder `482`.
 
-### 4. Cliente A envía un mensaje; B solo lo recibe si ya es miembro
+### 4. Cliente A envía un mensaje; B lo recibe al unirse
 
 Cliente A:
 
@@ -434,13 +435,15 @@ JOIN #general
 PRIVMSG #general :antes de que entre b
 ```
 
-- B, todavía fuera del canal, no debe recibir ese `PRIVMSG`. El servidor no reenvía el historial.
+- B, todavía fuera del canal, no debe recibir ese `PRIVMSG` en tiempo real.
 
 Cliente B:
 
 ```text
 JOIN #general
 ```
+
+- Tras `JOIN`, `331`/`332`, `353` y `366`, B debe recibir `:alice!… PRIVMSG #general :antes de que entre b`.
 
 Cliente A:
 
@@ -449,7 +452,6 @@ PRIVMSG #general :despues de que entre b
 ```
 
 - B debe recibir `:alice!… PRIVMSG #general :despues de que entre b`.
-- B no debe recibir el mensaje enviado antes de su `JOIN`.
 
 ### 5. Canal solo por invitación (`+i`)
 
@@ -634,7 +636,7 @@ Cliente A:
 - A debe recibir `341` (`RPL_INVITING`) por cada invitación.
 - Privilegio por canal: si B crea `#charlie` (`/join #charlie`) y A entra después, A es miembro normal. `/mode #charlie +i` desde A debe mostrar `482`.
 
-### 4. Cliente A envía un mensaje; B solo lo recibe si ya es miembro
+### 4. Cliente A envía un mensaje; B lo recibe al unirse
 
 Cliente A:
 
@@ -648,13 +650,15 @@ En la ventana de `#general`:
 antes de que entre b
 ```
 
-- B, todavía fuera del canal, no debe ver ese texto. El servidor no reenvía el historial.
+- B, todavía fuera del canal, no debe ver ese texto en tiempo real.
 
 Cliente B:
 
 ```text
 /join #general
 ```
+
+- B debe ver `antes de que entre b` en `#general` al entrar.
 
 Cliente A, otra vez en `#general`:
 
@@ -663,7 +667,6 @@ despues de que entre b
 ```
 
 - B debe ver `despues de que entre b` en `#general`.
-- B no debe ver el mensaje enviado antes de su `/join`.
 
 ### 5. Canal solo por invitación (`+i`)
 

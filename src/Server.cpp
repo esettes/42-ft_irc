@@ -825,6 +825,27 @@ void Server::sendChannelNames(Client &client, const Channel &channel)
     );
 }
 
+/**
+ * @brief Replays stored channel PRIVMSG traffic to a client that has just
+ * joined. Messages are queued in insertion order through queueMessage() so
+ * late members receive the same serialized lines that earlier members saw.
+ *
+ * The sequence is sent after JOIN, topic and NAMES so a reference client
+ * already has the channel window open when the history arrives.
+ */
+void Server::sendChannelHistory(Client &client, const Channel &channel)
+{
+    const std::vector<std::string> &history = channel.getMessageHistory();
+    std::vector<std::string>::const_iterator historyIterator =
+        history.begin();
+
+    while (historyIterator != history.end())
+    {
+        queueMessage(client, *historyIterator);
+        ++historyIterator;
+    }
+}
+
 std::string Server::getReplyTarget(const Client &client) const
 {
     if (client.getNickname().empty())

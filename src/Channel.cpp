@@ -11,7 +11,8 @@ Channel::Channel(const std::string &channelName)
       keyEnabled(false),
       limitEnabled(false),
       channelKey(""),
-      userLimit(0)
+      userLimit(0),
+      messageHistory()
 {
 }
 
@@ -284,4 +285,24 @@ void Channel::removeUserLimit()
 {
     userLimit = 0;
     limitEnabled = false;
+}
+
+/**
+ * @brief Stores a serialized channel PRIVMSG so later JOIN members can
+ * receive messages that were sent before they entered the channel.
+ */
+void Channel::addHistoryMessage(const std::string &serializedMessage)
+{
+    if (serializedMessage.empty())
+        return;
+
+    messageHistory.push_back(serializedMessage);
+}
+
+/**
+ * @brief Returns the PRIVMSG history preserved for clients that join later.
+ */
+const std::vector<std::string> &Channel::getMessageHistory() const
+{
+    return messageHistory;
 }
