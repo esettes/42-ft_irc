@@ -341,3 +341,21 @@ No forman parte de la checklist obligatoria. Si existen, probarlos con irssi (`/
 4. Test de `nc` + `Ctrl+D` del enunciado.
 5. Desconexiones bruscas y varios clientes (`docs/utils/`).
 6. Recorrer la lista de la sección 6.
+
+---
+
+## 11. Más tests
+
+1. Comprobar que los mensajes se envían a los clientes después de que se unan a un canal.
+
+2. Comprobar que los usuarios regulares no pueden usar comandos que solo están disponibles para operadores.
+
+3. Comprobar que los operadores pueden usar todos los comandos en todos los canales que han creado.
+
+4. Cliente A se une a un canal y envía un mensaje al canal. Cliente B se une al canal y debe recibir el mensaje.
+
+5. Cliente A se une a un canal, actualiza el canal para que sea de invitación. Cliente B intenta unirse al canal y no puede.
+
+6. Cliente A se une a un canal, actualiza su contraseña. Cliente B intenta unirse al canal sin contraseña y no puede.
+
+7. Cliente A se une a un canal, actualiza el límite de usuarios del canal. Cliente B intenta unirse al canal y no puede.
