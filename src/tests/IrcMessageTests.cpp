@@ -236,6 +236,27 @@ static void testRejectsTrailingWithoutParameter()
     );
 }
 
+static void testSerializesDccCtcpPayloadExactly()
+{
+    std::vector<std::string> parameters;
+    parameters.push_back("Roxana");
+    parameters.push_back(
+        std::string("\x01") + "DCC SEND example.txt 2130706433 5000 1200" + "\x01"
+    );
+
+    const IrcMessage message("PRIVMSG", parameters, "alice!alice@localhost", true);
+
+    expectEqual(
+        message.serialize(),
+        std::string(":alice!alice@localhost PRIVMSG Roxana :")
+            + "\x01"
+            + "DCC SEND example.txt 2130706433 5000 1200"
+            + "\x01"
+            + "\r\n",
+        "serialize should preserve CTCP SOH markers used by DCC SEND"
+    );
+}
+
 static void testRejectsMessageExceedingMaxLength()
 {
     std::vector<std::string> params;
@@ -263,6 +284,7 @@ int main()
     testRejectsPrefixContainingSpace();
     testRejectsPrefixStartingWithColon();
     testKeepsTabInsideRegularParameter();
+    testSerializesDccCtcpPayloadExactly();
     testRejectsMessageExceedingMaxLength();
 
     if (g_failures != 0)

@@ -147,6 +147,11 @@ void CommandDispatcher::registerCommands()
     );
     cmmds.insert(
         std::make_pair(
+            "NOTICE",
+            CommandDefinition(&CommandDispatcher::handleNotice, 0, true))
+    );
+    cmmds.insert(
+        std::make_pair(
             "TOPIC",
             CommandDefinition(&CommandDispatcher::handleTopic, 1, true))
     );
@@ -1633,6 +1638,10 @@ void CommandDispatcher::handleMode(
  * @brief Delivers PRIVMSG to a nickname or channel after registration and
  * parameter checks performed by execute(). Empty message text is rejected
  * with 412; routing then depends on whether the target begins with '#'.
+ *
+ * CTCP payloads, including DCC SEND/CHAT, travel as a normal PRIVMSG
+ * trailing parameter. The handler does not parse or rewrite the text, so
+ * SOH-delimited DCC handshakes are forwarded byte-for-byte to the target.
  */
 void CommandDispatcher::handlePrivateMessage(
     Client &client,
@@ -1654,11 +1663,37 @@ void CommandDispatcher::handlePrivateMessage(
 
     if (isChannelTarget(target))
     {
-        sendMessageToChannel(client, target, messageText);
+        sendMessageToChannel(client, target, messageText, "PRIVMSG", true);
         return;
     }
 
-    sendMessageToUser(client, target, messageText);
+    sendMessageToUser(client, target, messageText, "PRIVMSG", true);
+}
+
+/**
+ * @brief Delivers NOTICE with the same nickname/channel routing as PRIVMSG,
+ * including CTCP replies such as DCC REJECT. RFC 2812 forbids automatic
+ * error replies, so missing targets, empty text and channel access failures
+ * are dropped silently.
+ */
+void CommandDispatcher::handleNotice(
+    Client &client,
+    const IrcMessage &message
+)
+{
+    if (message.params.size() < 2 || message.params[1].empty())
+        return;
+
+    const std::string &target = message.params[0];
+    const std::string &messageText = message.params[1];
+
+    if (isChannelTarget(target))
+    {
+        sendMessageToChannel(client, target, messageText, "NOTICE", false);
+        return;
+    }
+
+    sendMessageToUser(client, target, messageText, "NOTICE", false);
 }
 
 bool CommandDispatcher::isChannelTarget(const std::string &target) const
@@ -1667,26 +1702,32 @@ bool CommandDispatcher::isChannelTarget(const std::string &target) const
 }
 
 /**
- * @brief Delivers a private message to a single nickname when it exists,
- * otherwise replies with ERR_NOSUCHNICK. The sender's full prefix is preserved
- * and delivery uses the non-blocking output buffer.
+ * @brief Delivers a client message to a single nickname when it exists,
+ * otherwise replies with ERR_NOSUCHNICK when reportErrors is true. Used by
+ * PRIVMSG and NOTICE, including exact CTCP/DCC payloads. Delivery uses the
+ * non-blocking output buffer.
  */
 void CommandDispatcher::sendMessageToUser(
     Client &sender,
     const std::string &nickname,
-    const std::string &messageText
+    const std::string &messageText,
+    const std::string &command,
+    bool reportErrors
 )
 {
     Client *recipient = server.findClientByNickname(nickname);
 
     if (recipient == NULL)
     {
-        server.queueNumericReply(
-            sender,
-            NumericReply::ERR_NOSUCHNICK,
-            nickname,
-            NumericReply::MSG_NOSUCHNICK
-        );
+        if (reportErrors)
+        {
+            server.queueNumericReply(
+                sender,
+                NumericReply::ERR_NOSUCHNICK,
+                nickname,
+                NumericReply::MSG_NOSUCHNICK
+            );
+        }
         return;
     }
 
@@ -1696,7 +1737,7 @@ void CommandDispatcher::sendMessageToUser(
     privateMessageParameters.push_back(messageText);
 
     const IrcMessage privateMessage(
-        "PRIVMSG",
+        command,
         privateMessageParameters,
         server.getClientPrefix(sender),
         true
@@ -1706,38 +1747,47 @@ void CommandDispatcher::sendMessageToUser(
 }
 
 /**
- * @brief Delivers a channel message to every member except the sender when
- * the channel exists and the sender belongs to it. The serialized line is
- * also stored on the channel so clients that JOIN later receive it. Missing
- * channels yield ERR_NOSUCHCHANNEL; non-members yield ERR_CANNOTSENDTOCHAN.
+ * @brief Delivers a client message to every channel member except the sender
+ * when the channel exists and the sender belongs to it. PRIVMSG lines are
+ * stored for later JOIN replay; NOTICE is not. Missing channels yield
+ * ERR_NOSUCHCHANNEL and non-members yield ERR_CANNOTSENDTOCHAN when
+ * reportErrors is true.
  */
 void CommandDispatcher::sendMessageToChannel(
     Client &sender,
     const std::string &channelName,
-    const std::string &messageText
+    const std::string &messageText,
+    const std::string &command,
+    bool reportErrors
 )
 {
     Channel *channel = server.findChannel(channelName);
 
     if (channel == NULL)
     {
-        server.queueNumericReply(
-            sender,
-            NumericReply::ERR_NOSUCHCHANNEL,
-            channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+        if (reportErrors)
+        {
+            server.queueNumericReply(
+                sender,
+                NumericReply::ERR_NOSUCHCHANNEL,
+                channelName,
+                NumericReply::MSG_NOSUCHCHANNEL
+            );
+        }
         return;
     }
 
     if (!channel->hasMember(&sender))
     {
-        server.queueNumericReply(
-            sender,
-            NumericReply::ERR_CANNOTSENDTOCHAN,
-            channelName,
-            NumericReply::MSG_CANNOTSENDTOCHAN
-        );
+        if (reportErrors)
+        {
+            server.queueNumericReply(
+                sender,
+                NumericReply::ERR_CANNOTSENDTOCHAN,
+                channelName,
+                NumericReply::MSG_CANNOTSENDTOCHAN
+            );
+        }
         return;
     }
 
@@ -1747,7 +1797,7 @@ void CommandDispatcher::sendMessageToChannel(
     privateMessageParameters.push_back(messageText);
 
     const IrcMessage privateMessage(
-        "PRIVMSG",
+        command,
         privateMessageParameters,
         server.getClientPrefix(sender),
         true
@@ -1755,7 +1805,8 @@ void CommandDispatcher::sendMessageToChannel(
 
     const std::string serializedMessage = privateMessage.serialize();
 
-    channel->addHistoryMessage(serializedMessage);
+    if (command == "PRIVMSG")
+        channel->addHistoryMessage(serializedMessage);
 
     const std::set<Client *> &channelMembers = channel->getMembers();
 

@@ -72,6 +72,7 @@ Si todo va bien, cada suite imprime un mensaje de éxito y el proceso termina co
 | `ProtocolModeOperatorTests.cpp` | Modo `o` (dar/quitar operador). |
 | `ProtocolModeQueryTests.cpp` / `ProtocolModeCombinationTests.cpp` / `ProtocolModeErrorTests.cpp` | Consulta, combinaciones y errores de `MODE`. |
 | `ProtocolDisconnectTests.cpp` / `ProtocolChannelEdgeTests.cpp` / `ProtocolOversizedInputTests.cpp` / `ProtocolErrorRobustnessTests.cpp` | Desconexiones, último miembro, líneas > 512 bytes, numerics de error. |
+| `ProtocolDccTests.cpp` | Bonus de transferencia de archivos: CTCP `DCC SEND`/`CHAT` retransmitido tal cual, `NOTICE` `DCC REJECT`, y bytes del archivo en TCP entre clientes. |
 
 Las suites independientes se descubren solas: un archivo nuevo `src/tests/Protocol*Tests.cpp` (salvo `ProtocolTests.cpp`) entra en `make test-protocol` sin tocar el Makefile.
 
@@ -325,12 +326,44 @@ Conectar y desconectar varios clientes (irssi o netcat), unirse a canales y sali
 
 El enunciado marca como bonus:
 
-- Transferencia de archivos (habitualmente DCC sobre `PRIVMSG` CTCP; el servidor retransmite el mensaje).
+- Transferencia de archivos (DCC sobre `PRIVMSG` CTCP; el servidor retransmite el mensaje).
 - Un bot.
 
 Y como comando extra: `LIST`.
 
 No forman parte de la checklist obligatoria. Si existen, probarlos con irssi (`/dcc send`, mensaje al bot, `/list`) además de `make test`.
+
+### Transferencia de archivos (DCC)
+
+El archivo **no pasa por el servidor IRC**. El emisor abre un socket TCP, anuncia `DCC SEND` en un `PRIVMSG` CTCP, el servidor reenvía ese texto sin cambiarlo (incluidos los `\x01`) y el receptor se conecta al emisor.
+
+Comprobación automática: `make test-protocol` incluye `ProtocolDccTests.cpp`.
+
+Comprobación con irssi (dos clientes, servidor `./ircserv 6667 secret`):
+
+```text
+# Cliente A
+/connect 127.0.0.1 6667 secret
+/nick alice
+/dcc send bob /tmp/hola.txt
+
+# Cliente B
+/connect 127.0.0.1 6667 secret
+/nick bob
+/dcc get alice
+```
+
+- B debe recibir la oferta DCC (mensaje CTCP `DCC SEND`).
+- Tras aceptar, el fichero debe llegar a B.
+- El servidor no debe reescribir el payload ni recortar el nombre del archivo.
+
+Con netcat, el handshake es un `PRIVMSG` normal:
+
+```text
+PRIVMSG bob :^ADCC SEND hola.txt 2130706433 5000 5^A
+```
+
+`^A` es el carácter SOH (`\x01`). El servidor debe entregarlo a `bob` con los mismos bytes.
 
 ---
 

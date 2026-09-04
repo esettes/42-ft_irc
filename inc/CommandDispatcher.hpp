@@ -75,6 +75,7 @@ class CommandDispatcher
         );
         void handlePart(Client &client, const IrcMessage &message);
         void handlePrivateMessage(Client &client, const IrcMessage &message);
+        void handleNotice(Client &client, const IrcMessage &message);
         void handleTopic(Client &client, const IrcMessage &message);
         void handleInvite(Client &client, const IrcMessage &message);
         void handleKick(Client &client, const IrcMessage &message);
@@ -132,12 +133,16 @@ class CommandDispatcher
         void sendMessageToUser(
             Client &sender,
             const std::string &nickname,
-            const std::string &messageText
+            const std::string &messageText,
+            const std::string &command,
+            bool reportErrors
         );
         void sendMessageToChannel(
             Client &sender,
             const std::string &channelName,
-            const std::string &messageText
+            const std::string &messageText,
+            const std::string &command,
+            bool reportErrors
         );
 
     public:

@@ -44,6 +44,8 @@ inline std::string escapeOutput(const std::string &value)
             escaped += "\\n";
         else if (character == '\0')
             escaped += "\\0";
+        else if (character == '\x01')
+            escaped += "\\x01";
         else
             escaped += static_cast<char>(character);
     }

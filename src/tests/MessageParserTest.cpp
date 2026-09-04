@@ -84,6 +84,39 @@ int main()
         return fail("TOPIC #general : must be marked as having a trailing parameter");
     }
 
+    const std::string dccLine =
+        "PRIVMSG Roxana :"
+        "\x01"
+        "DCC SEND example.txt 2130706433 5000 1200"
+        "\x01";
+    const IrcMessage dccMessage = MessageParser::parse(dccLine);
+
+    if (dccMessage.cmd != "PRIVMSG")
+    {
+        return fail("DCC CTCP must parse as PRIVMSG");
+    }
+    if (dccMessage.params.size() != 2)
+    {
+        return fail("DCC CTCP must keep target and trailing payload");
+    }
+    if (dccMessage.params[0] != "Roxana")
+    {
+        return fail("DCC CTCP must keep the recipient nickname");
+    }
+    if (dccMessage.params[1]
+        != std::string("\x01") + "DCC SEND example.txt 2130706433 5000 1200" + "\x01")
+    {
+        return fail("DCC CTCP must preserve SOH markers and spaces");
+    }
+    if (!dccMessage.hasTrailingParameter)
+    {
+        return fail("DCC CTCP must stay a trailing parameter");
+    }
+    if (dccMessage.serialize() != dccLine + "\r\n")
+    {
+        return fail("DCC CTCP must serialize back to the original payload");
+    }
+
     std::cout << "MessageParser test passed" << std::endl;
     return EXIT_SUCCESS;
 }
