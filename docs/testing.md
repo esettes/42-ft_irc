@@ -346,16 +346,401 @@ No forman parte de la checklist obligatoria. Si existen, probarlos con irssi (`/
 
 ## 11. Más tests
 
-1. Comprobar que los mensajes se envían a los clientes después de que se unan a un canal.
+Servidor en marcha (`./ircserv 6667 secret`) y clientes netcat como en la sección 5. En cada caso, registrar primero a los clientes (`PASS` / `NICK` / `USER`). El primer usuario que entra en un canal vacío es operador (`@`).
 
-2. Comprobar que los usuarios regulares no pueden usar comandos que solo están disponibles para operadores.
+### 1. Los mensajes llegan a los clientes que ya están en el canal
 
-3. Comprobar que los operadores pueden usar todos los comandos en todos los canales que han creado.
+Cliente A:
 
-4. Cliente A se une a un canal y envía un mensaje al canal. Cliente B se une al canal y debe recibir el mensaje.
+```text
+PASS secret
+NICK alice
+USER alice 0 * :Alice
+JOIN #general
+PRIVMSG #general :hola canal
+```
 
-5. Cliente A se une a un canal, actualiza el canal para que sea de invitación. Cliente B intenta unirse al canal y no puede.
+Cliente B:
 
-6. Cliente A se une a un canal, actualiza su contraseña. Cliente B intenta unirse al canal sin contraseña y no puede.
+```text
+PASS secret
+NICK bob
+USER bob 0 * :Bob
+JOIN #general
+```
 
-7. Cliente A se une a un canal, actualiza el límite de usuarios del canal. Cliente B intenta unirse al canal y no puede.
+- B debe recibir `:alice!… PRIVMSG #general :hola canal`.
+- A no debe recibir su propio mensaje de canal.
+- Un cliente C registrado, sin `JOIN #general`, no debe recibir ese `PRIVMSG`.
+
+### 2. Un usuario regular no puede usar comandos de operador
+
+Cliente A crea el canal y restringe el topic. Cliente B entra como miembro normal. Cliente C se registra (`charlie`) y no entra al canal.
+
+Cliente A:
+
+```text
+JOIN #ops
+MODE #ops +t
+```
+
+Cliente B:
+
+```text
+JOIN #ops
+KICK #ops alice :fuera
+INVITE charlie #ops
+TOPIC #ops :no deberia
+MODE #ops +i
+```
+
+- Cada comando de B debe responder `482` (`ERR_CHANOPRIVSNEEDED`).
+- A no debe ver `KICK`, `INVITE`, `TOPIC` ni `MODE`.
+- C no debe recibir `INVITE`.
+- `MODE #ops` (consulta, sin flags) sí puede usarlo B: numeric `324`.
+
+### 3. Un operador puede usar los comandos de operador en cada canal que ha creado
+
+Cliente A crea dos canales. Cliente B entra en ambos. Cliente C se registra (`charlie`) y no entra.
+
+Cliente A:
+
+```text
+JOIN #alpha
+JOIN #bravo
+MODE #alpha +t
+MODE #bravo +t
+TOPIC #alpha :tema alpha
+TOPIC #bravo :tema bravo
+INVITE charlie #alpha
+INVITE charlie #bravo
+MODE #alpha +o bob
+MODE #bravo +o bob
+KICK #alpha bob :fuera
+KICK #bravo bob :fuera
+```
+
+- En `#alpha` y en `#bravo`, B debe ver `MODE`, `TOPIC` y `KICK`.
+- C debe recibir ambos `INVITE`.
+- A debe recibir `341` (`RPL_INVITING`) por cada invitación.
+- Privilegio por canal: si B crea `#charlie` y A entra después, A es miembro normal. `MODE #charlie +i` desde A debe responder `482`.
+
+### 4. Cliente A envía un mensaje; B solo lo recibe si ya es miembro
+
+Cliente A:
+
+```text
+JOIN #general
+PRIVMSG #general :antes de que entre b
+```
+
+- B, todavía fuera del canal, no debe recibir ese `PRIVMSG`. El servidor no reenvía el historial.
+
+Cliente B:
+
+```text
+JOIN #general
+```
+
+Cliente A:
+
+```text
+PRIVMSG #general :despues de que entre b
+```
+
+- B debe recibir `:alice!… PRIVMSG #general :despues de que entre b`.
+- B no debe recibir el mensaje enviado antes de su `JOIN`.
+
+### 5. Canal solo por invitación (`+i`)
+
+Cliente A:
+
+```text
+JOIN #invite
+MODE #invite +i
+```
+
+Cliente B:
+
+```text
+JOIN #invite
+```
+
+- B debe recibir `473` (`ERR_INVITEONLYCHAN`) y no entrar.
+- A no debe ver un `JOIN` de B.
+
+Opcional, para confirmar que la invitación desbloquea la entrada:
+
+```text
+INVITE bob #invite
+```
+
+Cliente B:
+
+```text
+JOIN #invite
+```
+
+- B entra. A y B ven el `JOIN` de B.
+
+### 6. Canal con clave (`+k`)
+
+Cliente A:
+
+```text
+JOIN #keyed
+MODE #keyed +k secretkey
+```
+
+Cliente B:
+
+```text
+JOIN #keyed
+JOIN #keyed wrong
+```
+
+- Ambos `JOIN` deben responder `475` (`ERR_BADCHANNELKEY`). B no entra.
+
+Cliente B, con la clave correcta:
+
+```text
+JOIN #keyed secretkey
+```
+
+- B entra. A y B ven el `JOIN` de B.
+
+### 7. Límite de usuarios (`+l`)
+
+Cliente A (único miembro; el límite debe ser `1` para que B no quepa):
+
+```text
+JOIN #limited
+MODE #limited +l 1
+```
+
+Cliente B:
+
+```text
+JOIN #limited
+```
+
+- B debe recibir `471` (`ERR_CHANNELISFULL`) y no entrar.
+- A no debe ver un `JOIN` de B.
+
+Opcional: `MODE #limited -l` o `MODE #limited +l 2` y repetir el `JOIN` de B; ahora debe entrar.
+
+---
+
+## 12. Más tests (irssi)
+
+Los mismos casos que la sección 11, con el cliente de referencia. Servidor en marcha (`./ircserv 6667 secret`) y una sesión irssi por cliente, como en la sección 4. Los numerics de error (`482`, `473`, `475`, `471`, `324`, `341`) aparecen en la ventana de estado.
+
+Cliente A:
+
+```text
+/set nick alice
+/connect 127.0.0.1 6667 secret
+```
+
+Cliente B:
+
+```text
+/set nick bob
+/connect 127.0.0.1 6667 secret
+```
+
+Cuando haga falta un tercer cliente (casos 2 y 3):
+
+```text
+/set nick charlie
+/connect 127.0.0.1 6667 secret
+```
+
+El primer usuario que entra en un canal vacío es operador (`@`).
+
+### 1. Los mensajes llegan a los clientes que ya están en el canal
+
+Cliente A:
+
+```text
+/join #general
+```
+
+Cliente B:
+
+```text
+/join #general
+```
+
+Cliente A, en la ventana de `#general`:
+
+```text
+hola canal
+```
+
+- B debe ver `hola canal` en `#general`.
+- A no debe ver su propio mensaje duplicado de forma anómala.
+- Un cliente C conectado, sin `/join #general`, no debe recibir ese texto.
+
+### 2. Un usuario regular no puede usar comandos de operador
+
+Cliente A crea el canal y restringe el topic. Cliente B entra como miembro normal. Cliente C (`charlie`) no entra al canal.
+
+Cliente A:
+
+```text
+/join #ops
+/mode #ops +t
+```
+
+Cliente B:
+
+```text
+/join #ops
+/kick alice fuera
+/invite charlie #ops
+/topic no deberia
+/mode #ops +i
+```
+
+- Cada comando de B debe mostrar `482` (`ERR_CHANOPRIVSNEEDED`) en la ventana de estado.
+- A no debe ver `KICK`, `INVITE`, `TOPIC` ni cambio de modo.
+- C no debe recibir invitación.
+- `/mode #ops` (consulta, sin flags) sí puede usarlo B: numeric `324`.
+
+### 3. Un operador puede usar los comandos de operador en cada canal que ha creado
+
+Cliente A crea dos canales. Cliente B entra en ambos. Cliente C (`charlie`) no entra.
+
+Cliente A:
+
+```text
+/join #alpha
+/join #bravo
+/mode #alpha +t
+/mode #bravo +t
+/topic #alpha tema alpha
+/topic #bravo tema bravo
+/invite charlie #alpha
+/invite charlie #bravo
+/mode #alpha +o bob
+/mode #bravo +o bob
+/kick #alpha bob fuera
+/kick #bravo bob fuera
+```
+
+- En `#alpha` y en `#bravo`, B debe ver el cambio de modo, el topic nuevo y el `KICK`.
+- C debe recibir ambas invitaciones (aviso de `INVITE` en la ventana de estado).
+- A debe recibir `341` (`RPL_INVITING`) por cada invitación.
+- Privilegio por canal: si B crea `#charlie` (`/join #charlie`) y A entra después, A es miembro normal. `/mode #charlie +i` desde A debe mostrar `482`.
+
+### 4. Cliente A envía un mensaje; B solo lo recibe si ya es miembro
+
+Cliente A:
+
+```text
+/join #general
+```
+
+En la ventana de `#general`:
+
+```text
+antes de que entre b
+```
+
+- B, todavía fuera del canal, no debe ver ese texto. El servidor no reenvía el historial.
+
+Cliente B:
+
+```text
+/join #general
+```
+
+Cliente A, otra vez en `#general`:
+
+```text
+despues de que entre b
+```
+
+- B debe ver `despues de que entre b` en `#general`.
+- B no debe ver el mensaje enviado antes de su `/join`.
+
+### 5. Canal solo por invitación (`+i`)
+
+Cliente A:
+
+```text
+/join #invite
+/mode #invite +i
+```
+
+Cliente B:
+
+```text
+/join #invite
+```
+
+- B debe ver `473` (`ERR_INVITEONLYCHAN`) y no entrar.
+- A no debe ver un `JOIN` de B.
+
+Opcional, para confirmar que la invitación desbloquea la entrada.
+
+Cliente A:
+
+```text
+/invite bob #invite
+```
+
+Cliente B:
+
+```text
+/join #invite
+```
+
+- B entra. A y B ven el `JOIN` de B.
+
+### 6. Canal con clave (`+k`)
+
+Cliente A:
+
+```text
+/join #keyed
+/mode #keyed +k secretkey
+```
+
+Cliente B:
+
+```text
+/join #keyed
+/join #keyed wrong
+```
+
+- Ambos `/join` deben mostrar `475` (`ERR_BADCHANNELKEY`). B no entra.
+
+Cliente B, con la clave correcta:
+
+```text
+/join #keyed secretkey
+```
+
+- B entra. A y B ven el `JOIN` de B.
+
+### 7. Límite de usuarios (`+l`)
+
+Cliente A (único miembro; el límite debe ser `1` para que B no quepa):
+
+```text
+/join #limited
+/mode #limited +l 1
+```
+
+Cliente B:
+
+```text
+/join #limited
+```
+
+- B debe ver `471` (`ERR_CHANNELISFULL`) y no entrar.
+- A no debe ver un `JOIN` de B.
+
+Opcional: `/mode #limited -l` o `/mode #limited +l 2` y repetir el `/join #limited` de B; ahora debe entrar.
