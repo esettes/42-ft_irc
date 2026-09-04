@@ -262,4 +262,7 @@ test-protocol-suites: $(NAME) ## 🧪 Runs split protocol suites (TOPIC, INVITE,
 		done; \
 	fi
 
-.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites
+run: ## 🚀 Runs the server
+	@./$(NAME) 6667 secret
+
+.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites run
