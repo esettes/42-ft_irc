@@ -55,6 +55,8 @@ class Server
 
         void createListeningSocket();
         void registerListeningSocket();
+        void pauseAcceptingConnections();
+        void resumeAcceptingConnections();
 
         void acceptClient();
         void configureSocketAsNonBlocking(int socketFd);

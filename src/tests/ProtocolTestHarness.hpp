@@ -14,6 +14,7 @@
 #include <poll.h>
 #include <sstream>
 #include <string>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -368,7 +369,7 @@ class TestServerProcess
             stop();
         }
 
-        bool start()
+        bool start(int fileDescriptorLimit = 0)
         {
             if (port == -1)
                 return false;
@@ -380,6 +381,17 @@ class TestServerProcess
 
             if (processId == 0)
             {
+                if (fileDescriptorLimit > 0)
+                {
+                    struct rlimit limit;
+
+                    limit.rlim_cur = static_cast<rlim_t>(fileDescriptorLimit);
+                    limit.rlim_max = static_cast<rlim_t>(fileDescriptorLimit);
+
+                    if (::setrlimit(RLIMIT_NOFILE, &limit) == -1)
+                        ::_exit(EXIT_FAILURE);
+                }
+
                 const int nullFd = ::open("/dev/null", O_WRONLY);
 
                 if (nullFd != -1)

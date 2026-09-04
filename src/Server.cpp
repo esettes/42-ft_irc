@@ -125,6 +125,19 @@ void Server::createListeningSocket()
     }
 }
 
+/**
+ * @brief Accepts one pending TCP connection without interrupting the event
+ * loop when the process cannot take more file descriptors.
+ *
+ * Transient accept errors leave the listening socket armed. Any other accept
+ * failure disables POLLIN on the listening socket so poll() can keep serving
+ * already-connected clients instead of spinning or terminating the process.
+ * Accepting is re-enabled from disconnectClient() when a descriptor is
+ * released.
+ *
+ * A failure while configuring or registering a socket that accept() already
+ * returned closes that descriptor and continues; it does not stop the server.
+ */
 void Server::acceptClient()
 {
     struct sockaddr_storage clientAddress;
@@ -138,10 +151,22 @@ void Server::acceptClient()
 
     if (clientSocketFd == INVALID_FD)
     {
-        if (errno == EAGAIN || errno == EWOULDBLOCK|| errno == EINTR)
-            return;
+        const int errorNumber = errno;
 
-        throw createSystemError("accept", errno);
+        if (errorNumber == EAGAIN
+            || errorNumber == EWOULDBLOCK
+            || errorNumber == EINTR
+            || errorNumber == ECONNABORTED)
+        {
+            return;
+        }
+
+        std::cerr << Console::WARNING
+            << " accept: "
+            << std::strerror(errorNumber) << std::endl;
+
+        pauseAcceptingConnections();
+        return;
     }
 
     Client *newClient = NULL;
@@ -172,18 +197,51 @@ void Server::acceptClient()
 
         pollFds.push_back(clientDescriptor);
     }
-    catch (...)
+    catch (const std::exception &error)
     {
         if (clientWasRegistered)
             clients.erase(clientSocketFd);
 
         delete newClient;
         ::close(clientSocketFd);
-        throw ;
+
+        std::cerr << Console::WARNING
+            << " Failed to register client: "
+            << error.what() << std::endl;
+        return;
     }
 
     std::cout << Console::CLIENT << " Connection accepted: fd=" << clientSocketFd
         << ", host=" << newClient->getHost() << std::endl;
+}
+
+void Server::pauseAcceptingConnections()
+{
+    if (pollFds.empty())
+        return;
+
+    if (pollFds[0].events & POLLIN)
+    {
+        std::cerr << Console::WARNING
+            << " Pausing accept"
+            << std::endl;
+    }
+
+    pollFds[0].events = 0;
+}
+
+void Server::resumeAcceptingConnections()
+{
+    if (pollFds.empty() || pollFds[0].fd == INVALID_FD)
+        return;
+
+    if ((pollFds[0].events & POLLIN) == 0)
+    {
+        std::cout << Console::SERVER
+            << " Resuming accept" << std::endl;
+    }
+
+    pollFds[0].events = POLLIN;
 }
 
 /**
@@ -1082,6 +1140,9 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
     }
 
     delete client;
+
+    if (!SignalHandler::isShutdownRequested())
+        resumeAcceptingConnections();
 
     std::cout << Console::CLIENT
         << " Connection closed: fd=" << clientSocketFd
