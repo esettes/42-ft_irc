@@ -26,6 +26,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+class Bot;
+
 /**
  * @file Server.hpp
  * @brief Declares the main IRC server that accepts clients, processes messages, and manages channels.
@@ -38,6 +40,7 @@
  * @param clients A mapping of client socket file descriptors to their corresponding Client objects.
  * @param channels A mapping of normalized channel names to their corresponding Channel objects.
  * @param clientsByNickname Client objects for quick lookup. Allows detecting duplicates and searching for users.
+ * @param bot Built-in helper bot registered as a virtual IRC user.
  */
 class Server
 {
@@ -52,6 +55,7 @@ class Server
         std::map<int, Client *> clients;
         std::map<std::string, Client *> clientsByNickname;
         std::map<std::string, Channel> channels;
+        Bot *bot;
 
         void createListeningSocket();
         void registerListeningSocket();
@@ -158,6 +162,23 @@ class Server
         void queueMessageToChannel(
             const Channel &channel,
             const std::string &message
+        );
+        void releaseNickname(const Client &client);
+        std::size_t getRegisteredNicknameCount() const;
+        bool isBotClient(const Client &client) const;
+        void notifyBotPrivateMessage(
+            Client &sender,
+            const std::string &text
+        );
+        void notifyBotChannelMessage(
+            Client &sender,
+            Channel &channel,
+            const std::string &text
+        );
+        void notifyBotInvite(Channel &channel);
+        void notifyBotKick(
+            const Client &target,
+            const std::string &channelName
         );
         void queueMessageToRelatedClients(
             Client &sourceClient,

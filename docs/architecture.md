@@ -48,12 +48,9 @@ Responsabilidades de cada parte:
 
 ### Bot
 
-Si queremos que el bot aparezca como miembro real de canales, en `NAMES`, `WHO`,` pueda recibir mensajes del canal, etc., entonces sí merece la pena separar desde ahora:
+El bonus del bot está implementado como un `Client` virtual (`fd < 0`) sin entrada en `poll()`. `Bot` posee esa identidad, reserva el nick `marvin` y se une a `#bot` al arrancar. Los usuarios reales tienen socket y buffers; el bot comparte el modelo de canales, `NAMES` e `INVITE` sin un descriptor extra.
 
-- `ClientConnection`: descriptor, buffers y operaciones de red.
-- `IrcUser`: nickname, username, canales y estado IRC.
-
-Así un usuario normal tendría conexión, mientras que el bot podría ser un IrcUser sin socket.
+Los `PRIVMSG` dirigidos al nick o a un canal del que es miembro se procesan en `Bot`; `NOTICE` no genera respuesta automática. Un `INVITE` provoca un `JOIN` del bot.
 
 ### Transferencia de archivos
 

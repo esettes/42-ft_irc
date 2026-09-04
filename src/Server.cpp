@@ -1,6 +1,7 @@
 #include "Server.hpp"
 #include "Console.hpp"
 #include "MessageParser.hpp"
+#include "Bot.hpp"
 #include <netdb.h>
 #include <set>
 #include <utility>
@@ -40,7 +41,8 @@ Server::Server(int port, const std::string &password)
       password(password),
       serverName(DEFAULT_SERVER_NAME),
       listenSocket(INVALID_FD),
-      dispatcher(*this)
+      dispatcher(*this),
+      bot(NULL)
 {
     if (port < 1 || port > 65535)
         throw std::invalid_argument("invalid server port");
@@ -50,6 +52,8 @@ Server::Server(int port, const std::string &password)
 
     createListeningSocket();
     registerListeningSocket();
+    bot = new Bot(*this);
+    bot->start();
     displayStartupInformation();
 }
 
@@ -270,6 +274,8 @@ void Server::displayStartupInformation() const
         << "  Port: " << port << std::endl
         << "  Protocol: TCP/IPv4" << std::endl
         << "  Socket mode: non-blocking" << std::endl
+        << "  Bot nickname: " << Bot::NICKNAME << std::endl
+        << "  Bot channel: " << Bot::HOME_CHANNEL << std::endl
         << "  Status: listening" << std::endl;
 }
 
@@ -482,6 +488,63 @@ Client *Server::findClientByNickname(const std::string &nickname)
         return NULL;
 
     return nicknameIterator->second;
+}
+
+void Server::releaseNickname(const Client &client)
+{
+    removeNicknameIndexEntry(client);
+}
+
+std::size_t Server::getRegisteredNicknameCount() const
+{
+    return clientsByNickname.size();
+}
+
+bool Server::isBotClient(const Client &client) const
+{
+    return bot != NULL && bot->owns(client);
+}
+
+void Server::notifyBotPrivateMessage(
+    Client &sender,
+    const std::string &text
+)
+{
+    if (bot == NULL || bot->owns(sender))
+        return;
+
+    bot->handleDirectMessage(sender, text);
+}
+
+void Server::notifyBotChannelMessage(
+    Client &sender,
+    Channel &channel,
+    const std::string &text
+)
+{
+    if (bot == NULL || bot->owns(sender))
+        return;
+
+    bot->handleChannelMessage(sender, channel, text);
+}
+
+void Server::notifyBotInvite(Channel &channel)
+{
+    if (bot == NULL)
+        return;
+
+    bot->handleInvite(channel);
+}
+
+void Server::notifyBotKick(
+    const Client &target,
+    const std::string &channelName
+)
+{
+    if (bot == NULL || !bot->owns(target))
+        return;
+
+    bot->handleKick(channelName);
 }
 
 Channel *Server::findChannel(const std::string &channelName)
@@ -1525,7 +1588,7 @@ bool Server::flushClientOutput(int socketFd)
  */
 void Server::queueMessage(Client &client, const std::string &message)
 {
-    if (message.empty() || client.isDisconnectRequested())
+    if (message.empty() || client.isDisconnectRequested() || client.isVirtual())
         return;
 
     if (message.size() > IRC_MAX_MESSAGE_LENGTH)
@@ -1761,6 +1824,13 @@ void Server::closeAllFds()
         const int clientSocketFd = clients.begin()->first;
 
         disconnectClient(clientSocketFd, "Server shutting down");
+    }
+
+    if (bot != NULL)
+    {
+        bot->stop();
+        delete bot;
+        bot = NULL;
     }
 
     clientsByNickname.clear();

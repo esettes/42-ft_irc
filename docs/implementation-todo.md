@@ -145,8 +145,8 @@ Referencias: [subject](en.subject.pdf), [README](../README.md) y [Makefile](../M
 
 Solo después de completar y verificar toda la parte obligatoria.
 
-- [ ] Implementar transferencia DCC: retransmitir CTCP exactamente mediante `PRIVMSG`; los bytes del archivo circulan entre clientes.
-- [ ] Implementar un bot integrado como usuario IRC sin socket o mediante una abstracción separada.
-- [ ] Añadir tests específicos de DCC y bot.
+- [x] Implementar transferencia DCC: retransmitir CTCP exactamente mediante `PRIVMSG`; los bytes del archivo circulan entre clientes.
+- [x] Implementar un bot integrado como usuario IRC sin socket o mediante una abstracción separada.
+- [x] Añadir tests específicos de DCC y bot.
 
 Referencia: [arquitectura](architecture.md).

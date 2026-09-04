@@ -965,6 +965,9 @@ void CommandDispatcher::handleInvite(
     );
 
     server.queueMessage(*targetClient, inviteMessage.serialize());
+
+    if (server.isBotClient(*targetClient))
+        server.notifyBotInvite(*channel);
 }
 
 /**
@@ -1080,7 +1083,10 @@ void CommandDispatcher::handleKick(
         kickMessage.serialize()
     );
 
+    const std::string kickedFromChannel = channel->getName();
+
     server.removeClientFromChannel(*targetClient, *channel);
+    server.notifyBotKick(*targetClient, kickedFromChannel);
 }
 
 /**
@@ -1705,7 +1711,8 @@ bool CommandDispatcher::isChannelTarget(const std::string &target) const
  * @brief Delivers a client message to a single nickname when it exists,
  * otherwise replies with ERR_NOSUCHNICK when reportErrors is true. Used by
  * PRIVMSG and NOTICE, including exact CTCP/DCC payloads. Delivery uses the
- * non-blocking output buffer.
+ * non-blocking output buffer. PRIVMSG to the built-in bot is then handed to
+ * the bot handler so the virtual user can reply without a socket.
  */
 void CommandDispatcher::sendMessageToUser(
     Client &sender,
@@ -1744,6 +1751,9 @@ void CommandDispatcher::sendMessageToUser(
     );
 
     server.queueMessage(*recipient, privateMessage.serialize());
+
+    if (command == "PRIVMSG" && server.isBotClient(*recipient))
+        server.notifyBotPrivateMessage(sender, messageText);
 }
 
 /**
@@ -1822,4 +1832,7 @@ void CommandDispatcher::sendMessageToChannel(
 
         ++memberIterator;
     }
+
+    if (command == "PRIVMSG")
+        server.notifyBotChannelMessage(sender, *channel, messageText);
 }

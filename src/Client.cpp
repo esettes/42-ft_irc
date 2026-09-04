@@ -72,6 +72,16 @@ int Client::getSocketFd() const
     return socketFd;
 }
 
+/**
+ * @brief Reports whether this client exists only as an IRC identity.
+ * Virtual users, such as the built-in bot, have no socket and are not
+ * registered in poll().
+ */
+bool Client::isVirtual() const
+{
+    return socketFd < 0;
+}
+
 void Client::appendToInputBuffer(const std::string &data)
 {
     inputBuffer += data;

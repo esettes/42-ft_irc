@@ -365,6 +365,46 @@ PRIVMSG bob :^ADCC SEND hola.txt 2130706433 5000 5^A
 
 `^A` es el carácter SOH (`\x01`). El servidor debe entregarlo a `bob` con los mismos bytes.
 
+### Bot
+
+El bot es un usuario IRC virtual **sin socket**: no entra en `poll()`, reserva el nick `marvin` y permanece en `#bot`. Responde a consultas privadas y a `!comando` o `marvin: comando` en los canales de los que es miembro. Un `INVITE` hace que entre al canal; `NOTICE` no genera respuesta automática.
+
+Comprobación automática: `make test-protocol` incluye `ProtocolBotTests.cpp`.
+
+Comprobación con irssi (`./ircserv 6667 secret`):
+
+```text
+/connect 127.0.0.1 6667 secret
+/nick alice
+/msg marvin help
+/join #bot
+# en #bot:
+!ping
+!time
+marvin: dice
+```
+
+Para llevarlo a otro canal:
+
+```text
+/join #lounge
+/invite marvin #lounge
+!help
+```
+
+Comandos: `help`, `ping`, `time`, `date`, `info`, `uptime`, `version`, `users`, `whoami`, `echo <texto>`, `dice`.
+
+Con netcat, tras `PASS` / `NICK` / `USER`:
+
+```text
+PRIVMSG marvin :help
+PRIVMSG marvin :ping
+JOIN #bot
+PRIVMSG #bot :!ping
+```
+
+El nick `marvin` no se puede registrar (433). El bot no usa un `poll()` extra ni un proceso hijo.
+
 ---
 
 ## 10. Orden de trabajo recomendado

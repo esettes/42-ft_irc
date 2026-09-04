@@ -65,6 +65,7 @@ class Client
         ~Client();
         
         int getSocketFd() const;
+        bool isVirtual() const;
 
         void appendToInputBuffer(const std::string &data);
         const std::string &getInputBuffer() const;
