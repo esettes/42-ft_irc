@@ -91,7 +91,7 @@ Comprobación equivalente, más explícita:
 
 
 ```bash
-# Tres fragmentos: "NICK", " ali", "ce\n"
+# Tres fragmentos: "NICK", " ro", "xy\n"
 printf 'NICK' >&0
 # Ctrl+D en la sesión nc, o:
 python3 - <<'PY'
@@ -101,9 +101,9 @@ s.send(b"PASS secret\r\n")
 time.sleep(0.05)
 s.send(b"NICK")
 time.sleep(0.05)
-s.send(b" ali")
+s.send(b" ro")
 time.sleep(0.05)
-s.send(b"ce\r\nUSER alice 0 * :Alice\r\n")
+s.send(b"xy\r\nUSER roxy 0 * :Roxy\r\n")
 print(s.recv(4096).decode("utf-8", "replace"))
 s.close()
 PY
@@ -138,7 +138,7 @@ Si el nick por defecto está ocupado:
 
 
 ```text
-/nick alice
+/nick roxy
 ```
 
 Irssi envía `CAP LS` al conectar. El servidor debe responder (`CAP * LS`) y **no desconectar**. A continuación irssi envía `PASS`, `NICK` y `USER`. Debe aparecer la bienvenida (numeric `001` y siguientes).
@@ -150,7 +150,7 @@ irssi
 ```
 
 ```text
-/set nick bob
+/set nick dani
 /connect 127.0.0.1 6667 secret
 ```
 
@@ -160,12 +160,12 @@ Comprobar, como pide el enunciado:
 |---|---|---|
 | Unirse a un canal | `/join #general` | El primer usuario es operador (`@`). El resto ve el `JOIN`. |
 | Mensaje de canal | escribir en `#general` | Todos los miembros reciben el texto. El emisor no tiene por qué verse duplicado de forma anómala. |
-| Mensaje privado | `/msg bob hola` | Solo `bob` lo recibe. |
+| Mensaje privado | `/msg dani hola` | Solo `dani` lo recibe. |
 | Ver/cambiar topic | `/topic Hola mundo` | Los miembros ven el topic nuevo. |
 | Modos de canal | `/mode #general +i` | `JOIN` sin invitación falla. |
-| Invitar | `/invite bob #general` | `bob` recibe `INVITE` y puede entrar con `+i`. |
-| Kick | `/kick bob motivo` | `bob` sale del canal; el resto ve `KICK`. |
-| Operador | `/mode #general +o bob` | `bob` pasa a operador. `/mode #general -o bob` se lo quita. |
+| Invitar | `/invite dani #general` | `dani` recibe `INVITE` y puede entrar con `+i`. |
+| Kick | `/kick dani motivo` | `dani` sale del canal; el resto ve `KICK`. |
+| Operador | `/mode #general +o dani` | `dani` pasa a operador. `/mode #general -o dani` se lo quita. |
 | Clave | `/mode #general +k clave` | `JOIN` exige la clave. |
 | Límite | `/mode #general +l 1` | Un tercer usuario no puede entrar. |
 
@@ -189,24 +189,24 @@ Cliente A:
 
 ```text
 PASS secret
-NICK alice
-USER alice 0 * :Alice
+NICK roxy
+USER roxy 0 * :Roxy
 JOIN #general
 PRIVMSG #general :hola canal
-PRIVMSG bob :hola privado
+PRIVMSG dani :hola privado
 ```
 
-- Debe recibir el `JOIN` de `alice` (si `alice` entra después) o ver a `alice` en `NAMES`.
+- Debe recibir el `JOIN` de `roxy` (si `roxy` entra después) o ver a `roxy` en `NAMES`.
 - Debe recibir `PRIVMSG #general :hola canal`.
 - Debe recibir el privado `hola privado`.
-- `alice` no debe recibir su propio privado dirigido a `bob`.
+- `roxy` no debe recibir su propio privado dirigido a `dani`.
 
-Cliente B (después de registrarse como `bob` y hacer `JOIN #general`):
+Cliente B (después de registrarse como `dani` y hacer `JOIN #general`):
 
 ```text
 PASS secret
-NICK bob
-USER bob 0 * :Bob
+NICK dani
+USER dani 0 * :Dani
 JOIN #general
 ```
 
@@ -214,8 +214,8 @@ Registro incompleto o contraseña mala:
 
 ```text
 PASS wrong
-NICK alice
-USER alice 0 * :Alice
+NICK roxy
+USER roxy 0 * :Roxy
 ```
 
 No debe enviarse `001`. Contraseña incorrecta → `464`. Faltan parámetros → `461`. Comando desconocido → `421`.
@@ -224,14 +224,14 @@ Operadores de canal (cliente A es `@` por haber creado `#general`):
 
 ```text
 MODE #general +i
-INVITE bob #general
+INVITE dani #general
 TOPIC #general :tema
-KICK #general bob :fuera
-MODE #general +o bob
+KICK #general dani :fuera
+MODE #general +o dani
 MODE #general +t
 MODE #general +k secretkey
 MODE #general +l 5
-MODE #general -i-t-k-l-o bob
+MODE #general -i-t-k-l-o dani
 ```
 
 ---
@@ -355,8 +355,8 @@ Cliente A:
 
 ```text
 PASS secret
-NICK alice
-USER alice 0 * :Alice
+NICK roxy
+USER roxy 0 * :Roxy
 JOIN #general
 PRIVMSG #general :hola canal
 ```
@@ -365,12 +365,12 @@ Cliente B:
 
 ```text
 PASS secret
-NICK bob
-USER bob 0 * :Bob
+NICK dani
+USER dani 0 * :Dani
 JOIN #general
 ```
 
-- B debe recibir `:alice!… PRIVMSG #general :hola canal`.
+- B debe recibir `:roxy!… PRIVMSG #general :hola canal`.
 - A no debe recibir su propio mensaje de canal.
 - Un cliente C registrado, sin `JOIN #general`, no debe recibir ese `PRIVMSG`.
 
@@ -389,7 +389,7 @@ Cliente B:
 
 ```text
 JOIN #ops
-KICK #ops alice :fuera
+KICK #ops roxy :fuera
 INVITE charlie #ops
 TOPIC #ops :no deberia
 MODE #ops +i
@@ -415,10 +415,10 @@ TOPIC #alpha :tema alpha
 TOPIC #bravo :tema bravo
 INVITE charlie #alpha
 INVITE charlie #bravo
-MODE #alpha +o bob
-MODE #bravo +o bob
-KICK #alpha bob :fuera
-KICK #bravo bob :fuera
+MODE #alpha +o dani
+MODE #bravo +o dani
+KICK #alpha dani :fuera
+KICK #bravo dani :fuera
 ```
 
 - En `#alpha` y en `#bravo`, B debe ver `MODE`, `TOPIC` y `KICK`.
@@ -443,7 +443,7 @@ Cliente B:
 JOIN #general
 ```
 
-- Tras `JOIN`, `331`/`332`, `353` y `366`, B debe recibir `:alice!… PRIVMSG #general :antes de que entre b`.
+- Tras `JOIN`, `331`/`332`, `353` y `366`, B debe recibir `:roxy!… PRIVMSG #general :antes de que entre b`.
 
 Cliente A:
 
@@ -451,7 +451,7 @@ Cliente A:
 PRIVMSG #general :despues de que entre b
 ```
 
-- B debe recibir `:alice!… PRIVMSG #general :despues de que entre b`.
+- B debe recibir `:roxy!… PRIVMSG #general :despues de que entre b`.
 
 ### 5. Canal solo por invitación (`+i`)
 
@@ -474,7 +474,7 @@ JOIN #invite
 Opcional, para confirmar que la invitación desbloquea la entrada:
 
 ```text
-INVITE bob #invite
+INVITE dani #invite
 ```
 
 Cliente B:
@@ -540,14 +540,14 @@ Los mismos casos que la sección 11, con el cliente de referencia. Servidor en m
 Cliente A:
 
 ```text
-/set nick alice
+/set nick roxy
 /connect 127.0.0.1 6667 secret
 ```
 
 Cliente B:
 
 ```text
-/set nick bob
+/set nick dani
 /connect 127.0.0.1 6667 secret
 ```
 
@@ -599,7 +599,7 @@ Cliente B:
 
 ```text
 /join #ops
-/kick alice fuera
+/kick roxy fuera
 /invite charlie #ops
 /topic no deberia
 /mode #ops +i
@@ -625,10 +625,10 @@ Cliente A:
 /topic #bravo tema bravo
 /invite charlie #alpha
 /invite charlie #bravo
-/mode #alpha +o bob
-/mode #bravo +o bob
-/kick #alpha bob fuera
-/kick #bravo bob fuera
+/mode #alpha +o dani
+/mode #bravo +o dani
+/kick #alpha dani fuera
+/kick #bravo dani fuera
 ```
 
 - En `#alpha` y en `#bravo`, B debe ver el cambio de modo, el topic nuevo y el `KICK`.
@@ -691,7 +691,7 @@ Opcional, para confirmar que la invitación desbloquea la entrada.
 Cliente A:
 
 ```text
-/invite bob #invite
+/invite dani #invite
 ```
 
 Cliente B:
