@@ -1,5 +1,6 @@
 #include "ProtocolTestHarness.hpp"
 
+
 /**
  * @brief Phase 14 — setting, replacing and clearing a topic broadcasts the
  * TOPIC message with the sender's full prefix to every member, including the

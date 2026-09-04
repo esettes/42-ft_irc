@@ -266,4 +266,9 @@ test-protocol-suites: $(NAME) ## 🧪 Runs split protocol suites (TOPIC, INVITE,
 run: ## 🚀 Runs the server
 	@./$(NAME) 6667 secret
 
-.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites run
+lint: ## Run cpplint on source and header files (pipx install cpplint)
+	@$(call print_banner,Running cpplint)
+	@cpplint --filter=-build/include_what_you_use --recursive --exclude=src/tests/* src inc
+	@$(call print_success,cpplint completed successfully!)
+
+.PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites run lint
