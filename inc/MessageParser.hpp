@@ -12,10 +12,10 @@
  */
 class MessageParser {
  private:
-        MessageParser();
+    MessageParser();
 
  public:
-        static IrcMessage parse(const std::string &line);
+    static IrcMessage parse(const std::string &line);
 };
 
 #endif  // INC_MESSAGEPARSER_HPP_

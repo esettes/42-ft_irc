@@ -29,62 +29,62 @@ class Client;
 */
 class Channel {
  private:
-        std::string name;
-        std::string topic;
+       std::string name;
+       std::string topic;
 
-        std::set<Client *> members;
-        std::set<Client *> operators;
-        std::set<Client *> invitedClients;
+       std::set<Client *> members;
+       std::set<Client *> operators;
+       std::set<Client *> invitedClients;
 
-        bool inviteOnly;
-        bool topicRestricted;
-        bool keyEnabled;
-        bool limitEnabled;
+       bool inviteOnly;
+       bool topicRestricted;
+       bool keyEnabled;
+       bool limitEnabled;
 
-        std::string channelKey;
-        std::size_t userLimit;
-        std::vector<std::string> messageHistory;
+       std::string channelKey;
+       std::size_t userLimit;
+       std::vector<std::string> messageHistory;
 
  public:
-        explicit Channel(const std::string &channelName);
-        ~Channel();
-        const std::string &getName() const;
+       explicit Channel(const std::string &channelName);
+       ~Channel();
+       const std::string &getName() const;
 
-        const std::string &getTopic() const;
-        void setTopic(const std::string &newTopic);
+       const std::string &getTopic() const;
+       void setTopic(const std::string &newTopic);
 
-        void addMember(Client *client);
-        void removeMember(Client *client);
-        bool hasMember(const Client *client) const;
-        std::size_t getMemberCount() const;
-        bool isEmpty() const;
-        const std::set<Client *> &getMembers() const;
+       void addMember(Client *client);
+       void removeMember(Client *client);
+       bool hasMember(const Client *client) const;
+       std::size_t getMemberCount() const;
+       bool isEmpty() const;
+       const std::set<Client *> &getMembers() const;
 
-        void addOperator(Client *client);
-        void removeOperator(Client *client);
-        bool hasOperator(const Client *client) const;
+       void addOperator(Client *client);
+       void removeOperator(Client *client);
+       bool hasOperator(const Client *client) const;
 
-        void inviteClient(Client *client);
-        void removeInvitation(Client *client);
-        bool hasInvitation(const Client *client) const;
-        bool isInviteOnly() const;
-        void setInviteOnly(bool enabled);
+       void inviteClient(Client *client);
+       void removeInvitation(Client *client);
+       bool hasInvitation(const Client *client) const;
+       bool isInviteOnly() const;
+       void setInviteOnly(bool enabled);
 
-        bool isTopicRestricted() const;
-        void setTopicRestricted(bool enabled);
+       bool isTopicRestricted() const;
+       void setTopicRestricted(bool enabled);
 
-        bool isKeyEnabled() const;
-        const std::string &getKey() const;
-        void setKey(const std::string &newKey);
-        void removeKey();
+       bool isKeyEnabled() const;
+       const std::string &getKey() const;
+       void setKey(const std::string &newKey);
+       void removeKey();
 
-        bool isLimitEnabled() const;
-        std::size_t getUserLimit() const;
-        void setUserLimit(std::size_t newLimit);
-        void removeUserLimit();
+       bool isLimitEnabled() const;
+       std::size_t getUserLimit() const;
+       void setUserLimit(std::size_t newLimit);
+       void removeUserLimit();
 
-        void addHistoryMessage(const std::string &serializedMessage);
-        const std::vector<std::string> &getMessageHistory() const;
+       void addHistoryMessage(const std::string &serializedMessage);
+       const std::vector<std::string> &getMessageHistory() const;
 };
 
 #endif  // INC_CHANNEL_HPP_

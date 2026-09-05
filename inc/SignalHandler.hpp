@@ -12,17 +12,16 @@
  */
 class SignalHandler {
  private:
-        static volatile sig_atomic_t shutdownRequested;
+       static volatile sig_atomic_t shutdownRequested;
 
-        static void handleTerminationSignal(int signalNumber);
+       static void handleTerminationSignal(int signalNumber);
 
-        SignalHandler();
-        SignalHandler(const SignalHandler &other);
-        SignalHandler &operator=(const SignalHandler &other);
+       SignalHandler();
+       SignalHandler(const SignalHandler &other);
 
  public:
-        static void runSignalHandler();
-        static bool isShutdownRequested();
+       static void runSignalHandler();
+       static bool isShutdownRequested();
 };
 
 #endif  // INC_SIGNALHANDLER_HPP_

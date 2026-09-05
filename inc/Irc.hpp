@@ -55,12 +55,6 @@ const std::string DEFAULT_SERVER_NAME = "irc.42.local";
 const std::string INVALID_SERVER_PORT_MSG = "invalid server port";
 const std::string EMPTY_PASSWORD_MSG = "password cannot be empty";
 
-const std::string BOT_NICKNAME = "marvin";
-const std::string BOT_USERNAME = "bot";
-const std::string BOT_REALNAME = "ft_irc helper bot";
-const std::string BOT_HOST = "bot.local";
-const std::string BOT_HOME_CHANNEL = "#bot";
-const std::string BOT_HOME_TOPIC = "Ask me with !help or /msg marvin help";
 const std::string BOT_VERSION = "ft_irc bot 1.0";
 const std::string BOT_VERSION_CXX98 = "ft_irc bot 1.0 (C++98)";
 const std::string BOT_HELP = "Commands: help, ping, time, date, info, uptime, "

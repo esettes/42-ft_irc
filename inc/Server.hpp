@@ -43,152 +43,148 @@ class Bot;
  */
 class Server {
  private:
-        int port;
-        std::string password;
-        std::string serverName;
-        int listenSocket;
-        CommandDispatcher dispatcher;
+    int port;
+    std::string password;
+    std::string serverName;
+    int listenSocket;
+    CommandDispatcher dispatcher;
 
-        std::vector<struct pollfd> pollFds;
-        std::map<int, Client *> clients;
-        std::map<std::string, Client *> clientsByNickname;
-        std::map<std::string, Channel> channels;
-        Bot *bot;
+    std::vector<struct pollfd> pollFds;
+    std::map<int, Client *> clients;
+    std::map<std::string, Client *> clientsByNickname;
+    std::map<std::string, Channel> channels;
+    Bot *bot;
 
-        void createListeningSocket();
-        void registerListeningSocket();
-        void pauseAcceptingConnections();
-        void resumeAcceptingConnections();
+    void createListeningSocket();
+    void registerListeningSocket();
+    void pauseAcceptingConnections();
+    void resumeAcceptingConnections();
 
-        void acceptClient();
-        void configureSocketAsNonBlocking(int socketFd);
+    void acceptClient();
+    void configureSocketAsNonBlocking(int socketFd);
 
-        bool receiveClientData(std::size_t descriptorIndex);
-        void disconnectClient(int clientSocketFd, const std::string &reason);
-        void removeClient(std::size_t descriptorIndex);
-        void removeNicknameIndexEntry(const Client &client);
+    bool receiveClientData(std::size_t descriptorIndex);
+    void disconnectClient(int clientSocketFd, const std::string &reason);
+    void removeNicknameIndexEntry(const Client &client);
 
-        bool processClientBuffer(Client &client);
+    bool processClientBuffer(Client &client);
 
-        void tryRegisterClient(Client &client);
-        void sendWelcomeMessages(Client &client);
+    void tryRegisterClient(Client &client);
+    void sendWelcomeMessages(Client &client);
 
-        bool flushClientOutput(int socketFd);
-        void updateClientPollEvents(int socketFd);
-        std::string resolveClientHost(
-            const struct sockaddr_storage &clientAddress,
-            socklen_t clientAddressLength) const;
+    bool flushClientOutput(int socketFd);
+    void updateClientPollEvents(int socketFd);
+    std::string resolveClientHost(
+        const struct sockaddr_storage &clientAddress,
+        socklen_t clientAddressLength) const;
 
-        std::string getReplyTarget(const Client &client) const;
-        Server(const Server &other);
-        Server &operator=(const Server &other);
+    std::string getReplyTarget(const Client &client) const;
+    Server(const Server &other);
 
-        void closeAllFds();
-        void closeFd(int &fd);
+    void closeAllFds();
+    void closeFd(int &fd);
 
-        void displayStartupInformation() const;
+    void displayStartupInformation() const;
 
  public:
-        Server(int port, const std::string &password);
-        ~Server();
+    Server(int port, const std::string &password);
+    ~Server();
 
-        void run();
-        void stop();
+    void run();
 
-        int getPort() const;
-        const std::string &getServerName() const;
-        bool isPasswordCorrect(const std::string &providedPassword) const;
+    const std::string &getServerName() const;
+    bool isPasswordCorrect(const std::string &providedPassword) const;
 
-        std::string getServerPrefix() const;
-        std::string getClientPrefix(const Client &client) const;
+    std::string getServerPrefix() const;
+    std::string getClientPrefix(const Client &client) const;
 
-        std::string normalizeNickname(const std::string &nickname) const;
-        bool assignNickname(Client &client, const std::string &nickname);
-        bool isValidNickname(const std::string &nickname) const;
+    std::string normalizeNickname(const std::string &nickname) const;
+    bool assignNickname(Client &client, const std::string &nickname);
+    bool isValidNickname(const std::string &nickname) const;
 
-        std::string normalizeChannelName(const std::string &channelName) const;
-        bool isValidChannelName(const std::string &channelName) const;
-        Client *findClientByNickname(const std::string &nickname);
-        Channel *findChannel(const std::string &channelName);
-        Channel *findOrCreateChannel(const std::string &channelName);
-        void addClientToChannel(Client &client, Channel &channel);
-        void removeClientFromChannel(Client &client, Channel &channel);
-        void removeChannelIfEmpty(const std::string &channelName);
-        void detachClientFromChannels(Client &client);
-        bool validateChannelJoinAccess(
-            Client &client,
-            const Channel &channel,
-            const std::string &providedKey);
-        void sendChannelTopic(
-            Client &client,
-            const Channel &channel);
-        void sendChannelNames(
-            Client &client,
-            const Channel &channel);
-        void sendChannelHistory(
-            Client &client,
-            const Channel &channel);
-        std::string buildNumericReply(
-            int numericCode,
-            const Client &client,
-            const std::string &trailingMessage) const;
-        std::string buildNumericReply(
-            int numericCode,
-            const Client &client,
-            const std::string &parameter,
-            const std::string &trailingMessage) const;
-        std::string buildNumericReply(
-            int numericCode,
-            const Client &client,
-            const std::vector<std::string> &parameters,
-            const std::string &trailingMessage) const;
-        std::string buildNumericReply(
-            int numericCode,
-            const Client &client,
-            const std::vector<std::string> &parameters) const;
+    std::string normalizeChannelName(const std::string &channelName) const;
+    bool isValidChannelName(const std::string &channelName) const;
+    Client *findClientByNickname(const std::string &nickname);
+    Channel *findChannel(const std::string &channelName);
+    Channel *findOrCreateChannel(const std::string &channelName);
+    void addClientToChannel(Client &client, Channel &channel);
+    void removeClientFromChannel(Client &client, Channel &channel);
+    void removeChannelIfEmpty(const std::string &channelName);
+    void detachClientFromChannels(Client &client);
+    bool validateChannelJoinAccess(
+        Client &client,
+        const Channel &channel,
+        const std::string &providedKey);
+    void sendChannelTopic(
+        Client &client,
+        const Channel &channel);
+    void sendChannelNames(
+        Client &client,
+        const Channel &channel);
+    void sendChannelHistory(
+        Client &client,
+        const Channel &channel);
+    std::string buildNumericReply(
+        int numericCode,
+        const Client &client,
+        const std::string &trailingMessage) const;
+    std::string buildNumericReply(
+        int numericCode,
+        const Client &client,
+        const std::string &parameter,
+        const std::string &trailingMessage) const;
+    std::string buildNumericReply(
+        int numericCode,
+        const Client &client,
+        const std::vector<std::string> &parameters,
+        const std::string &trailingMessage) const;
+    std::string buildNumericReply(
+        int numericCode,
+        const Client &client,
+        const std::vector<std::string> &parameters) const;
 
-        void queueMessage(Client &client, const std::string &message);
-        void queueMessageToChannel(
-            const Channel &channel,
-            const std::string &message);
-        void releaseNickname(const Client &client);
-        std::size_t getRegisteredNicknameCount() const;
-        bool isBotClient(const Client &client) const;
-        void notifyBotPrivateMessage(
-            Client &sender,
-            const std::string &text);
-        void notifyBotChannelMessage(
-            Client &sender,
-            Channel &channel,
-            const std::string &text);
-        void notifyBotInvite(Channel &channel);
-        void notifyBotKick(
-            const Client &target,
-            const std::string &channelName);
-        void queueMessageToRelatedClients(
-            Client &sourceClient,
-            const std::string &message);
-        void queueNumericReply(
-            Client &client,
-            int numericCode,
-            const std::string &trailingMessage);
-        void queueNumericReply(
-            Client &client,
-            int numericCode,
-            const std::string &parameter,
-            const std::string &trailingMessage);
-        void queueNumericReply(
-            Client &client,
-            int numericCode,
-            const std::vector<std::string> &parameters,
-            const std::string &trailingMessage);
-        void queueNumericReply(
-            Client &client,
-            int numericCode,
-            const std::vector<std::string> &parameters);
+    void queueMessage(Client &client, const std::string &message);
+    void queueMessageToChannel(
+        const Channel &channel,
+        const std::string &message);
+    void releaseNickname(const Client &client);
+    std::size_t getRegisteredNicknameCount() const;
+    bool isBotClient(const Client &client) const;
+    void notifyBotPrivateMessage(
+        Client &sender,
+        const std::string &text);
+    void notifyBotChannelMessage(
+        Client &sender,
+        Channel &channel,
+        const std::string &text);
+    void notifyBotInvite(Channel &channel);
+    void notifyBotKick(
+        const Client &target,
+        const std::string &channelName);
+    void queueMessageToRelatedClients(
+        Client &sourceClient,
+        const std::string &message);
+    void queueNumericReply(
+        Client &client,
+        int numericCode,
+        const std::string &trailingMessage);
+    void queueNumericReply(
+        Client &client,
+        int numericCode,
+        const std::string &parameter,
+        const std::string &trailingMessage);
+    void queueNumericReply(
+        Client &client,
+        int numericCode,
+        const std::vector<std::string> &parameters,
+        const std::string &trailingMessage);
+    void queueNumericReply(
+        Client &client,
+        int numericCode,
+        const std::vector<std::string> &parameters);
 
-        /* For send parsed commands to the dispatcher */
-        void dispatchCommand(Client &client, const IrcMessage &message);
+    /* For send parsed commands to the dispatcher */
+    void dispatchCommand(Client &client, const IrcMessage &message);
 };
 
 #endif  // INC_SERVER_HPP_
