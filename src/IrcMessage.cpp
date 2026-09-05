@@ -41,9 +41,6 @@ void validateMiddleParameter(const std::string &parameter) {
 }
 }  // namespace
 
-/**
- * 
- */
 IrcMessage::IrcMessage(
         const std::string &msgCmd,
         const std::vector<std::string> &msgParams,

@@ -53,7 +53,8 @@ void Server::configureSocketAsNonBlocking(int socketFd) {
     }
 }
 
-/** @brief Creates the listening socket.
+/**
+ * @brief Creates the listening socket.
  * Sets the SO_REUSEADDR option.
  * Describes the server's address and binds the socket to it.
  * Starts listening for incoming connections.
