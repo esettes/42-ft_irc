@@ -1,10 +1,12 @@
+// Copyright 2026 @esettes, @danielfdez17
+#include <netdb.h>
+#include <set>
+#include <utility>
+
 #include "Server.hpp"
 #include "Console.hpp"
 #include "MessageParser.hpp"
 #include "Bot.hpp"
-#include <netdb.h>
-#include <set>
-#include <utility>
 
 /** por el momento debe:
  * 
@@ -21,20 +23,21 @@
  * 
  */
 
-namespace
-{
-    const int INVALID_FD = -1;
-    const int POLL_TIMEOUT_MS = 1000;
-    const std::size_t RECEIVE_BUFFER_SIZE = 4096;
-    const std::size_t MAX_SEND_SIZE = 16384;
-    const char *DEFAULT_SERVER_NAME = "irc.42.local";
-    const char *UNKNOWN_CLIENT_HOST = "unknown";
+namespace {
+const int INVALID_FD = -1;
+const int POLL_TIMEOUT_MS = 1000;
+const std::size_t RECEIVE_BUFFER_SIZE = 4096;
+const std::size_t MAX_SEND_SIZE = 16384;
+const char *DEFAULT_SERVER_NAME = "irc.42.local";
+const char *UNKNOWN_CLIENT_HOST = "unknown";
 
-    std::runtime_error createSystemError(const std::string &operation, int errorNumber)
-    {
-        return std::runtime_error(operation + ": " + std::strerror(errorNumber));
-    }
+std::runtime_error createSystemError(
+    const std::string &operation,
+    int errorNumber) {
+        return std::runtime_error(
+            operation + ": " + std::strerror(errorNumber));
 }
+}  // namespace
 
 Server::Server(int port, const std::string &password)
     : port(port),
@@ -42,8 +45,7 @@ Server::Server(int port, const std::string &password)
       serverName(DEFAULT_SERVER_NAME),
       listenSocket(INVALID_FD),
       dispatcher(*this),
-      bot(NULL)
-{
+      bot(NULL) {
     if (port < 1 || port > 65535)
         throw std::invalid_argument("invalid server port");
 
@@ -57,17 +59,14 @@ Server::Server(int port, const std::string &password)
     displayStartupInformation();
 }
 
-void Server::configureSocketAsNonBlocking(int socketFd)
-{
+void Server::configureSocketAsNonBlocking(int socketFd) {
     const int currentFlags = ::fcntl(socketFd, F_GETFL, 0);
 
-    if (currentFlags == -1)
-    {
+    if (currentFlags == -1) {
         const int errorNumber = errno;
         throw createSystemError("fcntl F_GETFL", errorNumber);
     }
-    if (::fcntl(socketFd, F_SETFL, currentFlags | O_NONBLOCK) == -1)
-    {
+    if (::fcntl(socketFd, F_SETFL, currentFlags | O_NONBLOCK) == -1) {
         const int errorNumber = errno;
         throw createSystemError("fcntl F_SETFL", errorNumber);
     }
@@ -78,50 +77,50 @@ void Server::configureSocketAsNonBlocking(int socketFd)
  * Describes the server's address and binds the socket to it.
  * Starts listening for incoming connections.
 */
-void Server::createListeningSocket()
-{
+void Server::createListeningSocket() {
     listenSocket = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listenSocket == INVALID_FD)
         throw createSystemError("socket", errno);
 
-    try 
-    {
+    try {
         configureSocketAsNonBlocking(listenSocket);
     }
-    catch (...)
-    {
+    catch (...) {
         closeFd(listenSocket);
         throw createSystemError("non-blocking configuration failed", errno);
     }
 
     int reuseAddr = 1;
 
-    if (::setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr)) == -1)
-    {
+    if (::setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &reuseAddr,
+            sizeof(reuseAddr)) == -1) {
         const int errorNumber = errno;
 
         closeFd(listenSocket);
         throw createSystemError("setsockopt", errorNumber);
     }
-    
+
     struct sockaddr_in serverAddress;
     std::memset(&serverAddress, 0, sizeof(serverAddress));
-    serverAddress.sin_family = AF_INET; // ipv4
-    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);  // accepts connections that are directed to any ipv4 interface of the server machine
-    serverAddress.sin_port = htons(static_cast<unsigned short>(port));  // listen port
+    // ipv4
+    serverAddress.sin_family = AF_INET;
+    // accepts connections that are directed to any ipv4 interface
+    // of the server machine
+    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+    // listen port
+    serverAddress.sin_port = htons(static_cast<int16_t>(port));
 
     if (::bind(listenSocket,
-        reinterpret_cast<const struct sockaddr *>(&serverAddress),  // address cast to sockaddr pointer
-        sizeof(serverAddress)) == -1)
-    {
+        // address cast to sockaddr pointer
+        reinterpret_cast<const struct sockaddr *>(&serverAddress),
+        sizeof(serverAddress)) == -1) {
         const int errorNumber = errno;
 
         closeFd(listenSocket);
         throw createSystemError("bind", errorNumber);
     }
 
-    if (::listen(listenSocket,SOMAXCONN) == -1)
-    {
+    if (::listen(listenSocket, SOMAXCONN) == -1) {
         const int errorNumber = errno;
 
         closeFd(listenSocket);
@@ -142,26 +141,22 @@ void Server::createListeningSocket()
  * A failure while configuring or registering a socket that accept() already
  * returned closes that descriptor and continues; it does not stop the server.
  */
-void Server::acceptClient()
-{
+void Server::acceptClient() {
     struct sockaddr_storage clientAddress;
     std::memset(&clientAddress, 0, sizeof(clientAddress));
     socklen_t clientAddressLength = sizeof(clientAddress);
     const int clientSocketFd = ::accept(
         listenSocket,
         reinterpret_cast<struct sockaddr *>(&clientAddress),
-        &clientAddressLength
-    );
+        &clientAddressLength);
 
-    if (clientSocketFd == INVALID_FD)
-    {
+    if (clientSocketFd == INVALID_FD) {
         const int errorNumber = errno;
 
         if (errorNumber == EAGAIN
             || errorNumber == EWOULDBLOCK
             || errorNumber == EINTR
-            || errorNumber == ECONNABORTED)
-        {
+            || errorNumber == ECONNABORTED) {
             return;
         }
 
@@ -176,18 +171,20 @@ void Server::acceptClient()
     Client *newClient = NULL;
     bool clientWasRegistered = false;
 
-    try
-    {
+    try {
         configureSocketAsNonBlocking(clientSocketFd);
 
-        const std::string clientHost = resolveClientHost(clientAddress, clientAddressLength);
+        const std::string clientHost = resolveClientHost(
+            clientAddress,
+            clientAddressLength);
         newClient = new Client(clientSocketFd, clientHost);
 
-        const std::pair<std::map<int, Client *>::iterator, bool
-        > insertionResult = clients.insert(std::make_pair(clientSocketFd, newClient));
+        const std::pair<std::map<int, Client *>::iterator, bool>
+            insertionResult = clients.insert(std::make_pair(
+                clientSocketFd,
+                newClient));
 
-        if (!insertionResult.second)
-        {
+        if (!insertionResult.second) {
             throw std::logic_error("client descriptor is already registered");
         }
 
@@ -201,8 +198,7 @@ void Server::acceptClient()
 
         pollFds.push_back(clientDescriptor);
     }
-    catch (const std::exception &error)
-    {
+    catch (const std::exception &error) {
         if (clientWasRegistered)
             clients.erase(clientSocketFd);
 
@@ -215,17 +211,20 @@ void Server::acceptClient()
         return;
     }
 
-    std::cout << Console::CLIENT << " Connection accepted: fd=" << clientSocketFd
-        << ", host=" << newClient->getHost() << std::endl;
+    std::cout
+        << Console::CLIENT
+        << " Connection accepted: fd="
+        << clientSocketFd
+        << ", host="
+        << newClient->getHost()
+        << std::endl;
 }
 
-void Server::pauseAcceptingConnections()
-{
+void Server::pauseAcceptingConnections() {
     if (pollFds.empty())
         return;
 
-    if (pollFds[0].events & POLLIN)
-    {
+    if (pollFds[0].events & POLLIN) {
         std::cerr << Console::WARNING
             << " Pausing accept"
             << std::endl;
@@ -234,13 +233,11 @@ void Server::pauseAcceptingConnections()
     pollFds[0].events = 0;
 }
 
-void Server::resumeAcceptingConnections()
-{
+void Server::resumeAcceptingConnections() {
     if (pollFds.empty() || pollFds[0].fd == INVALID_FD)
         return;
 
-    if ((pollFds[0].events & POLLIN) == 0)
-    {
+    if ((pollFds[0].events & POLLIN) == 0) {
         std::cout << Console::SERVER
             << " Resuming accept" << std::endl;
     }
@@ -254,8 +251,7 @@ void Server::resumeAcceptingConnections()
  * It adds the listening socket to the pollFds vector with the POLLIN event.
  * POLLOUT not activated because the listening socket is not used for writing.
  */
-void Server::registerListeningSocket()
-{
+void Server::registerListeningSocket() {
     pollfd listeningDescriptor;
 
     listeningDescriptor.fd = listenSocket;
@@ -265,8 +261,7 @@ void Server::registerListeningSocket()
     pollFds.push_back(listeningDescriptor);
 }
 
-void Server::displayStartupInformation() const
-{
+void Server::displayStartupInformation() const {
     std::cout
         << "IRC server configuration:" << std::endl
         << "  Server name: " << serverName << std::endl
@@ -282,10 +277,10 @@ void Server::displayStartupInformation() const
 std::string Server::resolveClientHost(
     const struct sockaddr_storage &clientAddress,
     socklen_t clientAddressLength
-) const
-{
+) const {
     char hostBuffer[NI_MAXHOST];
-    const struct sockaddr *addressPtr = reinterpret_cast<const struct sockaddr *>(&clientAddress);
+    const struct sockaddr *addressPtr =
+        reinterpret_cast<const struct sockaddr *>(&clientAddress);
 
     const int reverseLookupResult = ::getnameinfo(
         addressPtr,
@@ -294,8 +289,7 @@ std::string Server::resolveClientHost(
         sizeof(hostBuffer),
         NULL,
         0,
-        NI_NAMEREQD
-    );
+        NI_NAMEREQD);
 
     if (reverseLookupResult == 0)
         return std::string(hostBuffer);
@@ -307,8 +301,7 @@ std::string Server::resolveClientHost(
         sizeof(hostBuffer),
         NULL,
         0,
-        NI_NUMERICHOST
-    );
+        NI_NUMERICHOST);
 
     if (numericLookupResult == 0)
         return std::string(hostBuffer);
@@ -316,18 +309,19 @@ std::string Server::resolveClientHost(
     return UNKNOWN_CLIENT_HOST;
 }
 
-std::string Server::getServerPrefix() const
-{
+std::string Server::getServerPrefix() const {
     return serverName;
 }
 
-std::string Server::getClientPrefix(const Client &client) const
-{
-    return client.getNickname() + "!" + client.getUsername() + "@" + client.getHost();
+std::string Server::getClientPrefix(const Client &client) const {
+    return client.getNickname()
+        + "!"
+        + client.getUsername()
+        + "@"
+        + client.getHost();
 }
 
-std::string Server::normalizeNickname(const std::string &nickname) const
-{
+std::string Server::normalizeNickname(const std::string &nickname) const {
     return IrcCasemap::normalize(nickname);
 }
 
@@ -342,8 +336,7 @@ std::string Server::normalizeNickname(const std::string &nickname) const
  * 
  * Strict ASCII validation.
  */
-bool Server::isValidNickname(const std::string &nickname) const
-{
+bool Server::isValidNickname(const std::string &nickname) const {
     if (nickname.empty())
         return false;
 
@@ -361,8 +354,7 @@ bool Server::isValidNickname(const std::string &nickname) const
     if (!firstCharIsLetter && !firstCharIsSpecial)
         return false;
 
-    for (std::string::size_type i = 1; i < nickname.size(); ++i)
-    {
+    for (std::string::size_type i = 1; i < nickname.size(); ++i) {
         const char currentChar = nickname[i];
 
         const bool currentCharIsLetter =
@@ -379,8 +371,7 @@ bool Server::isValidNickname(const std::string &nickname) const
         if (!currentCharIsLetter
             && !currentCharIsDigit
             && !currentCharIsSpecial
-            && currentChar != '-')
-        {
+            && currentChar != '-') {
             return false;
         }
     }
@@ -397,8 +388,7 @@ bool Server::isValidNickname(const std::string &nickname) const
  * Ownership verification takes place before the previous nickname is removed.
  * Therefore, if the new one is taken, the client retains their current nickname unchanged.
  */
-bool Server::assignNickname(Client &client, const std::string &nickname)
-{
+bool Server::assignNickname(Client &client, const std::string &nickname) {
     const std::string normalizedNickname = normalizeNickname(nickname);
 
     if (normalizedNickname.empty())
@@ -408,13 +398,11 @@ bool Server::assignNickname(Client &client, const std::string &nickname)
         clientsByNickname.find(normalizedNickname);
 
     if (nicknameIt != clientsByNickname.end()
-        && nicknameIt->second != &client)
-    {
+        && nicknameIt->second != &client) {
         return false;
     }
 
-    if (client.isNicknameReceived())
-    {
+    if (client.isNicknameReceived()) {
         const std::string previousNormalizedNickname =
             normalizeNickname(client.getNickname());
 
@@ -429,8 +417,7 @@ bool Server::assignNickname(Client &client, const std::string &nickname)
     return true;
 }
 
-std::string Server::normalizeChannelName(const std::string &channelName) const
-{
+std::string Server::normalizeChannelName(const std::string &channelName) const {
     return IrcCasemap::normalize(channelName);
 }
 
@@ -442,13 +429,11 @@ std::string Server::normalizeChannelName(const std::string &channelName) const
  * @param channelName The channel name to validate.
  * @return true if the channel name is valid, false otherwise.
  */
-bool Server::isValidChannelName(const std::string &channelName) const
-{
+bool Server::isValidChannelName(const std::string &channelName) const {
     const std::size_t maximumChannelNameLength = 50;
 
     if (channelName.size() < 2
-        || channelName.size() > maximumChannelNameLength)
-    {
+        || channelName.size() > maximumChannelNameLength) {
         return false;
     }
 
@@ -457,16 +442,14 @@ bool Server::isValidChannelName(const std::string &channelName) const
 
     for (std::string::size_type characterIndex = 1;
         characterIndex < channelName.size();
-        ++characterIndex)
-    {
+        ++characterIndex) {
         const unsigned char currentCharacter =
             static_cast<unsigned char>(channelName[characterIndex]);
 
         if (currentCharacter <= 32
             || currentCharacter == 127
             || currentCharacter == ','
-            || currentCharacter == ':')
-        {
+            || currentCharacter == ':') {
             return false;
         }
     }
@@ -474,8 +457,7 @@ bool Server::isValidChannelName(const std::string &channelName) const
     return true;
 }
 
-Client *Server::findClientByNickname(const std::string &nickname)
-{
+Client *Server::findClientByNickname(const std::string &nickname) {
     const std::string normalizedNickname = normalizeNickname(nickname);
 
     if (normalizedNickname.empty())
@@ -490,26 +472,22 @@ Client *Server::findClientByNickname(const std::string &nickname)
     return nicknameIterator->second;
 }
 
-void Server::releaseNickname(const Client &client)
-{
+void Server::releaseNickname(const Client &client) {
     removeNicknameIndexEntry(client);
 }
 
-std::size_t Server::getRegisteredNicknameCount() const
-{
+std::size_t Server::getRegisteredNicknameCount() const {
     return clientsByNickname.size();
 }
 
-bool Server::isBotClient(const Client &client) const
-{
+bool Server::isBotClient(const Client &client) const {
     return bot != NULL && bot->owns(client);
 }
 
 void Server::notifyBotPrivateMessage(
     Client &sender,
     const std::string &text
-)
-{
+) {
     if (bot == NULL || bot->owns(sender))
         return;
 
@@ -520,16 +498,14 @@ void Server::notifyBotChannelMessage(
     Client &sender,
     Channel &channel,
     const std::string &text
-)
-{
+) {
     if (bot == NULL || bot->owns(sender))
         return;
 
     bot->handleChannelMessage(sender, channel, text);
 }
 
-void Server::notifyBotInvite(Channel &channel)
-{
+void Server::notifyBotInvite(Channel &channel) {
     if (bot == NULL)
         return;
 
@@ -539,16 +515,14 @@ void Server::notifyBotInvite(Channel &channel)
 void Server::notifyBotKick(
     const Client &target,
     const std::string &channelName
-)
-{
+) {
     if (bot == NULL || !bot->owns(target))
         return;
 
     bot->handleKick(channelName);
 }
 
-Channel *Server::findChannel(const std::string &channelName)
-{
+Channel *Server::findChannel(const std::string &channelName) {
     const std::string normalizedChannelName = normalizeChannelName(channelName);
 
     if (normalizedChannelName.empty())
@@ -575,8 +549,7 @@ Channel *Server::findChannel(const std::string &channelName)
  * @return A pointer to the existing or newly created channel, or NULL when
  * the supplied name is invalid.
  */
-Channel *Server::findOrCreateChannel(const std::string &channelName)
-{
+Channel *Server::findOrCreateChannel(const std::string &channelName) {
     if (!isValidChannelName(channelName))
         return NULL;
 
@@ -593,9 +566,7 @@ Channel *Server::findOrCreateChannel(const std::string &channelName)
         insertionResult = channels.insert(
             std::make_pair(
                 normalizedChannelName,
-                Channel(channelName)
-            )
-        );
+                Channel(channelName)));
 
     return &insertionResult.first->second;
 }
@@ -612,8 +583,7 @@ Channel *Server::findOrCreateChannel(const std::string &channelName)
  * @param client The client joining the channel.
  * @param channel The channel the client is joining.
  */
-void Server::addClientToChannel(Client &client, Channel &channel)
-{
+void Server::addClientToChannel(Client &client, Channel &channel) {
     if (channel.hasMember(&client))
         return;
 
@@ -640,8 +610,7 @@ void Server::addClientToChannel(Client &client, Channel &channel)
  * @param client The client leaving the channel.
  * @param channel The channel the client is leaving.
  */
-void Server::removeClientFromChannel(Client &client, Channel &channel)
-{
+void Server::removeClientFromChannel(Client &client, Channel &channel) {
     if (!channel.hasMember(&client))
         return;
 
@@ -655,8 +624,7 @@ void Server::removeClientFromChannel(Client &client, Channel &channel)
 /**
  * @brief Deletes a channel from the server map when it has no members left.
  */
-void Server::removeChannelIfEmpty(const std::string &channelName)
-{
+void Server::removeChannelIfEmpty(const std::string &channelName) {
     Channel *channel = findChannel(channelName);
 
     if (channel == NULL || !channel->isEmpty())
@@ -669,20 +637,17 @@ void Server::removeChannelIfEmpty(const std::string &channelName)
  * @brief Removes a disconnecting client from every channel membership and
  * invitation list, then deletes channels that become empty.
  */
-void Server::detachClientFromChannels(Client &client)
-{
+void Server::detachClientFromChannels(Client &client) {
     std::vector<std::string> emptyChannelNames;
     std::map<std::string, Channel>::iterator channelIterator =
         channels.begin();
 
-    while (channelIterator != channels.end())
-    {
+    while (channelIterator != channels.end()) {
         Channel &channel = channelIterator->second;
 
         channel.removeInvitation(&client);
 
-        if (channel.hasMember(&client))
-        {
+        if (channel.hasMember(&client)) {
             channel.removeMember(&client);
             client.leaveChannel(channel.getName());
 
@@ -696,8 +661,7 @@ void Server::detachClientFromChannels(Client &client)
     std::vector<std::string>::const_iterator emptyChannelIterator =
         emptyChannelNames.begin();
 
-    while (emptyChannelIterator != emptyChannelNames.end())
-    {
+    while (emptyChannelIterator != emptyChannelNames.end()) {
         channels.erase(*emptyChannelIterator);
         ++emptyChannelIterator;
     }
@@ -722,41 +686,34 @@ bool Server::validateChannelJoinAccess(
     Client &client,
     const Channel &channel,
     const std::string &providedKey
-)
-{
+) {
     if (channel.isLimitEnabled()
-        && channel.getMemberCount() >= channel.getUserLimit())
-    {
+        && channel.getMemberCount() >= channel.getUserLimit()) {
         queueNumericReply(
             client,
             NumericReply::ERR_CHANNELISFULL,
             channel.getName(),
-            NumericReply::MSG_CHANNELISFULL
-        );
+            NumericReply::MSG_CHANNELISFULL);
         return false;
     }
 
     if (channel.isInviteOnly()
-        && !channel.hasInvitation(&client))
-    {
+        && !channel.hasInvitation(&client)) {
         queueNumericReply(
             client,
             NumericReply::ERR_INVITEONLYCHAN,
             channel.getName(),
-            NumericReply::MSG_INVITEONLYCHAN
-        );
+            NumericReply::MSG_INVITEONLYCHAN);
         return false;
     }
 
     if (channel.isKeyEnabled()
-        && channel.getKey() != providedKey)
-    {
+        && channel.getKey() != providedKey) {
         queueNumericReply(
             client,
             NumericReply::ERR_BADCHANNELKEY,
             channel.getName(),
-            NumericReply::MSG_BADCHANNELKEY
-        );
+            NumericReply::MSG_BADCHANNELKEY);
         return false;
     }
 
@@ -771,16 +728,13 @@ bool Server::validateChannelJoinAccess(
  * @param client The client that will receive the numeric reply.
  * @param channel The channel whose topic state will be reported.
  */
-void Server::sendChannelTopic(Client &client, const Channel &channel)
-{
-    if (channel.getTopic().empty())
-    {
+void Server::sendChannelTopic(Client &client, const Channel &channel) {
+    if (channel.getTopic().empty()) {
         queueNumericReply(
             client,
             NumericReply::RPL_NOTOPIC,
             channel.getName(),
-            NumericReply::MSG_NOTOPIC
-        );
+            NumericReply::MSG_NOTOPIC);
         return;
     }
 
@@ -788,8 +742,7 @@ void Server::sendChannelTopic(Client &client, const Channel &channel)
         client,
         NumericReply::RPL_TOPIC,
         channel.getName(),
-        channel.getTopic()
-    );
+        channel.getTopic());
 }
 
 /**
@@ -804,8 +757,7 @@ void Server::sendChannelTopic(Client &client, const Channel &channel)
  * @param client The client that will receive the member list.
  * @param channel The channel whose members will be listed.
  */
-void Server::sendChannelNames(Client &client, const Channel &channel)
-{
+void Server::sendChannelNames(Client &client, const Channel &channel) {
     std::vector<std::string> nameReplyParameters;
 
     nameReplyParameters.push_back("=");
@@ -815,8 +767,7 @@ void Server::sendChannelNames(Client &client, const Channel &channel)
         NumericReply::RPL_NAMREPLY,
         client,
         nameReplyParameters,
-        ""
-    );
+        "");
 
     const std::size_t maximumNamesLength =
         IRC_MAX_MESSAGE_LENGTH - emptyNamesReply.size();
@@ -828,13 +779,11 @@ void Server::sendChannelNames(Client &client, const Channel &channel)
     std::set<Client *>::const_iterator memberIterator =
         channelMembers.begin();
 
-    while (memberIterator != channelMembers.end())
-    {
+    while (memberIterator != channelMembers.end()) {
         Client *channelMember = *memberIterator;
 
         if (channelMember != NULL
-            && !channelMember->getNickname().empty())
-        {
+            && !channelMember->getNickname().empty()) {
             std::string displayedNickname;
 
             if (channel.hasOperator(channelMember))
@@ -849,14 +798,12 @@ void Server::sendChannelNames(Client &client, const Channel &channel)
                 && currentNames.size()
                     + separatorLength
                     + displayedNickname.size()
-                    > maximumNamesLength)
-            {
+                    > maximumNamesLength) {
                 queueNumericReply(
                     client,
                     NumericReply::RPL_NAMREPLY,
                     nameReplyParameters,
-                    currentNames
-                );
+                    currentNames);
 
                 currentNames.clear();
             }
@@ -870,22 +817,19 @@ void Server::sendChannelNames(Client &client, const Channel &channel)
         ++memberIterator;
     }
 
-    if (!currentNames.empty())
-    {
+    if (!currentNames.empty()) {
         queueNumericReply(
             client,
             NumericReply::RPL_NAMREPLY,
             nameReplyParameters,
-            currentNames
-        );
+            currentNames);
     }
 
     queueNumericReply(
         client,
         NumericReply::RPL_ENDOFNAMES,
         channel.getName(),
-        NumericReply::MSG_ENDOFNAMES
-    );
+        NumericReply::MSG_ENDOFNAMES);
 }
 
 /**
@@ -896,21 +840,18 @@ void Server::sendChannelNames(Client &client, const Channel &channel)
  * The sequence is sent after JOIN, topic and NAMES so a reference client
  * already has the channel window open when the history arrives.
  */
-void Server::sendChannelHistory(Client &client, const Channel &channel)
-{
+void Server::sendChannelHistory(Client &client, const Channel &channel) {
     const std::vector<std::string> &history = channel.getMessageHistory();
     std::vector<std::string>::const_iterator historyIterator =
         history.begin();
 
-    while (historyIterator != history.end())
-    {
+    while (historyIterator != history.end()) {
         queueMessage(client, *historyIterator);
         ++historyIterator;
     }
 }
 
-std::string Server::getReplyTarget(const Client &client) const
-{
+std::string Server::getReplyTarget(const Client &client) const {
     if (client.getNickname().empty())
         return "*";
     return client.getNickname();
@@ -919,22 +860,19 @@ std::string Server::getReplyTarget(const Client &client) const
 std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
-    const std::string &trailingMessage) const
-{
+    const std::string &trailingMessage) const {
     return buildNumericReply(
         numericCode,
         client,
         std::vector<std::string>(),
-        trailingMessage
-    );
+        trailingMessage);
 }
 
 std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
     const std::string &parameter,
-    const std::string &trailingMessage) const
-{
+    const std::string &trailingMessage) const {
     std::vector<std::string> parameters;
 
     if (!parameter.empty())
@@ -947,24 +885,21 @@ std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
     const std::vector<std::string> &parameters,
-    const std::string &trailingMessage) const
-{
+    const std::string &trailingMessage) const {
     std::vector<std::string> replyParameters;
 
     replyParameters.push_back(getReplyTarget(client));
     replyParameters.insert(
         replyParameters.end(),
         parameters.begin(),
-        parameters.end()
-    );
+        parameters.end());
     replyParameters.push_back(trailingMessage);
 
     const IrcMessage reply(
         NumericReply::formatCode(numericCode),
         replyParameters,
         getServerPrefix(),
-        true
-    );
+        true);
 
     return reply.serialize();
 }
@@ -972,23 +907,20 @@ std::string Server::buildNumericReply(
 std::string Server::buildNumericReply(
     int numericCode,
     const Client &client,
-    const std::vector<std::string> &parameters) const
-{
+    const std::vector<std::string> &parameters) const {
     std::vector<std::string> replyParameters;
 
     replyParameters.push_back(getReplyTarget(client));
     replyParameters.insert(
         replyParameters.end(),
         parameters.begin(),
-        parameters.end()
-    );
+        parameters.end());
 
     const IrcMessage reply(
         NumericReply::formatCode(numericCode),
         replyParameters,
         getServerPrefix(),
-        false
-    );
+        false);
 
     return reply.serialize();
 }
@@ -1005,19 +937,16 @@ std::string Server::buildNumericReply(
  * @return true when the connection may continue, false when the client must
  * be disconnected.
  */
-bool Server::receiveClientData(std::size_t descriptorIndex)
-{
+bool Server::receiveClientData(std::size_t descriptorIndex) {
     const int clientSocketFd = pollFds[descriptorIndex].fd;
 
     std::map<int, Client *>::iterator clientIterator =
         clients.find(clientSocketFd);
 
     if (clientIterator == clients.end()
-        || clientIterator->second == NULL)
-    {
+        || clientIterator->second == NULL) {
         throw std::logic_error(
-            "received data from an unregistered client"
-        );
+            "received data from an unregistered client");
     }
 
     Client *client = clientIterator->second;
@@ -1027,20 +956,16 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         clientSocketFd,
         receiveBuffer,
         sizeof(receiveBuffer),
-        0
-    );
+        0);
 
-    if (receivedBytes > 0)
-    {
+    if (receivedBytes > 0) {
         const std::string receivedData(
             receiveBuffer,
-            static_cast<std::size_t>(receivedBytes)
-        );
+            static_cast<std::size_t>(receivedBytes));
 
         if (client->getInputBuffer().size()
             + receivedData.size()
-            > IRC_MAX_INPUT_BUFFER_SIZE)
-        {
+            > IRC_MAX_INPUT_BUFFER_SIZE) {
             std::cerr << Console::CLIENT
                 << " Input buffer limit exceeded ("
                 << IRC_MAX_INPUT_BUFFER_SIZE
@@ -1048,8 +973,7 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
                 << clientSocketFd << std::endl;
 
             client->requestDisconnect(
-                "Input buffer limit exceeded"
-            );
+                "Input buffer limit exceeded");
             return false;
         }
 
@@ -1070,11 +994,9 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
         return processClientBuffer(*client);
     }
 
-    if (receivedBytes == 0)
-    {
+    if (receivedBytes == 0) {
         client->requestDisconnect(
-            "Connection closed by peer"
-        );
+            "Connection closed by peer");
         return false;
     }
 
@@ -1086,8 +1008,7 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
      */
     if (receiveErrno == EAGAIN
         || receiveErrno == EWOULDBLOCK
-        || receiveErrno == EINTR)
-    {
+        || receiveErrno == EINTR) {
         return true;
     }
 
@@ -1106,8 +1027,7 @@ bool Server::receiveClientData(std::size_t descriptorIndex)
  * The pointer check prevents the accidental deletion of an entry 
  * belonging to another client if the state were out of sync.
  */
-void Server::removeNicknameIndexEntry(const Client &client)
-{
+void Server::removeNicknameIndexEntry(const Client &client) {
     if (!client.isNicknameReceived())
         return;
 
@@ -1118,8 +1038,7 @@ void Server::removeNicknameIndexEntry(const Client &client)
         clientsByNickname.find(normalizedNickname);
 
     if (nicknameIterator != clientsByNickname.end()
-        && nicknameIterator->second == &client)
-    {
+        && nicknameIterator->second == &client) {
         clientsByNickname.erase(nicknameIterator);
     }
 }
@@ -1141,8 +1060,7 @@ void Server::removeNicknameIndexEntry(const Client &client)
  * @param clientSocketFd The socket descriptor that identifies the client.
  * @param reason The fallback reason why the connection is being closed.
  */
-void Server::disconnectClient(int clientSocketFd, const std::string &reason)
-{
+void Server::disconnectClient(int clientSocketFd, const std::string &reason) {
     std::map<int, Client *>::iterator clientIterator =
         clients.find(clientSocketFd);
 
@@ -1153,14 +1071,12 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         ++descriptorIterator;
 
     while (descriptorIterator != pollFds.end()
-        && descriptorIterator->fd != clientSocketFd)
-    {
+        && descriptorIterator->fd != clientSocketFd) {
         ++descriptorIterator;
     }
 
     if (clientIterator == clients.end()
-        && descriptorIterator == pollFds.end())
-    {
+        && descriptorIterator == pollFds.end()) {
         return;
     }
 
@@ -1170,23 +1086,19 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
 
     Client *client = NULL;
 
-    if (clientIterator != clients.end())
-    {
+    if (clientIterator != clients.end()) {
         client = clientIterator->second;
 
         if (client != NULL
             && client->isDisconnectRequested()
-            && !client->getDisconnectReason().empty())
-        {
+            && !client->getDisconnectReason().empty()) {
             disconnectReason = client->getDisconnectReason();
         }
 
-        if (client != NULL)
-        {
+        if (client != NULL) {
             client->requestDisconnect(disconnectReason);
 
-            if (!client->getJoinedChannels().empty())
-            {
+            if (!client->getJoinedChannels().empty()) {
                 std::vector<std::string> quitParameters;
 
                 quitParameters.push_back(disconnectReason);
@@ -1195,13 +1107,11 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
                     "QUIT",
                     quitParameters,
                     getClientPrefix(*client),
-                    true
-                );
+                    true);
 
                 queueMessageToRelatedClients(
                     *client,
-                    quitMessage.serialize()
-                );
+                    quitMessage.serialize());
             }
 
             detachClientFromChannels(*client);
@@ -1211,13 +1121,10 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         clients.erase(clientIterator);
     }
 
-    if (descriptorIterator != pollFds.end())
-    {
+    if (descriptorIterator != pollFds.end()) {
         closeFd(descriptorIterator->fd);
         pollFds.erase(descriptorIterator);
-    }
-    else
-    {
+    } else {
         int unregisteredSocketFd = clientSocketFd;
 
         closeFd(unregisteredSocketFd);
@@ -1233,8 +1140,7 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason)
         << ", reason=" << disconnectReason << std::endl;
 }
 
-void Server::dispatchCommand(Client &client, const IrcMessage &msg)
-{
+void Server::dispatchCommand(Client &client, const IrcMessage &msg) {
     dispatcher.execute(client, msg);
     tryRegisterClient(client);
 }
@@ -1244,8 +1150,7 @@ void Server::dispatchCommand(Client &client, const IrcMessage &msg)
  * First call with complete data, registers and sends welcome message.
  * Subsequent calls with complete data, does nothing.
  */
-void Server::tryRegisterClient(Client &client)
-{
+void Server::tryRegisterClient(Client &client) {
     if (client.isRegistered())
         return;
 
@@ -1256,27 +1161,23 @@ void Server::tryRegisterClient(Client &client)
     sendWelcomeMessages(client);
 }
 
-void Server::sendWelcomeMessages(Client &client)
-{
+void Server::sendWelcomeMessages(Client &client) {
     const std::string clientIdentity = getClientPrefix(client);
 
     queueNumericReply(
         client,
         NumericReply::RPL_WELCOME,
-        NumericReply::welcomeMessage(clientIdentity)
-    );
+        NumericReply::welcomeMessage(clientIdentity));
 
     queueNumericReply(
         client,
         NumericReply::RPL_YOURHOST,
-        NumericReply::yourHostMessage(serverName)
-    );
+        NumericReply::yourHostMessage(serverName));
 
     queueNumericReply(
         client,
         NumericReply::RPL_CREATED,
-        NumericReply::MSG_CREATED
-    );
+        NumericReply::MSG_CREATED);
 
     std::vector<std::string> myInfoParameters;
     myInfoParameters.push_back(serverName);
@@ -1294,8 +1195,7 @@ void Server::sendWelcomeMessages(Client &client)
         client,
         NumericReply::RPL_ISUPPORT,
         isupportParameters,
-        NumericReply::MSG_ISUPPORT
-    );
+        NumericReply::MSG_ISUPPORT);
 }
 
 /**
@@ -1306,23 +1206,19 @@ void Server::sendWelcomeMessages(Client &client)
  * removal through disconnectClient(). Removing a descriptor does not advance
  * the current index because the next descriptor moves into that position.
  */
-void Server::run()
-{
+void Server::run() {
     if (pollFds.empty())
         throw std::logic_error("no file descriptors registered");
 
     std::cout << Console::SERVER << " Event loop started" << std::endl;
 
-    while (!SignalHandler::isShutdownRequested())
-    {
+    while (!SignalHandler::isShutdownRequested()) {
         const int pollResult = ::poll(
             &pollFds[0],
             static_cast<nfds_t>(pollFds.size()),
-            POLL_TIMEOUT_MS
-        );
+            POLL_TIMEOUT_MS);
 
-        if (pollResult == -1)
-        {
+        if (pollResult == -1) {
             if (errno == EINTR)
                 continue;
 
@@ -1332,61 +1228,53 @@ void Server::run()
         if (pollResult == 0)
             continue;
 
-        const short listeningEvents = pollFds[0].revents;
+        const int16_t listeningEvents = pollFds[0].revents;
 
         if (listeningEvents & POLLNVAL)
             throw std::runtime_error(
-                "listening socket descriptor is invalid"
-            );
+                "listening socket descriptor is invalid");
 
         if (listeningEvents & (POLLERR | POLLHUP))
             throw std::runtime_error(
-                "listening socket reported an error"
-            );
+                "listening socket reported an error");
 
         if (listeningEvents & POLLIN)
             acceptClient();
 
         std::size_t descriptorIndex = 1;
 
-        while (descriptorIndex < pollFds.size())
-        {
-            const short clientEvents =
+        while (descriptorIndex < pollFds.size()) {
+            const int16_t clientEvents =
                 pollFds[descriptorIndex].revents;
 
             const int clientSocketFd =
                 pollFds[descriptorIndex].fd;
 
-            if (clientEvents & POLLNVAL)
-            {
+            if (clientEvents & POLLNVAL) {
                 std::cerr << Console::CLIENT
                     << " Invalid descriptor: fd="
                     << clientSocketFd << std::endl;
 
                 disconnectClient(
                     clientSocketFd,
-                    "Invalid socket descriptor"
-                );
+                    "Invalid socket descriptor");
                 continue;
             }
 
             bool clientConnected = true;
             std::string disconnectReason = "Connection closed";
 
-            if (clientEvents & POLLIN)
-            {
+            if (clientEvents & POLLIN) {
                 clientConnected =
                     receiveClientData(descriptorIndex);
 
-                if (!clientConnected)
-                {
+                if (!clientConnected) {
                     disconnectReason =
                         "Receive failure or connection closed by peer";
                 }
             }
 
-            if (clientConnected && (clientEvents & POLLOUT))
-            {
+            if (clientConnected && (clientEvents & POLLOUT)) {
                 clientConnected =
                     flushClientOutput(clientSocketFd);
 
@@ -1394,22 +1282,17 @@ void Server::run()
                     disconnectReason = "Send failure";
             }
 
-            if (clientEvents & POLLERR)
-            {
+            if (clientEvents & POLLERR) {
                 disconnectReason = "Socket error";
-            }
-            else if (clientEvents & POLLHUP)
-            {
+            } else if (clientEvents & POLLHUP) {
                 disconnectReason = "Connection closed by peer";
             }
 
             if (!clientConnected
-                || (clientEvents & (POLLERR | POLLHUP)))
-            {
+                || (clientEvents & (POLLERR | POLLHUP))) {
                 disconnectClient(
                     clientSocketFd,
-                    disconnectReason
-                );
+                    disconnectReason);
                 continue;
             }
 
@@ -1418,8 +1301,7 @@ void Server::run()
 
         descriptorIndex = 1;
 
-        while (descriptorIndex < pollFds.size())
-        {
+        while (descriptorIndex < pollFds.size()) {
             const int clientSocketFd =
                 pollFds[descriptorIndex].fd;
 
@@ -1428,15 +1310,13 @@ void Server::run()
 
             if (clientIterator != clients.end()
                 && clientIterator->second != NULL
-                && clientIterator->second->isDisconnectRequested())
-            {
+                && clientIterator->second->isDisconnectRequested()) {
                 const std::string disconnectReason =
                     clientIterator->second->getDisconnectReason();
 
                 disconnectClient(
                     clientSocketFd,
-                    disconnectReason
-                );
+                    disconnectReason);
                 continue;
             }
 
@@ -1458,27 +1338,25 @@ void Server::run()
  * 
  * POLLIN is always included, as the server should always be ready to receive data from the client.
  */
-void Server::updateClientPollEvents(int socketFd)
-{
+void Server::updateClientPollEvents(int socketFd) {
     std::map<int, Client *>::iterator clientIterator = clients.find(socketFd);
 
-    if (clientIterator == clients.end())
-    {
-        throw std::logic_error("cannot update events for an unregistered client");
+    if (clientIterator == clients.end()) {
+        throw std::logic_error(
+            "cannot update events for an unregistered client");
     }
 
     Client *client = clientIterator->second;
 
-    for (std::size_t i = 1; i < pollFds.size(); ++i)
-    {
+    for (std::size_t i = 1; i < pollFds.size(); ++i) {
         if (pollFds[i].fd != socketFd)
             continue;
 
         pollFds[i].events = POLLIN;
 
-        if (!client->getOutputBuffer().empty())
-        {
-            pollFds[i].events = static_cast<short>(pollFds[i].events | POLLOUT);
+        if (!client->getOutputBuffer().empty()) {
+            pollFds[i].events = static_cast<int16_t>(
+                pollFds[i].events | POLLOUT);
         }
 
         return;
@@ -1499,13 +1377,11 @@ void Server::updateClientPollEvents(int socketFd)
  * @return true when the connection may continue, false when the client must
  * be disconnected.
  */
-bool Server::flushClientOutput(int socketFd)
-{
+bool Server::flushClientOutput(int socketFd) {
     std::map<int, Client *>::iterator clientIterator = clients.find(socketFd);
 
     if (clientIterator == clients.end()
-        || clientIterator->second == NULL)
-    {
+        || clientIterator->second == NULL) {
         throw std::logic_error("cannot send data to an unregistered client");
     }
 
@@ -1513,8 +1389,7 @@ bool Server::flushClientOutput(int socketFd)
 
     const std::string &pendingOutput = client->getOutputBuffer();
 
-    if (pendingOutput.empty())
-    {
+    if (pendingOutput.empty()) {
         updateClientPollEvents(socketFd);
         return true;
     }
@@ -1522,22 +1397,28 @@ bool Server::flushClientOutput(int socketFd)
     const std::size_t bytesToSend = pendingOutput.size() > MAX_SEND_SIZE
         ? MAX_SEND_SIZE : pendingOutput.size();
 
-    const ssize_t bytes = ::send(socketFd, pendingOutput.c_str(), bytesToSend, 0);
+    const ssize_t bytes = ::send(socketFd, pendingOutput.c_str(),
+        bytesToSend, 0);
 
-    if (bytes > 0)
-    {
+    if (bytes > 0) {
         client->removeSentOutput(static_cast<std::size_t>(bytes));
 
         updateClientPollEvents(socketFd);
 
-        std::cout << Console::CLIENT << " Sent " << bytes << " bytes: fd=" << socketFd
-            << ", pending=" << client->getOutputBuffer().size() << std::endl;
+        std::cout
+            << Console::CLIENT
+            << " Sent "
+            << bytes
+            << " bytes: fd="
+            << socketFd
+            << ", pending="
+            << client->getOutputBuffer().size()
+            << std::endl;
 
         return true;
     }
 
-    if (bytes == 0)
-    {
+    if (bytes == 0) {
         client->requestDisconnect("Send returned zero bytes");
         return false;
     }
@@ -1554,18 +1435,12 @@ bool Server::flushClientOutput(int socketFd)
     std::cerr << Console::CLIENT << " Send error: fd=" << socketFd << ", error="
         << std::strerror(sendErrno) << std::endl;
 
-    if (sendErrno == EPIPE)
-    {
+    if (sendErrno == EPIPE) {
         client->requestDisconnect("Broken pipe");
-    }
-    else if (sendErrno == ECONNRESET)
-    {
+    } else if (sendErrno == ECONNRESET) {
         client->requestDisconnect(
-            "Connection reset by peer"
-        );
-    }
-    else
-    {
+            "Connection reset by peer");
+    } else {
         client->requestDisconnect("Send error");
     }
 
@@ -1586,15 +1461,17 @@ bool Server::flushClientOutput(int socketFd)
  * @param client The client that will receive the queued message.
  * @param message The complete serialized IRC message.
  */
-void Server::queueMessage(Client &client, const std::string &message)
-{
+void Server::queueMessage(Client &client, const std::string &message) {
     if (message.empty() || client.isDisconnectRequested() || client.isVirtual())
         return;
 
-    if (message.size() > IRC_MAX_MESSAGE_LENGTH)
-    {
-        std::cerr << Console::CLIENT << " IRC reply exceeds "
-            << IRC_MAX_MESSAGE_LENGTH << " bytes: fd=" << client.getSocketFd()
+    if (message.size() > IRC_MAX_MESSAGE_LENGTH) {
+        std::cerr
+            << Console::CLIENT
+            << " IRC reply exceeds "
+            << IRC_MAX_MESSAGE_LENGTH
+            << " bytes: fd="
+            << client.getSocketFd()
             << std::endl;
         client.requestDisconnect("IRC message length limit exceeded");
         return;
@@ -1602,10 +1479,13 @@ void Server::queueMessage(Client &client, const std::string &message)
 
     const std::size_t pendingOutputSize = client.getOutputBuffer().size();
 
-    if (pendingOutputSize + message.size() > IRC_MAX_OUTPUT_BUFFER_SIZE)
-    {
-        std::cerr << Console::CLIENT << " Output buffer limit exceeded ("
-            << IRC_MAX_OUTPUT_BUFFER_SIZE << " bytes): fd=" << client.getSocketFd()
+    if (pendingOutputSize + message.size() > IRC_MAX_OUTPUT_BUFFER_SIZE) {
+        std::cerr
+            << Console::CLIENT
+            << " Output buffer limit exceeded ("
+            << IRC_MAX_OUTPUT_BUFFER_SIZE
+            << " bytes): fd="
+            << client.getSocketFd()
             << std::endl;
         client.requestDisconnect("Output buffer limit exceeded");
         return;
@@ -1627,15 +1507,13 @@ void Server::queueMessage(Client &client, const std::string &message)
 void Server::queueMessageToChannel(
     const Channel &channel,
     const std::string &message
-)
-{
+) {
     const std::set<Client *> &channelMembers = channel.getMembers();
 
     std::set<Client *>::const_iterator memberIterator =
         channelMembers.begin();
 
-    while (memberIterator != channelMembers.end())
-    {
+    while (memberIterator != channelMembers.end()) {
         Client *channelMember = *memberIterator;
 
         if (channelMember != NULL)
@@ -1652,8 +1530,7 @@ void Server::queueMessageToChannel(
  */
 void Server::queueMessageToRelatedClients(
     Client &sourceClient,
-    const std::string &message)
-{
+    const std::string &message) {
     queueMessage(sourceClient, message);
 
     const std::set<std::string> &sourceChannels =
@@ -1661,12 +1538,10 @@ void Server::queueMessageToRelatedClients(
 
     std::map<int, Client *>::iterator clientIterator = clients.begin();
 
-    while (clientIterator != clients.end())
-    {
+    while (clientIterator != clients.end()) {
         Client *relatedClient = clientIterator->second;
 
-        if (relatedClient == &sourceClient)
-        {
+        if (relatedClient == &sourceClient) {
             ++clientIterator;
             continue;
         }
@@ -1678,11 +1553,9 @@ void Server::queueMessageToRelatedClients(
         std::set<std::string>::const_iterator channelIterator =
             sourceChannels.begin();
 
-        while (channelIterator != sourceChannels.end())
-        {
+        while (channelIterator != sourceChannels.end()) {
             if (relatedClientChannels.find(*channelIterator)
-                != relatedClientChannels.end())
-            {
+                != relatedClientChannels.end()) {
                 sharesChannel = true;
                 break;
             }
@@ -1701,9 +1574,9 @@ void Server::queueNumericReply(
     Client &client,
     int numericCode,
     const std::string &trailingMessage
-)
-{
-    queueMessage(client, buildNumericReply(numericCode, client, trailingMessage));
+) {
+    queueMessage(client, buildNumericReply(numericCode,
+        client, trailingMessage));
 }
 
 void Server::queueNumericReply(
@@ -1711,12 +1584,10 @@ void Server::queueNumericReply(
     int numericCode,
     const std::string &parameter,
     const std::string &trailingMessage
-)
-{
+) {
     queueMessage(
         client,
-        buildNumericReply(numericCode, client, parameter, trailingMessage)
-    );
+        buildNumericReply(numericCode, client, parameter, trailingMessage));
 }
 
 void Server::queueNumericReply(
@@ -1724,41 +1595,40 @@ void Server::queueNumericReply(
     int numericCode,
     const std::vector<std::string> &parameters,
     const std::string &trailingMessage
-)
-{
+) {
     queueMessage(
         client,
-        buildNumericReply(numericCode, client, parameters, trailingMessage)
-    );
+        buildNumericReply(numericCode, client, parameters, trailingMessage));
 }
 
 void Server::queueNumericReply(
     Client &client,
     int numericCode,
     const std::vector<std::string> &parameters
-)
-{
+) {
     queueMessage(client, buildNumericReply(numericCode, client, parameters));
 }
 
-bool Server::processClientBuffer(Client &client)
-{
+bool Server::processClientBuffer(Client &client) {
     std::string completeLine;
 
-    while (true)
-    {
+    while (true) {
         if (client.isDisconnectRequested())
             return false;
 
-        const Client::LineReadStatus status = client.extractNextLine(completeLine);
+        const Client::LineReadStatus status = client.extractNextLine(
+            completeLine);
 
         if (status == Client::LINE_INCOMPLETE)
             return !client.isDisconnectRequested();
 
-        if (status == Client::LINE_TOO_LONG)
-        {
-            std::cerr << Console::CLIENT << " IRC line exceeds "
-                << IRC_MAX_MESSAGE_LENGTH << " bytes: fd=" << client.getSocketFd()
+        if (status == Client::LINE_TOO_LONG) {
+            std::cerr
+                << Console::CLIENT
+                << " IRC line exceeds "
+                << IRC_MAX_MESSAGE_LENGTH
+                << " bytes: fd="
+                << client.getSocketFd()
                 << std::endl;
             client.requestDisconnect("IRC line exceeds maximum length");
             return false;
@@ -1767,23 +1637,36 @@ bool Server::processClientBuffer(Client &client)
         if (completeLine.empty())
             continue;
 
-        std::cout << Console::CLIENT << " Complete line: fd=" << client.getSocketFd()
-            << ", line=\"" << completeLine << "\"" << std::endl;
+        std::cout
+            << Console::CLIENT
+            << " Complete line: fd="
+            << client.getSocketFd()
+            << ", line=\""
+            << completeLine
+            << "\""
+            << std::endl;
 
-        try
-        {
+        try {
             const IrcMessage message = MessageParser::parse(completeLine);
             dispatchCommand(client, message);
         }
-        catch (const std::invalid_argument &error)
-        {
-            std::cerr << Console::CLIENT << " Parse error: fd=" << client.getSocketFd()
-                << ", reason=" << error.what() << std::endl;
+        catch (const std::invalid_argument &error) {
+            std::cerr
+                << Console::CLIENT
+                << " Parse error: fd="
+                << client.getSocketFd()
+                << ", reason="
+                << error.what()
+                << std::endl;
         }
-        catch (const std::exception &error)
-        {
-            std::cerr << Console::ERROR << " Command dispatch error: fd="
-                << client.getSocketFd() << ", reason=" << error.what() << std::endl;
+        catch (const std::exception &error) {
+            std::cerr
+                << Console::ERROR
+                << " Command dispatch error: fd="
+                << client.getSocketFd()
+                << ", reason="
+                << error.what()
+                << std::endl;
             client.requestDisconnect();
             return false;
         }
@@ -1793,18 +1676,22 @@ bool Server::processClientBuffer(Client &client)
     }
 }
 
-void Server::closeFd(int &fd)
-{
+void Server::closeFd(int &fd) {
     if (fd == INVALID_FD)
         return;
-    
+
     const int fdToClose = fd;
 
-    fd = INVALID_FD; // Evitar cerrar el mismo descriptor varias veces
-    
-    if (::close(fdToClose) == INVALID_FD)
-    {
-        std::cerr  << Console::WARNING << " close: " << std::strerror(errno) << std::endl; // los destructores no deben lanzar errores, solo informar
+    // Evitar cerrar el mismo descriptor varias veces
+    fd = INVALID_FD;
+
+    // los destructores no deben lanzar errores, solo informar
+    if (::close(fdToClose) == INVALID_FD) {
+        std::cerr
+            << Console::WARNING
+            << " close: "
+            << std::strerror(errno)
+            << std::endl;
     }
 }
 
@@ -1817,17 +1704,14 @@ void Server::closeFd(int &fd)
  * in poll after client cleanup, including the listening socket, are then
  * closed exactly once.
  */
-void Server::closeAllFds()
-{
-    while (!clients.empty())
-    {
+void Server::closeAllFds() {
+    while (!clients.empty()) {
         const int clientSocketFd = clients.begin()->first;
 
         disconnectClient(clientSocketFd, "Server shutting down");
     }
 
-    if (bot != NULL)
-    {
+    if (bot != NULL) {
         bot->stop();
         delete bot;
         bot = NULL;
@@ -1836,27 +1720,23 @@ void Server::closeAllFds()
     clientsByNickname.clear();
     channels.clear();
 
-    for (std::size_t i = 0; i < pollFds.size(); ++i)
-    {
+    for (std::size_t i = 0; i < pollFds.size(); ++i) {
         closeFd(pollFds[i].fd);
     }
     pollFds.clear();
     listenSocket = -1;
 }
 
-Server::~Server()
-{
+Server::~Server() {
     closeAllFds();
 
     std::cout << Console::SERVER << " All sockets closed" << std::endl;
 }
 
-const std::string &Server::getServerName() const
-{
+const std::string &Server::getServerName() const {
     return serverName;
 }
 
-bool Server::isPasswordCorrect(const std::string &providedPassword) const
-{
+bool Server::isPasswordCorrect(const std::string &providedPassword) const {
     return providedPassword == password;
 }

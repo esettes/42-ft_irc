@@ -1,5 +1,6 @@
-#ifndef SIGNAL_HANDLER_HPP
-#define SIGNAL_HANDLER_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_SIGNALHANDLER_HPP_
+#define INC_SIGNALHANDLER_HPP_
 
 #include <signal.h>
 
@@ -9,20 +10,19 @@
  * 
  * @param shutdownRequested A static flag indicating whether a termination signal has been received.
  */
-class SignalHandler
-{
-    private:
+class SignalHandler {
+ private:
         static volatile sig_atomic_t shutdownRequested;
-        
+
         static void handleTerminationSignal(int signalNumber);
-        
+
         SignalHandler();
         SignalHandler(const SignalHandler &other);
         SignalHandler &operator=(const SignalHandler &other);
 
-    public:
+ public:
         static void runSignalHandler();
         static bool isShutdownRequested();
 };
 
-#endif
+#endif  // INC_SIGNALHANDLER_HPP_

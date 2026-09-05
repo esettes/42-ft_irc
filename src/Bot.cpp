@@ -1,3 +1,11 @@
+// Copyright 2026 @esettes, @danielfdez17
+#include <stdexcept>
+#include <cstdlib>
+#include <sstream>
+#include <vector>
+#include <set>
+#include <iostream>
+
 #include "Bot.hpp"
 #include "Server.hpp"
 #include "Client.hpp"
@@ -6,13 +14,6 @@
 #include "IrcCasemap.hpp"
 #include "Console.hpp"
 
-#include <stdexcept>
-#include <cstdlib>
-#include <sstream>
-#include <vector>
-#include <set>
-#include <iostream>
-
 const char *Bot::NICKNAME = "marvin";
 const char *Bot::USERNAME = "bot";
 const char *Bot::REALNAME = "ft_irc helper bot";
@@ -20,26 +21,22 @@ const char *Bot::HOST = "bot.local";
 const char *Bot::HOME_CHANNEL = "#bot";
 const char *Bot::HOME_TOPIC = "Ask me with !help or /msg marvin help";
 
-namespace
-{
-    const int VIRTUAL_CLIENT_FD = -1;
-    const char CTCP_MARKER = '\x01';
+namespace {
+const int VIRTUAL_CLIENT_FD = -1;
+const char CTCP_MARKER = '\x01';
 
-    std::string wrapCtcp(const std::string &payload)
-    {
-        return std::string(1, CTCP_MARKER) + payload + std::string(1, CTCP_MARKER);
-    }
+std::string wrapCtcp(const std::string &payload) {
+    return std::string(1, CTCP_MARKER) + payload + std::string(1, CTCP_MARKER);
 }
+}  // namespace
 
 Bot::Bot(Server &server)
     : server(server),
       user(NULL),
-      startedAt(std::time(NULL))
-{
+      startedAt(std::time(NULL)) {
 }
 
-Bot::~Bot()
-{
+Bot::~Bot() {
     stop();
 }
 
@@ -47,8 +44,7 @@ Bot::~Bot()
  * @brief Registers the virtual user and joins the home channel. The nickname
  * is reserved before any TCP client can connect, so it cannot be stolen.
  */
-void Bot::start()
-{
+void Bot::start() {
     if (user != NULL)
         return;
 
@@ -56,8 +52,7 @@ void Bot::start()
         startedAt = 0;
 
     std::srand(static_cast<unsigned int>(
-        startedAt == 0 ? 1 : startedAt
-    ));
+        startedAt == 0 ? 1 : startedAt));
 
     user = new Client(VIRTUAL_CLIENT_FD, HOST);
     registerIdentity();
@@ -72,8 +67,7 @@ void Bot::start()
  * @brief Leaves every channel, frees the nickname and destroys the virtual
  * client. Safe to call more than once.
  */
-void Bot::stop()
-{
+void Bot::stop() {
     if (user == NULL)
         return;
 
@@ -81,8 +75,7 @@ void Bot::stop()
     std::set<std::string>::const_iterator channelIterator =
         joinedChannels.begin();
 
-    while (channelIterator != joinedChannels.end())
-    {
+    while (channelIterator != joinedChannels.end()) {
         Channel *channel = server.findChannel(*channelIterator);
 
         if (channel != NULL)
@@ -96,34 +89,29 @@ void Bot::stop()
     user = NULL;
 }
 
-bool Bot::owns(const Client &client) const
-{
+bool Bot::owns(const Client &client) const {
     return user != NULL && user == &client;
 }
 
-Client *Bot::getClient() const
-{
+Client *Bot::getClient() const {
     return user;
 }
 
-void Bot::registerIdentity()
-{
+void Bot::registerIdentity() {
     user->setUsername(USERNAME);
     user->setRealname(REALNAME);
     user->setPasswordAccepted(true);
     user->setUsernameReceived(true);
     user->setRegistered(true);
 
-    if (!server.assignNickname(*user, NICKNAME))
-    {
+    if (!server.assignNickname(*user, NICKNAME)) {
         delete user;
         user = NULL;
         throw std::runtime_error("failed to reserve the bot nickname");
     }
 }
 
-void Bot::joinHomeChannel()
-{
+void Bot::joinHomeChannel() {
     Channel *channel = server.findOrCreateChannel(HOME_CHANNEL);
 
     if (channel == NULL)
@@ -133,8 +121,7 @@ void Bot::joinHomeChannel()
     joinChannel(*channel, false);
 }
 
-void Bot::joinChannel(Channel &channel, bool greet)
-{
+void Bot::joinChannel(Channel &channel, bool greet) {
     if (user == NULL || channel.hasMember(user))
         return;
 
@@ -142,22 +129,18 @@ void Bot::joinChannel(Channel &channel, bool greet)
     broadcastJoin(channel);
 
     if (IrcCasemap::equal(channel.getName(), HOME_CHANNEL)
-        && !channel.hasOperator(user))
-    {
+        && !channel.hasOperator(user)) {
         channel.addOperator(user);
     }
 
-    if (greet)
-    {
+    if (greet) {
         sendChannelReply(
             channel,
-            "Hello! Type !help to see my commands."
-        );
+            "Hello! Type !help to see my commands.");
     }
 }
 
-void Bot::broadcastJoin(Channel &channel)
-{
+void Bot::broadcastJoin(Channel &channel) {
     std::vector<std::string> joinParameters;
 
     joinParameters.push_back(channel.getName());
@@ -166,24 +149,20 @@ void Bot::broadcastJoin(Channel &channel)
         "JOIN",
         joinParameters,
         server.getClientPrefix(*user),
-        true
-    );
+        true);
 
     server.queueMessageToChannel(channel, joinMessage.serialize());
 }
 
-void Bot::sendPrivateReply(Client &recipient, const std::string &text)
-{
+void Bot::sendPrivateReply(Client &recipient, const std::string &text) {
     sendText(&recipient, NULL, "PRIVMSG", text);
 }
 
-void Bot::sendChannelReply(Channel &channel, const std::string &text)
-{
+void Bot::sendChannelReply(Channel &channel, const std::string &text) {
     sendText(NULL, &channel, "PRIVMSG", text);
 }
 
-void Bot::sendNotice(Client &recipient, const std::string &text)
-{
+void Bot::sendNotice(Client &recipient, const std::string &text) {
     sendText(&recipient, NULL, "NOTICE", text);
 }
 
@@ -197,8 +176,7 @@ void Bot::sendText(
     Channel *channel,
     const std::string &command,
     const std::string &text
-)
-{
+) {
     if (user == NULL || text.empty())
         return;
 
@@ -224,8 +202,7 @@ void Bot::sendText(
         command,
         parameters,
         server.getClientPrefix(*user),
-        true
-    );
+        true);
 
     const std::string serialized = message.serialize();
 
@@ -235,8 +212,7 @@ void Bot::sendText(
         server.queueMessage(*recipient, serialized);
 }
 
-std::string Bot::trim(const std::string &text) const
-{
+std::string Bot::trim(const std::string &text) const {
     std::string::size_type start = 0;
 
     while (start < text.size() && text[start] == ' ')
@@ -250,12 +226,10 @@ std::string Bot::trim(const std::string &text) const
     return text.substr(start, end - start);
 }
 
-std::string Bot::toLowerAscii(const std::string &text) const
-{
+std::string Bot::toLowerAscii(const std::string &text) const {
     std::string lowered = text;
 
-    for (std::size_t index = 0; index < lowered.size(); ++index)
-    {
+    for (std::size_t index = 0; index < lowered.size(); ++index) {
         const unsigned char character =
             static_cast<unsigned char>(lowered[index]);
 
@@ -266,8 +240,7 @@ std::string Bot::toLowerAscii(const std::string &text) const
     return lowered;
 }
 
-bool Bot::consumeBotMention(std::string &text) const
-{
+bool Bot::consumeBotMention(std::string &text) const {
     if (user == NULL)
         return false;
 
@@ -281,8 +254,7 @@ bool Bot::consumeBotMention(std::string &text) const
 
     std::string::size_type index = nickname.size();
 
-    if (index == text.size())
-    {
+    if (index == text.size()) {
         text.clear();
         return true;
     }
@@ -309,8 +281,7 @@ bool Bot::extractCommand(
     bool fromChannel,
     std::string &command,
     std::string &argument
-) const
-{
+) const {
     std::string line = trim(text);
 
     if (line.empty())
@@ -319,15 +290,12 @@ bool Bot::extractCommand(
     if (!line.empty() && line[0] == CTCP_MARKER)
         return false;
 
-    if (fromChannel)
-    {
+    if (fromChannel) {
         if (line[0] == '!')
             line = trim(line.substr(1));
         else if (!consumeBotMention(line))
             return false;
-    }
-    else if (line[0] == '!')
-    {
+    } else if (line[0] == '!') {
         line = trim(line.substr(1));
     }
 
@@ -336,8 +304,7 @@ bool Bot::extractCommand(
 
     const std::string::size_type spacePosition = line.find(' ');
 
-    if (spacePosition == std::string::npos)
-    {
+    if (spacePosition == std::string::npos) {
         command = toLowerAscii(line);
         argument.clear();
         return true;
@@ -348,8 +315,7 @@ bool Bot::extractCommand(
     return true;
 }
 
-bool Bot::handleCtcp(Client &sender, const std::string &text)
-{
+bool Bot::handleCtcp(Client &sender, const std::string &text) {
     if (text.empty() || text[0] != CTCP_MARKER)
         return false;
 
@@ -365,37 +331,29 @@ bool Bot::handleCtcp(Client &sender, const std::string &text)
     std::string ctcpArgument;
     const std::string::size_type spacePosition = payload.find(' ');
 
-    if (spacePosition == std::string::npos)
-    {
+    if (spacePosition == std::string::npos) {
         ctcpCommand = toLowerAscii(payload);
-    }
-    else
-    {
+    } else {
         ctcpCommand = toLowerAscii(payload.substr(0, spacePosition));
         ctcpArgument = payload.substr(spacePosition + 1);
     }
 
-    if (ctcpCommand == "version")
-    {
+    if (ctcpCommand == "version") {
         sendNotice(sender, wrapCtcp("VERSION ft_irc bot 1.0"));
         return true;
     }
 
-    if (ctcpCommand == "ping")
-    {
+    if (ctcpCommand == "ping") {
         sendNotice(
             sender,
-            wrapCtcp(ctcpArgument.empty() ? "PING" : "PING " + ctcpArgument)
-        );
+            wrapCtcp(ctcpArgument.empty() ? "PING" : "PING " + ctcpArgument));
         return true;
     }
 
-    if (ctcpCommand == "time")
-    {
+    if (ctcpCommand == "time") {
         sendNotice(
             sender,
-            wrapCtcp("TIME " + formatNow("%Y-%m-%d %H:%M:%S"))
-        );
+            wrapCtcp("TIME " + formatNow("%Y-%m-%d %H:%M:%S")));
         return true;
     }
 
@@ -406,10 +364,8 @@ std::string Bot::runCommand(
     Client &sender,
     const std::string &command,
     const std::string &argument
-)
-{
-    if (command == "help")
-    {
+) {
+    if (command == "help") {
         return "Commands: help, ping, time, date, info, uptime, version, "
             "users, whoami, echo <text>, dice. "
             "Use /msg marvin <cmd> or talk in #bot with !cmd";
@@ -430,8 +386,7 @@ std::string Bot::runCommand(
     if (command == "uptime")
         return "I have been online for " + formatUptime();
 
-    if (command == "users")
-    {
+    if (command == "users") {
         std::ostringstream stream;
 
         stream << server.getRegisteredNicknameCount()
@@ -439,8 +394,7 @@ std::string Bot::runCommand(
         return stream.str();
     }
 
-    if (command == "info")
-    {
+    if (command == "info") {
         std::ostringstream stream;
 
         stream << "I am " << NICKNAME
@@ -454,15 +408,13 @@ std::string Bot::runCommand(
     if (command == "whoami")
         return "You are " + server.getClientPrefix(sender);
 
-    if (command == "echo")
-    {
+    if (command == "echo") {
         if (argument.empty())
             return "Usage: echo <text>";
         return argument;
     }
 
-    if (command == "dice" || command == "roll")
-    {
+    if (command == "dice" || command == "roll") {
         std::ostringstream stream;
 
         stream << "You rolled a " << (std::rand() % 6 + 1);
@@ -472,8 +424,7 @@ std::string Bot::runCommand(
     return "Unknown command \"" + command + "\". Try help.";
 }
 
-std::string Bot::formatNow(const char *format) const
-{
+std::string Bot::formatNow(const char *format) const {
     const std::time_t now = std::time(NULL);
 
     if (now == static_cast<std::time_t>(-1))
@@ -492,22 +443,20 @@ std::string Bot::formatNow(const char *format) const
     return buffer;
 }
 
-std::string Bot::formatUptime() const
-{
+std::string Bot::formatUptime() const {
     const std::time_t now = std::time(NULL);
 
     if (now == static_cast<std::time_t>(-1) || startedAt <= 0)
         return "unknown";
 
-    long elapsed = static_cast<long>(now - startedAt);
+    int64_t elapsed = static_cast<int64_t>(now - startedAt);
 
     if (elapsed < 0)
         elapsed = 0;
 
-    const long hours = elapsed / 3600;
-    const long minutes = (elapsed % 3600) / 60;
-    const long seconds = elapsed % 60;
-
+    const int64_t hours = elapsed / 3600;
+    const int64_t minutes = (elapsed % 3600) / 60;
+    const int64_t seconds = elapsed % 60;
     std::ostringstream stream;
 
     stream << hours << "h " << minutes << "m " << seconds << "s";
@@ -518,8 +467,7 @@ std::string Bot::clipTrailing(
     const std::string &command,
     const std::string &target,
     const std::string &text
-) const
-{
+) const {
     const std::string prefix = server.getClientPrefix(*user);
     const std::size_t overhead =
         prefix.size() + command.size() + target.size() + 7;
@@ -535,8 +483,7 @@ std::string Bot::clipTrailing(
     return text.substr(0, maximumText);
 }
 
-void Bot::handleDirectMessage(Client &sender, const std::string &text)
-{
+void Bot::handleDirectMessage(Client &sender, const std::string &text) {
     if (user == NULL || owns(sender))
         return;
 
@@ -546,8 +493,7 @@ void Bot::handleDirectMessage(Client &sender, const std::string &text)
     std::string command;
     std::string argument;
 
-    if (!extractCommand(text, false, command, argument))
-    {
+    if (!extractCommand(text, false, command, argument)) {
         sendPrivateReply(sender, "I did not catch that. Try help.");
         return;
     }
@@ -559,8 +505,7 @@ void Bot::handleChannelMessage(
     Client &sender,
     Channel &channel,
     const std::string &text
-)
-{
+) {
     if (user == NULL || owns(sender) || !channel.hasMember(user))
         return;
 
@@ -576,16 +521,14 @@ void Bot::handleChannelMessage(
     sendChannelReply(channel, runCommand(sender, command, argument));
 }
 
-void Bot::handleInvite(Channel &channel)
-{
+void Bot::handleInvite(Channel &channel) {
     if (user == NULL || channel.hasMember(user))
         return;
 
     joinChannel(channel, true);
 }
 
-void Bot::handleKick(const std::string &channelName)
-{
+void Bot::handleKick(const std::string &channelName) {
     if (user == NULL)
         return;
 

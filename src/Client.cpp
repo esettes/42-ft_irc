@@ -1,53 +1,49 @@
+// Copyright 2026 @esettes, @danielfdez17
 #include "Client.hpp"
 #include "IrcCasemap.hpp"
 #include "IrcMessage.hpp"
 
 Client::Client(int socketFd, const std::string &host)
-    : socketFd(socketFd), 
-    inputBuffer(""), 
-    outputBuffer(""), 
-    nickname(""), 
-    username(""), 
-    realname(""), 
+    : socketFd(socketFd),
+    inputBuffer(""),
+    outputBuffer(""),
+    nickname(""),
+    username(""),
+    realname(""),
     host(host),
-    passwordAccepted(false), 
-    nicknameReceived(false), 
-    usernameReceived(false), 
+    passwordAccepted(false),
+    nicknameReceived(false),
+    usernameReceived(false),
     registered(false),
     joinedChannels(),
     isOperator(false),
     disconnectRequested(false),
-    disconnectReason("")
-{
+    disconnectReason("") {
 }
 
-Client::~Client()
-{
+Client::~Client() {
 }
 
 Client::Client(const Client &other)
-    : socketFd(other.socketFd), 
-    inputBuffer(other.inputBuffer), 
-    outputBuffer(other.outputBuffer), 
-    nickname(other.nickname), 
-    username(other.username), 
-    realname(other.realname), 
+    : socketFd(other.socketFd),
+    inputBuffer(other.inputBuffer),
+    outputBuffer(other.outputBuffer),
+    nickname(other.nickname),
+    username(other.username),
+    realname(other.realname),
     host(other.host),
-    passwordAccepted(other.passwordAccepted), 
-    nicknameReceived(other.nicknameReceived), 
-    usernameReceived(other.usernameReceived), 
+    passwordAccepted(other.passwordAccepted),
+    nicknameReceived(other.nicknameReceived),
+    usernameReceived(other.usernameReceived),
     registered(other.registered),
     joinedChannels(other.joinedChannels),
     isOperator(other.isOperator),
     disconnectRequested(other.disconnectRequested),
-    disconnectReason(other.disconnectReason)
-{
+    disconnectReason(other.disconnectReason) {
 }
 
-Client &Client::operator=(const Client &other)
-{
-    if (this != &other)
-    {
+Client &Client::operator=(const Client &other) {
+    if (this != &other) {
         socketFd = other.socketFd;
         inputBuffer = other.inputBuffer;
         outputBuffer = other.outputBuffer;
@@ -67,8 +63,7 @@ Client &Client::operator=(const Client &other)
     return *this;
 }
 
-int Client::getSocketFd() const
-{
+int Client::getSocketFd() const {
     return socketFd;
 }
 
@@ -77,118 +72,95 @@ int Client::getSocketFd() const
  * Virtual users, such as the built-in bot, have no socket and are not
  * registered in poll().
  */
-bool Client::isVirtual() const
-{
+bool Client::isVirtual() const {
     return socketFd < 0;
 }
 
-void Client::appendToInputBuffer(const std::string &data)
-{
+void Client::appendToInputBuffer(const std::string &data) {
     inputBuffer += data;
 }
 
-const std::string &Client::getInputBuffer() const
-{
+const std::string &Client::getInputBuffer() const {
     return inputBuffer;
 }
 
-void Client::appendToOutputBuffer(const std::string &data)
-{
+void Client::appendToOutputBuffer(const std::string &data) {
     outputBuffer += data;
 }
 
-const std::string &Client::getOutputBuffer() const
-{
+const std::string &Client::getOutputBuffer() const {
     return outputBuffer;
 }
 
-bool Client::isReadyToRegister() const
-{
+bool Client::isReadyToRegister() const {
     return passwordAccepted && nicknameReceived && usernameReceived;
 }
 
-bool Client::isRegistered() const
-{
+bool Client::isRegistered() const {
     return registered;
 }
 
-bool Client::isPasswordAccepted() const
-{
+bool Client::isPasswordAccepted() const {
     return passwordAccepted;
 }
 
-bool Client::isNicknameReceived() const
-{
+bool Client::isNicknameReceived() const {
     return nicknameReceived;
 }
 
-bool Client::isUsernameReceived() const
-{
+bool Client::isUsernameReceived() const {
     return usernameReceived;
 }
 
-void Client::setPasswordAccepted(bool accepted)
-{
+void Client::setPasswordAccepted(bool accepted) {
     passwordAccepted = accepted;
 }
 
-void Client::setNicknameReceived(bool received)
-{
+void Client::setNicknameReceived(bool received) {
     nicknameReceived = received;
 }
 
-void Client::setUsernameReceived(bool received)
-{
+void Client::setUsernameReceived(bool received) {
     usernameReceived = received;
 }
 
-void Client::setRegistered(bool registered)
-{
+void Client::setRegistered(bool registered) {
     this->registered = registered;
 }
 
-void Client::setNickname(const std::string &nickname)
-{
+void Client::setNickname(const std::string &nickname) {
     this->nickname = nickname;
 }
 
-const std::string &Client::getNickname() const
-{
+const std::string &Client::getNickname() const {
     return nickname;
 }
 
-void Client::setUsername(const std::string &username)
-{
+void Client::setUsername(const std::string &username) {
     this->username = username;
 }
 
-const std::string &Client::getUsername() const
-{
+const std::string &Client::getUsername() const {
     return username;
 }
 
-void Client::setRealname(const std::string &realname)
-{
+void Client::setRealname(const std::string &realname) {
     this->realname = realname;
 }
 
-const std::string &Client::getRealname() const
-{
+const std::string &Client::getRealname() const {
     return realname;
 }
 
-const std::string &Client::getHost() const
-{
+const std::string &Client::getHost() const {
     return host;
 }
 
-void Client::setIsOperator(bool isOperator)
-{
+void Client::setIsOperator(bool isOperator) {
     this->isOperator = isOperator;
 }
 
-bool Client::getIsOperator() const
-{
+bool Client::getIsOperator() const {
     return isOperator;
 }
 
@@ -196,8 +168,7 @@ bool Client::getIsOperator() const
  * @brief Marks the client for deferred disconnection using a generic reason.
  * It does not close the socket or destroy the client.
  */
-void Client::requestDisconnect()
-{
+void Client::requestDisconnect() {
     requestDisconnect("Client disconnected");
 }
 
@@ -208,15 +179,13 @@ void Client::requestDisconnect()
  *
  * @param reason The reason why the client must be disconnected.
  */
-void Client::requestDisconnect(const std::string &reason)
-{
+void Client::requestDisconnect(const std::string &reason) {
     if (disconnectRequested)
         return;
 
     disconnectRequested = true;
 
-    if (reason.empty())
-    {
+    if (reason.empty()) {
         disconnectReason = "Client disconnected";
         return;
     }
@@ -224,8 +193,7 @@ void Client::requestDisconnect(const std::string &reason)
     disconnectReason = reason;
 }
 
-bool Client::isDisconnectRequested() const
-{
+bool Client::isDisconnectRequested() const {
     return disconnectRequested;
 }
 
@@ -234,15 +202,12 @@ bool Client::isDisconnectRequested() const
  *
  * @return A read-only reference to the stored disconnection reason.
  */
-const std::string &Client::getDisconnectReason() const
-{
+const std::string &Client::getDisconnectReason() const {
     return disconnectReason;
 }
 
-void Client::removeSentOutput(std::size_t sentByteCount)
-{
-    if (sentByteCount >= outputBuffer.size())
-    {
+void Client::removeSentOutput(std::size_t sentByteCount) {
+    if (sentByteCount >= outputBuffer.size()) {
         outputBuffer.clear();
         return;
     }
@@ -250,24 +215,20 @@ void Client::removeSentOutput(std::size_t sentByteCount)
     outputBuffer.erase(0, sentByteCount);
 }
 
-void Client::joinChannel(const std::string &channelName)
-{
+void Client::joinChannel(const std::string &channelName) {
     joinedChannels.insert(IrcCasemap::normalize(channelName));
 }
 
-void Client::leaveChannel(const std::string &channelName)
-{
+void Client::leaveChannel(const std::string &channelName) {
     joinedChannels.erase(IrcCasemap::normalize(channelName));
 }
 
-bool Client::isInChannel(const std::string &channelName) const
-{
+bool Client::isInChannel(const std::string &channelName) const {
     return joinedChannels.find(IrcCasemap::normalize(channelName))
         != joinedChannels.end();
 }
 
-const std::set<std::string> &Client::getJoinedChannels() const
-{
+const std::set<std::string> &Client::getJoinedChannels() const {
     return joinedChannels;
 }
 
@@ -279,14 +240,11 @@ const std::set<std::string> &Client::getJoinedChannels() const
  * IRC_MAX_MESSAGE_LENGTH bytes including the terminator. Oversized data is
  * discarded so a later extract cannot loop on the same invalid fragment.
  */
-Client::LineReadStatus Client::extractNextLine(std::string &completeLine)
-{
+Client::LineReadStatus Client::extractNextLine(std::string &completeLine) {
     const std::string::size_type newlinePos = inputBuffer.find('\n');
 
-    if (newlinePos == std::string::npos)
-    {
-        if (inputBuffer.size() > IRC_MAX_MESSAGE_LENGTH - 1)
-        {
+    if (newlinePos == std::string::npos) {
+        if (inputBuffer.size() > IRC_MAX_MESSAGE_LENGTH - 1) {
             inputBuffer.clear();
             return LINE_TOO_LONG;
         }
@@ -294,8 +252,7 @@ Client::LineReadStatus Client::extractNextLine(std::string &completeLine)
     }
 
     const std::size_t totalLength = newlinePos + 1;
-    if (totalLength > IRC_MAX_MESSAGE_LENGTH)
-    {
+    if (totalLength > IRC_MAX_MESSAGE_LENGTH) {
         inputBuffer.erase(0, totalLength);
         return LINE_TOO_LONG;
     }

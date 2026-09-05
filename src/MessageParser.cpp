@@ -1,38 +1,32 @@
-#include "MessageParser.hpp"
-
+// Copyright 2026 @esettes, @danielfdez17
 #include <cctype>
 #include <stdexcept>
 
-namespace
-{
-    std::string toUpperAscii(const std::string &value)
-    {
-        std::string normalized = value;
+#include "MessageParser.hpp"
 
-        for (std::size_t i = 0; i < normalized.size(); ++i)
-        {
-            normalized[i] = static_cast<char>(
-                std::toupper(static_cast<unsigned char>(normalized[i]))
-            );
-        }
+namespace {
+std::string toUpperAscii(const std::string &value) {
+    std::string normalized = value;
 
-        return normalized;
+    for (std::size_t i = 0; i < normalized.size(); ++i) {
+        normalized[i] = static_cast<char>(
+            std::toupper(static_cast<unsigned char>(normalized[i])));
     }
 
-    bool isIrcLineSafe(const std::string &line)
-    {
-        for (std::size_t i = 0; i < line.size(); ++i)
-        {
-            if (line[i] == '\0' || line[i] == '\r' || line[i] == '\n')
-                return false;
-        }
-
-        return true;
-    }
+    return normalized;
 }
 
-IrcMessage MessageParser::parse(const std::string &line)
-{
+bool isIrcLineSafe(const std::string &line) {
+    for (std::size_t i = 0; i < line.size(); ++i) {
+        if (line[i] == '\0' || line[i] == '\r' || line[i] == '\n')
+            return false;
+    }
+
+    return true;
+}
+}  // namespace
+
+IrcMessage MessageParser::parse(const std::string &line) {
     if (!isIrcLineSafe(line))
         throw std::invalid_argument("invalid IRC line characters");
 
@@ -46,8 +40,7 @@ IrcMessage MessageParser::parse(const std::string &line)
         throw std::invalid_argument("empty IRC line");
 
     std::string prefix;
-    if (line[cursor] == ':')
-    {
+    if (line[cursor] == ':') {
         ++cursor;
 
         const std::string::size_type prefixEnd = line.find(' ', cursor);
@@ -72,21 +65,18 @@ IrcMessage MessageParser::parse(const std::string &line)
         throw std::invalid_argument("missing IRC command");
 
     const std::string command = toUpperAscii(
-        line.substr(commandStart, cursor - commandStart)
-    );
+        line.substr(commandStart, cursor - commandStart));
 
     std::vector<std::string> params;
     bool hasTrailingParameter = false;
-    while (cursor < lineLength)
-    {
+    while (cursor < lineLength) {
         while (cursor < lineLength && line[cursor] == ' ')
             ++cursor;
 
         if (cursor == lineLength)
             break;
 
-        if (line[cursor] == ':')
-        {
+        if (line[cursor] == ':') {
             hasTrailingParameter = true;
             params.push_back(line.substr(cursor + 1));
             break;

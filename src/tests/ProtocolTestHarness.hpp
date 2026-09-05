@@ -1,3 +1,4 @@
+// Copyright 2026 @esettes, @danielfdez17
 #ifndef PROTOCOL_TEST_HARNESS_HPP
 #define PROTOCOL_TEST_HARNESS_HPP
 

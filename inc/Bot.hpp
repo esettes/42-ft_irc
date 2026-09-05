@@ -1,5 +1,6 @@
-#ifndef BOT_HPP
-#define BOT_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_BOT_HPP_
+#define INC_BOT_HPP_
 
 #include <ctime>
 #include <string>
@@ -16,9 +17,8 @@ class Channel;
  * The bot registers a reserved nickname, sits in a home channel, answers
  * private commands, and can be invited into other channels.
  */
-class Bot
-{
-    private:
+class Bot {
+ private:
         Server &server;
         Client *user;
         std::time_t startedAt;
@@ -37,8 +37,7 @@ class Bot
             Client *recipient,
             Channel *channel,
             const std::string &command,
-            const std::string &text
-        );
+            const std::string &text);
 
         std::string trim(const std::string &text) const;
         std::string toLowerAscii(const std::string &text) const;
@@ -47,23 +46,20 @@ class Bot
             const std::string &text,
             bool fromChannel,
             std::string &command,
-            std::string &argument
-        ) const;
+            std::string &argument) const;
         bool handleCtcp(Client &sender, const std::string &text);
         std::string runCommand(
             Client &sender,
             const std::string &command,
-            const std::string &argument
-        );
+            const std::string &argument);
         std::string formatNow(const char *format) const;
         std::string formatUptime() const;
         std::string clipTrailing(
             const std::string &command,
             const std::string &target,
-            const std::string &text
-        ) const;
+            const std::string &text) const;
 
-    public:
+ public:
         static const char *NICKNAME;
         static const char *USERNAME;
         static const char *REALNAME;
@@ -84,10 +80,9 @@ class Bot
         void handleChannelMessage(
             Client &sender,
             Channel &channel,
-            const std::string &text
-        );
+            const std::string &text);
         void handleInvite(Channel &channel);
         void handleKick(const std::string &channelName);
 };
 
-#endif
+#endif  // INC_BOT_HPP_

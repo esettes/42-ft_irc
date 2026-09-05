@@ -1,5 +1,6 @@
-#ifndef COMMAND_DISPATCHER_HPP
-#define COMMAND_DISPATCHER_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_COMMANDDISPATCHER_HPP_
+#define INC_COMMANDDISPATCHER_HPP_
 
 #include <cstddef>
 #include <map>
@@ -20,17 +21,14 @@ struct IrcMessage;
  * @param CommandHandler A type alias for member function pointers that handle specific IRC commands.
  * @param CommandDefinition A struct that encapsulates a command handler, its minimum
  */
-class CommandDispatcher
-{
-    private:
+class CommandDispatcher {
+ private:
         /* Type that points to member functions of CommandDispatcher */
         typedef void (CommandDispatcher::*CommandHandler)(
             Client &client,
-            const IrcMessage &message
-        );
+            const IrcMessage &message);
 
-        struct CommandDefinition
-        {
+        struct CommandDefinition {
             CommandHandler handler;
             std::size_t minParams;
             bool requiresRegistration;
@@ -38,8 +36,7 @@ class CommandDispatcher
             CommandDefinition(
                 CommandHandler handler,
                 std::size_t minParams,
-                bool requiresRegistration
-            );
+                bool requiresRegistration);
         };
 
         typedef std::map<std::string, CommandDefinition> CommandMap;
@@ -49,7 +46,6 @@ class CommandDispatcher
 
         CommandDispatcher(const CommandDispatcher &other);
         CommandDispatcher &operator=(const CommandDispatcher &other);
-        
 
         void registerCommands();
 
@@ -71,8 +67,7 @@ class CommandDispatcher
             Client &client,
             const std::string &channelName,
             const std::string &partReason,
-            bool hasPartReason
-        );
+            bool hasPartReason);
         void handlePart(Client &client, const IrcMessage &message);
         void handlePrivateMessage(Client &client, const IrcMessage &message);
         void handleNotice(Client &client, const IrcMessage &message);
@@ -81,14 +76,12 @@ class CommandDispatcher
         void handleKick(Client &client, const IrcMessage &message);
         void handleMode(Client &client, const IrcMessage &message);
 
-        enum ModeAction
-        {
+        enum ModeAction {
             MODE_ADD,
             MODE_REMOVE
         };
 
-        struct ModeOperation
-        {
+        struct ModeOperation {
             ModeAction action;
             char mode;
             std::string argument;
@@ -100,58 +93,48 @@ class CommandDispatcher
         bool parseChannelModeOperations(
             const std::vector<std::string> &params,
             std::vector<ModeOperation> &operations,
-            char &unknownMode
-        ) const;
+            char &unknownMode) const;
         bool validateChannelModeOperations(
             Client &client,
             Channel &channel,
-            std::vector<ModeOperation> &operations
-        );
+            std::vector<ModeOperation> &operations);
         void applyChannelModeOperations(
             Channel &channel,
-            const std::vector<ModeOperation> &operations
-        );
+            const std::vector<ModeOperation> &operations);
         void sendChannelModeIs(Client &client, const Channel &channel);
         void notifyChannelModeChanges(
             Client &client,
             Channel &channel,
-            const std::vector<ModeOperation> &operations
-        );
+            const std::vector<ModeOperation> &operations);
 
         bool isChannelTarget(const std::string &target) const;
         bool canJoinChannel(
             Client &client,
             Channel &channel,
-            const std::string &providedKey
-        );
+            const std::string &providedKey);
         void sendTopicReply(Client &client, const Channel &channel);
         void applyTopicChange(
             Client &client,
             Channel &channel,
-            const std::string &newTopic
-        );
+            const std::string &newTopic);
         void sendMessageToUser(
             Client &sender,
             const std::string &nickname,
             const std::string &messageText,
             const std::string &command,
-            bool reportErrors
-        );
+            bool reportErrors);
         void sendMessageToChannel(
             Client &sender,
             const std::string &channelName,
             const std::string &messageText,
             const std::string &command,
-            bool reportErrors
-        );
+            bool reportErrors);
 
-    public:
-        CommandDispatcher(Server &server);
+ public:
+        explicit CommandDispatcher(Server &server);
 
         void execute(Client &client, const IrcMessage &message);
         ~CommandDispatcher();
-
 };
 
-#endif
-
+#endif  // INC_COMMANDDISPATCHER_HPP_

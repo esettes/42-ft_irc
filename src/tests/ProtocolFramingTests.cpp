@@ -1,3 +1,4 @@
+// Copyright 2026 @esettes, @danielfdez17
 #include "Client.hpp"
 #include "ProtocolTestHarness.hpp"
 

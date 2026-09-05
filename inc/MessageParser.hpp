@@ -1,20 +1,21 @@
-#ifndef MESSAGE_PARSER_HPP
-#define MESSAGE_PARSER_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_MESSAGEPARSER_HPP_
+#define INC_MESSAGEPARSER_HPP_
+
+#include <string>
 
 #include "IrcMessage.hpp"
-#include <string>
 
 /**
  * @file MessageParser.hpp
  * @brief Declares helpers for parsing raw IRC protocol lines into structured messages.
  */
-class MessageParser
-{
-    private:
+class MessageParser {
+ private:
         MessageParser();
 
-    public:
+ public:
         static IrcMessage parse(const std::string &line);
 };
 
-#endif
+#endif  // INC_MESSAGEPARSER_HPP_

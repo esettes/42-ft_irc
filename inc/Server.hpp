@@ -1,5 +1,21 @@
-#ifndef SERVER_HPP
-# define SERVER_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_SERVER_HPP_
+#define INC_SERVER_HPP_
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <map>
+#include <cerrno>
+#include <string>
+#include <vector>
+#include <cstddef>
+#include <cstring>
+#include <iostream>
+#include <stdexcept>
 
 #include "Client.hpp"
 #include "IrcMessage.hpp"
@@ -8,23 +24,6 @@
 #include "CommandDispatcher.hpp"
 #include "NumericReplies.hpp"
 #include "SignalHandler.hpp"
-
-#include <map>
-#include <poll.h>
-#include <cerrno>
-#include <string>
-#include <vector>
-#include <cstddef>
-#include <cerrno>
-#include <cstring>
-#include <iostream>
-#include <stdexcept>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <fcntl.h>
-#include <cstring>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 class Bot;
 
@@ -42,9 +41,8 @@ class Bot;
  * @param clientsByNickname Client objects for quick lookup. Allows detecting duplicates and searching for users.
  * @param bot Built-in helper bot registered as a virtual IRC user.
  */
-class Server
-{
-    private:
+class Server {
+ private:
         int port;
         std::string password;
         std::string serverName;
@@ -79,8 +77,7 @@ class Server
         void updateClientPollEvents(int socketFd);
         std::string resolveClientHost(
             const struct sockaddr_storage &clientAddress,
-            socklen_t clientAddressLength
-        ) const;
+            socklen_t clientAddressLength) const;
 
         std::string getReplyTarget(const Client &client) const;
         Server(const Server &other);
@@ -91,7 +88,7 @@ class Server
 
         void displayStartupInformation() const;
 
-    public:
+ public:
         Server(int port, const std::string &password);
         ~Server();
 
@@ -121,94 +118,77 @@ class Server
         bool validateChannelJoinAccess(
             Client &client,
             const Channel &channel,
-            const std::string &providedKey
-        );
+            const std::string &providedKey);
         void sendChannelTopic(
             Client &client,
-            const Channel &channel
-        );
+            const Channel &channel);
         void sendChannelNames(
             Client &client,
-            const Channel &channel
-        );
+            const Channel &channel);
         void sendChannelHistory(
             Client &client,
-            const Channel &channel
-        );
+            const Channel &channel);
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
-            const std::string &trailingMessage
-        ) const;
+            const std::string &trailingMessage) const;
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
             const std::string &parameter,
-            const std::string &trailingMessage
-        ) const;
+            const std::string &trailingMessage) const;
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
             const std::vector<std::string> &parameters,
-            const std::string &trailingMessage
-        ) const;
+            const std::string &trailingMessage) const;
         std::string buildNumericReply(
             int numericCode,
             const Client &client,
-            const std::vector<std::string> &parameters
-        ) const;
+            const std::vector<std::string> &parameters) const;
 
         void queueMessage(Client &client, const std::string &message);
         void queueMessageToChannel(
             const Channel &channel,
-            const std::string &message
-        );
+            const std::string &message);
         void releaseNickname(const Client &client);
         std::size_t getRegisteredNicknameCount() const;
         bool isBotClient(const Client &client) const;
         void notifyBotPrivateMessage(
             Client &sender,
-            const std::string &text
-        );
+            const std::string &text);
         void notifyBotChannelMessage(
             Client &sender,
             Channel &channel,
-            const std::string &text
-        );
+            const std::string &text);
         void notifyBotInvite(Channel &channel);
         void notifyBotKick(
             const Client &target,
-            const std::string &channelName
-        );
+            const std::string &channelName);
         void queueMessageToRelatedClients(
             Client &sourceClient,
-            const std::string &message
-        );
+            const std::string &message);
         void queueNumericReply(
             Client &client,
             int numericCode,
-            const std::string &trailingMessage
-        );
+            const std::string &trailingMessage);
         void queueNumericReply(
             Client &client,
             int numericCode,
             const std::string &parameter,
-            const std::string &trailingMessage
-        );
+            const std::string &trailingMessage);
         void queueNumericReply(
             Client &client,
             int numericCode,
             const std::vector<std::string> &parameters,
-            const std::string &trailingMessage
-        );
+            const std::string &trailingMessage);
         void queueNumericReply(
             Client &client,
             int numericCode,
-            const std::vector<std::string> &parameters
-        );
+            const std::vector<std::string> &parameters);
 
         /* For send parsed commands to the dispatcher */
         void dispatchCommand(Client &client, const IrcMessage &message);
 };
 
-#endif
+#endif  // INC_SERVER_HPP_

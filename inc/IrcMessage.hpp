@@ -1,5 +1,6 @@
-#ifndef IRC_MESSAGE_HPP
-#define IRC_MESSAGE_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_IRCMESSAGE_HPP_
+#define INC_IRCMESSAGE_HPP_
 
 #include <string>
 #include <vector>
@@ -31,24 +32,22 @@ const std::size_t IRC_MAX_OUTPUT_BUFFER_SIZE = 65536;
  * @param cmd The command of the message, which can be a standard IRC command or a numeric reply.
  * @param params The parameters of the message, which can include channel names, usernames, and message text.
  */
-struct IrcMessage
-{
+struct IrcMessage {
     std::string prefix;
     std::string cmd;
     std::vector<std::string> params;
     bool hasTrailingParameter;
 
     IrcMessage();
-    
+
     IrcMessage(
         const std::string &msgCmd,
         const std::vector<std::string> &msgParams,
         const std::string &msgPrefix = "",
-        bool messageHasTrailingParameter = false
-    );
+        bool messageHasTrailingParameter = false);
 
     const std::string &getCommand() const;
     std::string serialize() const;
 };
 
-#endif
+#endif  // INC_IRCMESSAGE_HPP_

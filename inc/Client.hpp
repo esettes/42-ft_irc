@@ -1,5 +1,6 @@
-#ifndef CLIENT_HPP
-#define CLIENT_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_CLIENT_HPP_
+#define INC_CLIENT_HPP_
 
 #include <string>
 #include <cstddef>
@@ -26,11 +27,10 @@
  * @param disconnectRequested Whether the client is waiting to be disconnected.
  * @param disconnectReason The reason associated with the first disconnection request.
  */
-class Client
-{
+class Client {
     friend class Server;
 
-    private:
+ private:
         int socketFd;
         std::string inputBuffer;
         std::string outputBuffer;
@@ -53,9 +53,8 @@ class Client
         void appendToOutputBuffer(const std::string &data);
         void removeSentOutput(std::size_t sentByteCount);
 
-    public:
-        enum LineReadStatus
-        {
+ public:
+        enum LineReadStatus {
             LINE_INCOMPLETE = 0,
             LINE_COMPLETE = 1,
             LINE_TOO_LONG = -1
@@ -63,7 +62,7 @@ class Client
 
         Client(int socketFd, const std::string &host);
         ~Client();
-        
+
         int getSocketFd() const;
         bool isVirtual() const;
 
@@ -102,7 +101,6 @@ class Client
         const std::string &getHost() const;
 
         LineReadStatus extractNextLine(std::string &completeLine);
-
 };
 
-#endif
+#endif  // INC_CLIENT_HPP_

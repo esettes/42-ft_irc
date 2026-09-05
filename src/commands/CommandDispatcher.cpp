@@ -1,25 +1,23 @@
+// Copyright 2026 @esettes, @danielfdez17
+#include <cctype>
+#include <sstream>
+
 #include "CommandDispatcher.hpp"
 #include "Server.hpp"
 #include "Client.hpp"
 #include "Channel.hpp"
 #include "IrcMessage.hpp"
 
-#include <cctype>
-#include <sstream>
-
-namespace
-{
-    bool isSupportedChannelMode(char mode)
-    {
+namespace {
+bool isSupportedChannelMode(char mode) {
         return mode == 'i'
             || mode == 't'
             || mode == 'k'
             || mode == 'o'
             || mode == 'l';
-    }
+}
 
-    bool modeRequiresArgument(char mode, bool adding)
-    {
+bool modeRequiresArgument(char mode, bool adding) {
         if (mode == 'o')
             return true;
 
@@ -30,18 +28,16 @@ namespace
             return true;
 
         return false;
-    }
+}
 
-    bool parsePositiveUserLimit(const std::string &text, std::size_t &limit)
-    {
+bool parsePositiveUserLimit(const std::string &text, std::size_t &limit) {
         if (text.empty())
             return false;
 
         const std::size_t maximumValue = static_cast<std::size_t>(-1);
         std::size_t value = 0;
 
-        for (std::size_t index = 0; index < text.size(); ++index)
-        {
+        for (std::size_t index = 0; index < text.size(); ++index) {
             const unsigned char character =
                 static_cast<unsigned char>(text[index]);
 
@@ -52,9 +48,7 @@ namespace
 
             if (value > maximumValue / 10
                 || (value == maximumValue / 10 && digit > maximumValue % 10))
-            {
                 return false;
-            }
 
             value = value * 10 + digit;
         }
@@ -64,28 +58,27 @@ namespace
 
         limit = value;
         return true;
-    }
+}
 
-    std::string formatUserLimit(std::size_t limit)
-    {
+std::string formatUserLimit(std::size_t limit) {
         std::ostringstream stream;
 
         stream << limit;
         return stream.str();
-    }
 }
+}  // namespace
 
 
 CommandDispatcher::CommandDefinition::CommandDefinition(
     CommandHandler handler,
     std::size_t minParams,
     bool requiresRegistration
-) : handler(handler), minParams(minParams), requiresRegistration(requiresRegistration)
-{
+) : handler(handler),
+    minParams(minParams),
+    requiresRegistration(requiresRegistration) {
 }
 
-CommandDispatcher::CommandDispatcher(Server &server) : server(server)
-{
+CommandDispatcher::CommandDispatcher(Server &server) : server(server) {
     registerCommands();
 }
 
@@ -93,83 +86,68 @@ CommandDispatcher::CommandDispatcher(Server &server) : server(server)
  * @brief Registers every supported IRC command with its handler, minimum
  * parameter count, and client registration requirement.
  */
-void CommandDispatcher::registerCommands()
-{
+void CommandDispatcher::registerCommands() {
     cmmds.insert(
         std::make_pair(
             "PASS",
-            CommandDefinition(&CommandDispatcher::handlePass, 1, false))
-    );
+            CommandDefinition(&CommandDispatcher::handlePass, 1, false)));
     cmmds.insert(
         std::make_pair(
             "NICK",
-            CommandDefinition(&CommandDispatcher::handleNick, 1, false))
-    );
+            CommandDefinition(&CommandDispatcher::handleNick, 1, false)));
     cmmds.insert(
         std::make_pair(
             "USER",
-            CommandDefinition(&CommandDispatcher::handleUser, 4, false))
-    );
+            CommandDefinition(&CommandDispatcher::handleUser, 4, false)));
     cmmds.insert(
         std::make_pair(
             "PING",
-            CommandDefinition(&CommandDispatcher::handlePing, 0, false))
-    );
+            CommandDefinition(&CommandDispatcher::handlePing, 0, false)));
     cmmds.insert(
         std::make_pair(
             "PONG",
-            CommandDefinition(&CommandDispatcher::handlePong, 0, false))
-    );
+            CommandDefinition(&CommandDispatcher::handlePong, 0, false)));
     cmmds.insert(
         std::make_pair(
             "QUIT",
-            CommandDefinition(&CommandDispatcher::handleQuit, 0, false))
-    );
+            CommandDefinition(&CommandDispatcher::handleQuit, 0, false)));
     cmmds.insert(
         std::make_pair(
             "CAP",
-            CommandDefinition(&CommandDispatcher::handleCap, 1, false))
-    );
+            CommandDefinition(&CommandDispatcher::handleCap, 1, false)));
     cmmds.insert(
         std::make_pair(
             "JOIN",
-            CommandDefinition(&CommandDispatcher::handleJoin, 1, true))
-    );
+            CommandDefinition(&CommandDispatcher::handleJoin, 1, true)));
     cmmds.insert(
         std::make_pair(
             "PART",
-            CommandDefinition(&CommandDispatcher::handlePart, 1, true))
-    );
+            CommandDefinition(&CommandDispatcher::handlePart, 1, true)));
     cmmds.insert(
         std::make_pair(
             "PRIVMSG",
-            CommandDefinition(&CommandDispatcher::handlePrivateMessage, 2, true))
-    );
+            CommandDefinition(&CommandDispatcher::handlePrivateMessage, 2,
+                true)));
     cmmds.insert(
         std::make_pair(
             "NOTICE",
-            CommandDefinition(&CommandDispatcher::handleNotice, 0, true))
-    );
+            CommandDefinition(&CommandDispatcher::handleNotice, 0, true)));
     cmmds.insert(
         std::make_pair(
             "TOPIC",
-            CommandDefinition(&CommandDispatcher::handleTopic, 1, true))
-    );
+            CommandDefinition(&CommandDispatcher::handleTopic, 1, true)));
     cmmds.insert(
         std::make_pair(
             "INVITE",
-            CommandDefinition(&CommandDispatcher::handleInvite, 2, true))
-    );
+            CommandDefinition(&CommandDispatcher::handleInvite, 2, true)));
     cmmds.insert(
         std::make_pair(
             "KICK",
-            CommandDefinition(&CommandDispatcher::handleKick, 2, true))
-    );
+            CommandDefinition(&CommandDispatcher::handleKick, 2, true)));
     cmmds.insert(
         std::make_pair(
             "MODE",
-            CommandDefinition(&CommandDispatcher::handleMode, 1, true))
-    );
+            CommandDefinition(&CommandDispatcher::handleMode, 1, true)));
 }
 
 /**
@@ -178,120 +156,98 @@ void CommandDispatcher::registerCommands()
  * that its required parameters are present. Queues the corresponding numeric
  * error when validation fails and invokes the registered handler otherwise.
  */
-void CommandDispatcher::execute(Client &client, const IrcMessage &message)
-{
+void CommandDispatcher::execute(Client &client, const IrcMessage &message) {
     CommandMap::iterator it;
 
     it = cmmds.find(message.getCommand());
-    if (it == cmmds.end())
-    {
+    if (it == cmmds.end()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_UNKNOWNCOMMAND,
             message.getCommand(),
-            NumericReply::MSG_UNKNOWNCOMMAND
-        );
+            NumericReply::MSG_UNKNOWNCOMMAND);
         return;
     }
 
     const CommandDefinition &definition = it->second;
 
-    if (definition.requiresRegistration && !client.isRegistered())
-    {
+    if (definition.requiresRegistration && !client.isRegistered()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTREGISTERED,
-            NumericReply::MSG_NOTREGISTERED
-        );
+            NumericReply::MSG_NOTREGISTERED);
         return;
     }
 
-    if (message.getCommand() == "NICK" && message.params.empty())
-    {
+    if (message.getCommand() == "NICK" && message.params.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NONICKNAMEGIVEN,
-            NumericReply::MSG_NONICKNAMEGIVEN
-        );
+            NumericReply::MSG_NONICKNAMEGIVEN);
         return;
     }
 
     if ((message.getCommand() == "PING"
             || message.getCommand() == "PONG")
-        && message.params.empty())
-    {
+        && message.params.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOORIGIN,
-            NumericReply::MSG_NOORIGIN
-        );
+            NumericReply::MSG_NOORIGIN);
         return;
     }
 
-    if (message.getCommand() == "PRIVMSG")
-    {
-        if (message.params.empty())
-        {
+    if (message.getCommand() == "PRIVMSG") {
+        if (message.params.empty()) {
             server.queueNumericReply(
                 client,
                 NumericReply::ERR_NORECIPIENT,
-                NumericReply::noRecipientMessage(message.getCommand())
-            );
+                NumericReply::noRecipientMessage(message.getCommand()));
             return;
         }
 
         if (message.params.size() == 1
-            || message.params[1].empty())
-        {
+            || message.params[1].empty()) {
             server.queueNumericReply(
                 client,
                 NumericReply::ERR_NOTEXTTOSEND,
-                NumericReply::MSG_NOTEXTTOSEND
-            );
+                NumericReply::MSG_NOTEXTTOSEND);
             return;
         }
     }
 
-    if (message.params.size() < definition.minParams)
-    {
+    if (message.params.size() < definition.minParams) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
     (this->*(definition.handler))(client, message);
 }
 
-CommandDispatcher::~CommandDispatcher()
-{
+CommandDispatcher::~CommandDispatcher() {
 }
 
-void CommandDispatcher::handlePass(Client &client, const IrcMessage &message)
-{
-    if (client.isRegistered())
-    {
+void CommandDispatcher::handlePass(Client &client, const IrcMessage &message) {
+    if (client.isRegistered()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_ALREADYREGISTERED,
-            NumericReply::MSG_ALREADYREGISTRED
-        );
+            NumericReply::MSG_ALREADYREGISTRED);
         return;
     }
 
     const std::string &providedPassword = message.params[0];
 
-    if (!server.isPasswordCorrect(providedPassword))
-    {
+    if (!server.isPasswordCorrect(providedPassword)) {
         client.setPasswordAccepted(false);
         server.queueNumericReply(
             client,
             NumericReply::ERR_PASSWDMISMATCH,
-            NumericReply::MSG_PASSWDMISMATCH
-        );
+            NumericReply::MSG_PASSWDMISMATCH);
         return;
     }
 
@@ -303,28 +259,23 @@ void CommandDispatcher::handlePass(Client &client, const IrcMessage &message)
  * or occupied names, and broadcasts registered nickname changes using the
  * client's previous prefix; initial and identical assignments are not announced.
  */
-void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
-{
+void CommandDispatcher::handleNick(Client &client, const IrcMessage &message) {
     const std::string &requestedNickname = message.params[0];
 
-    if (requestedNickname.empty())
-    {
+    if (requestedNickname.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NONICKNAMEGIVEN,
-            NumericReply::MSG_NONICKNAMEGIVEN
-        );
+            NumericReply::MSG_NONICKNAMEGIVEN);
         return;
     }
 
-    if (!server.isValidNickname(requestedNickname))
-    {
+    if (!server.isValidNickname(requestedNickname)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_ERRONEUSNICKNAME,
             requestedNickname,
-            NumericReply::MSG_ERRONEUSNICKNAME
-        );
+            NumericReply::MSG_ERRONEUSNICKNAME);
         return;
     }
 
@@ -333,14 +284,12 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
     const std::string previousClientPrefix =
         server.getClientPrefix(client);
 
-    if (!server.assignNickname(client, requestedNickname))
-    {
+    if (!server.assignNickname(client, requestedNickname)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NICKNAMEINUSE,
             requestedNickname,
-            NumericReply::MSG_NICKNAMEINUSE
-        );
+            NumericReply::MSG_NICKNAMEINUSE);
         return;
     }
 
@@ -354,13 +303,11 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
         "NICK",
         nicknameParameters,
         previousClientPrefix,
-        true
-    );
+        true);
 
     server.queueMessageToRelatedClients(
         client,
-        nicknameMessage.serialize()
-    );
+        nicknameMessage.serialize());
 }
 
 /**
@@ -368,29 +315,24 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message)
  * missing required data, then stores the username and real name and marks the
  * USER registration step as completed.
  */
-void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
-{
-    if (client.isRegistered())
-    {
+void CommandDispatcher::handleUser(Client &client, const IrcMessage &message) {
+    if (client.isRegistered()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_ALREADYREGISTERED,
-            NumericReply::MSG_ALREADYREGISTRED
-        );
+            NumericReply::MSG_ALREADYREGISTRED);
         return;
     }
 
     const std::string &requestedUsername = message.params[0];
     const std::string &requestedRealname = message.params[3];
 
-    if (requestedUsername.empty() || requestedRealname.empty())
-    {
+    if (requestedUsername.empty() || requestedRealname.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
@@ -403,8 +345,7 @@ void CommandDispatcher::handleUser(Client &client, const IrcMessage &message)
  * @brief Responds to a valid PING command with a PONG message containing
  * the same token, queued through the server's non-blocking output system.
  */
-void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
-{
+void CommandDispatcher::handlePing(Client &client, const IrcMessage &message) {
     std::vector<std::string> pongParameters;
 
     pongParameters.push_back(message.params[0]);
@@ -413,8 +354,7 @@ void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
         "PONG",
         pongParameters,
         "",
-        true
-    );
+        true);
 
     server.queueMessage(client, pongMessage.serialize());
 }
@@ -423,8 +363,7 @@ void CommandDispatcher::handlePing(Client &client, const IrcMessage &message)
  * @brief Accepts a valid PONG response from a client. No state is updated
  * because the server does not currently track keepalive tokens or deadlines.
  */
-void CommandDispatcher::handlePong(Client &client, const IrcMessage &message)
-{
+void CommandDispatcher::handlePong(Client &client, const IrcMessage &message) {
     (void)client;
     (void)message;
 }
@@ -440,8 +379,7 @@ void CommandDispatcher::handlePong(Client &client, const IrcMessage &message)
  * @param client The client requesting disconnection.
  * @param message The parsed QUIT command and its optional reason.
  */
-void CommandDispatcher::handleQuit(Client &client,const IrcMessage &message)
-{
+void CommandDispatcher::handleQuit(Client &client, const IrcMessage &message) {
     std::string quitReason = "Client Quit";
 
     if (!message.params.empty() && !message.params[0].empty())
@@ -455,50 +393,38 @@ void CommandDispatcher::handleQuit(Client &client,const IrcMessage &message)
  * registration, returning empty capability lists for LS and LIST and rejecting
  * requested capabilities through NAK.
  */
-void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
-{
+void CommandDispatcher::handleCap(Client &client, const IrcMessage &message) {
     std::string capabilitySubcommand = message.params[0];
 
     for (std::size_t characterIndex = 0;
         characterIndex < capabilitySubcommand.size();
-        ++characterIndex)
-    {
+        ++characterIndex) {
         capabilitySubcommand[characterIndex] = static_cast<char>(
             std::toupper(
                 static_cast<unsigned char>(
-                    capabilitySubcommand[characterIndex]
-                )
-            )
-        );
+                    capabilitySubcommand[characterIndex])));
     }
     if (capabilitySubcommand == "END")
         return;
-    
+
     std::string responseSubcommand;
     std::string responseCapabilityList;
 
-    if (capabilitySubcommand == "LS" || capabilitySubcommand == "LIST")
-    {
+    if (capabilitySubcommand == "LS" || capabilitySubcommand == "LIST") {
         responseSubcommand = capabilitySubcommand;
-    }
-    else if (capabilitySubcommand == "REQ")
-    {
-        if (message.params.size() < 2 || message.params[1].empty())
-        {
+    } else if (capabilitySubcommand == "REQ") {
+        if (message.params.size() < 2 || message.params[1].empty()) {
             server.queueNumericReply(
                 client,
                 NumericReply::ERR_NEEDMOREPARAMS,
                 message.getCommand(),
-                NumericReply::MSG_NEEDMOREPARAMS
-            );
+                NumericReply::MSG_NEEDMOREPARAMS);
             return;
         }
 
         responseSubcommand = "NAK";
         responseCapabilityList = message.params[1];
-    }
-    else
-    {
+    } else {
         return;
     }
 
@@ -517,13 +443,11 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
         "CAP",
         capabilityParameters,
         server.getServerName(),
-        true
-    );
+        true);
 
     server.queueMessage(
         client,
-        capabilityMessage.serialize()
-    );
+        capabilityMessage.serialize());
 }
 
 /**
@@ -535,18 +459,15 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message)
  * @return A vector containing each value in its original order.
  */
 std::vector<std::string>
-CommandDispatcher::splitCommaSeparatedValues(const std::string &valueList)
-{
+CommandDispatcher::splitCommaSeparatedValues(const std::string &valueList) {
     std::vector<std::string> values;
     std::string::size_type valueStart = 0;
 
-    while (true)
-    {
+    while (true) {
         const std::string::size_type commaPosition =
             valueList.find(',', valueStart);
 
-        if (commaPosition == std::string::npos)
-        {
+        if (commaPosition == std::string::npos) {
             values.push_back(valueList.substr(valueStart));
             break;
         }
@@ -554,9 +475,7 @@ CommandDispatcher::splitCommaSeparatedValues(const std::string &valueList)
         values.push_back(
             valueList.substr(
                 valueStart,
-                commaPosition - valueStart
-            )
-        );
+                commaPosition - valueStart));
 
         valueStart = commaPosition + 1;
     }
@@ -579,18 +498,15 @@ void CommandDispatcher::joinClientToSingleChannel(
     Client &client,
     const std::string &channelName,
     const std::string &providedKey
-)
-{
+) {
     Channel *channel = server.findOrCreateChannel(channelName);
 
-    if (channel == NULL)
-    {
+    if (channel == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHCHANNEL,
             channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+            NumericReply::MSG_NOSUCHCHANNEL);
         return;
     }
 
@@ -600,11 +516,8 @@ void CommandDispatcher::joinClientToSingleChannel(
     if (!server.validateChannelJoinAccess(
             client,
             *channel,
-            providedKey
-        ))
-    {
+            providedKey))
         return;
-    }
 
     server.addClientToChannel(client, *channel);
 
@@ -616,13 +529,11 @@ void CommandDispatcher::joinClientToSingleChannel(
         "JOIN",
         joinParameters,
         server.getClientPrefix(client),
-        true
-    );
+        true);
 
     server.queueMessageToChannel(
         *channel,
-        joinMessage.serialize()
-    );
+        joinMessage.serialize());
 
     server.sendChannelTopic(client, *channel);
     server.sendChannelNames(client, *channel);
@@ -645,18 +556,15 @@ void CommandDispatcher::joinClientToSingleChannel(
  * @param message The parsed JOIN message containing a comma-separated channel
  * list and an optional comma-separated key list.
  */
-void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
-{
-   const std::string &channelList = message.params[0];
+void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message) {
+    const std::string &channelList = message.params[0];
 
-    if (channelList.empty())
-    {
+    if (channelList.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
@@ -665,16 +573,14 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
 
     std::vector<std::string> providedKeys;
 
-    if (message.params.size() > 1)
-    {
+    if (message.params.size() > 1) {
         providedKeys =
             splitCommaSeparatedValues(message.params[1]);
     }
 
     for (std::size_t channelIndex = 0;
         channelIndex < requestedChannels.size();
-        ++channelIndex)
-    {
+        ++channelIndex) {
         std::string providedKey;
 
         if (channelIndex < providedKeys.size())
@@ -683,8 +589,7 @@ void CommandDispatcher::handleJoin(Client &client, const IrcMessage &message)
         joinClientToSingleChannel(
             client,
             requestedChannels[channelIndex],
-            providedKey
-        );
+            providedKey);
     }
 }
 
@@ -704,29 +609,24 @@ void CommandDispatcher::partClientFromSingleChannel(
     Client &client,
     const std::string &channelName,
     const std::string &partReason,
-    bool hasPartReason)
-{
+    bool hasPartReason) {
     Channel *channel = server.findChannel(channelName);
 
-    if (channel == NULL)
-    {
+    if (channel == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHCHANNEL,
             channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+            NumericReply::MSG_NOSUCHCHANNEL);
         return;
     }
 
-    if (!channel->hasMember(&client))
-    {
+    if (!channel->hasMember(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTONCHANNEL,
             channel->getName(),
-            NumericReply::MSG_NOTONCHANNEL
-        );
+            NumericReply::MSG_NOTONCHANNEL);
         return;
     }
 
@@ -741,13 +641,11 @@ void CommandDispatcher::partClientFromSingleChannel(
         "PART",
         partParameters,
         server.getClientPrefix(client),
-        hasPartReason
-    );
+        hasPartReason);
 
     server.queueMessageToChannel(
         *channel,
-        partMessage.serialize()
-    );
+        partMessage.serialize());
 
     server.removeClientFromChannel(client, *channel);
 }
@@ -764,18 +662,15 @@ void CommandDispatcher::partClientFromSingleChannel(
  * @param message The parsed PART message containing a comma-separated channel
  * list and an optional reason.
  */
-void CommandDispatcher::handlePart(Client &client, const IrcMessage &message)
-{
+void CommandDispatcher::handlePart(Client &client, const IrcMessage &message) {
     const std::string &channelList = message.params[0];
 
-    if (channelList.empty())
-    {
+    if (channelList.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
@@ -791,14 +686,12 @@ void CommandDispatcher::handlePart(Client &client, const IrcMessage &message)
 
     for (std::size_t channelIndex = 0;
         channelIndex < requestedChannels.size();
-        ++channelIndex)
-    {
+        ++channelIndex) {
         partClientFromSingleChannel(
             client,
             requestedChannels[channelIndex],
             partReason,
-            hasPartReason
-        );
+            hasPartReason);
     }
 }
 
@@ -811,40 +704,33 @@ bool CommandDispatcher::canJoinChannel(
     Client &client,
     Channel &channel,
     const std::string &providedKey
-)
-{
-    if (channel.isInviteOnly() && !channel.hasInvitation(&client))
-    {
+) {
+    if (channel.isInviteOnly() && !channel.hasInvitation(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_INVITEONLYCHAN,
             channel.getName(),
-            NumericReply::MSG_INVITEONLYCHAN
-        );
+            NumericReply::MSG_INVITEONLYCHAN);
         return false;
     }
 
     if (channel.isKeyEnabled()
-        && (providedKey.empty() || providedKey != channel.getKey()))
-    {
+        && (providedKey.empty() || providedKey != channel.getKey())) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_BADCHANNELKEY,
             channel.getName(),
-            NumericReply::MSG_BADCHANNELKEY
-        );
+            NumericReply::MSG_BADCHANNELKEY);
         return false;
     }
 
     if (channel.isLimitEnabled()
-        && channel.getMemberCount() >= channel.getUserLimit())
-    {
+        && channel.getMemberCount() >= channel.getUserLimit()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_CHANNELISFULL,
             channel.getName(),
-            NumericReply::MSG_CHANNELISFULL
-        );
+            NumericReply::MSG_CHANNELISFULL);
         return false;
     }
 
@@ -859,61 +745,51 @@ bool CommandDispatcher::canJoinChannel(
 void CommandDispatcher::handleInvite(
     Client &client,
     const IrcMessage &message
-)
-{
+) {
     const std::string &targetNickname = message.params[0];
     const std::string &channelName = message.params[1];
 
-    if (targetNickname.empty() || channelName.empty())
-    {
+    if (targetNickname.empty() || channelName.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
     Channel *channel = server.findChannel(channelName);
 
-    if (channel == NULL)
-    {
+    if (channel == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHCHANNEL,
             channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+            NumericReply::MSG_NOSUCHCHANNEL);
         return;
     }
 
     Client *targetClient = server.findClientByNickname(targetNickname);
 
-    if (targetClient == NULL)
-    {
+    if (targetClient == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHNICK,
             targetNickname,
-            NumericReply::MSG_NOSUCHNICK
-        );
+            NumericReply::MSG_NOSUCHNICK);
         return;
     }
 
-    if (!channel->hasMember(&client))
-    {
+    if (!channel->hasMember(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTONCHANNEL,
             channel->getName(),
-            NumericReply::MSG_NOTONCHANNEL
-        );
+            NumericReply::MSG_NOTONCHANNEL);
         return;
     }
 
-    if (channel->hasMember(targetClient))
-    {
+    if (channel->hasMember(targetClient)) {
         std::vector<std::string> alreadyOnChannelParameters;
 
         alreadyOnChannelParameters.push_back(targetClient->getNickname());
@@ -923,19 +799,16 @@ void CommandDispatcher::handleInvite(
             client,
             NumericReply::ERR_USERONCHANNEL,
             alreadyOnChannelParameters,
-            NumericReply::MSG_USERONCHANNEL
-        );
+            NumericReply::MSG_USERONCHANNEL);
         return;
     }
 
-    if (!channel->hasOperator(&client))
-    {
+    if (!channel->hasOperator(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_CHANOPRIVSNEEDED,
             channel->getName(),
-            NumericReply::MSG_CHANOPRIVSNEEDED
-        );
+            NumericReply::MSG_CHANOPRIVSNEEDED);
         return;
     }
 
@@ -949,8 +822,7 @@ void CommandDispatcher::handleInvite(
     server.queueNumericReply(
         client,
         NumericReply::RPL_INVITING,
-        invitingParameters
-    );
+        invitingParameters);
 
     std::vector<std::string> inviteParameters;
 
@@ -961,8 +833,7 @@ void CommandDispatcher::handleInvite(
         "INVITE",
         inviteParameters,
         server.getClientPrefix(client),
-        true
-    );
+        true);
 
     server.queueMessage(*targetClient, inviteMessage.serialize());
 
@@ -980,72 +851,60 @@ void CommandDispatcher::handleInvite(
 void CommandDispatcher::handleKick(
     Client &client,
     const IrcMessage &message
-)
-{
+) {
     const std::string &channelName = message.params[0];
     const std::string &targetNickname = message.params[1];
 
-    if (channelName.empty() || targetNickname.empty())
-    {
+    if (channelName.empty() || targetNickname.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
     Channel *channel = server.findChannel(channelName);
 
-    if (channel == NULL)
-    {
+    if (channel == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHCHANNEL,
             channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+            NumericReply::MSG_NOSUCHCHANNEL);
         return;
     }
 
     Client *targetClient = server.findClientByNickname(targetNickname);
 
-    if (targetClient == NULL)
-    {
+    if (targetClient == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHNICK,
             targetNickname,
-            NumericReply::MSG_NOSUCHNICK
-        );
+            NumericReply::MSG_NOSUCHNICK);
         return;
     }
 
-    if (!channel->hasMember(&client))
-    {
+    if (!channel->hasMember(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTONCHANNEL,
             channel->getName(),
-            NumericReply::MSG_NOTONCHANNEL
-        );
+            NumericReply::MSG_NOTONCHANNEL);
         return;
     }
 
-    if (!channel->hasOperator(&client))
-    {
+    if (!channel->hasOperator(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_CHANOPRIVSNEEDED,
             channel->getName(),
-            NumericReply::MSG_CHANOPRIVSNEEDED
-        );
+            NumericReply::MSG_CHANOPRIVSNEEDED);
         return;
     }
 
-    if (!channel->hasMember(targetClient))
-    {
+    if (!channel->hasMember(targetClient)) {
         std::vector<std::string> notInChannelParameters;
 
         notInChannelParameters.push_back(targetClient->getNickname());
@@ -1055,8 +914,7 @@ void CommandDispatcher::handleKick(
             client,
             NumericReply::ERR_USERNOTINCHANNEL,
             notInChannelParameters,
-            NumericReply::MSG_USERNOTINCHANNEL
-        );
+            NumericReply::MSG_USERNOTINCHANNEL);
         return;
     }
 
@@ -1075,13 +933,11 @@ void CommandDispatcher::handleKick(
         "KICK",
         kickParameters,
         server.getClientPrefix(client),
-        true
-    );
+        true);
 
     server.queueMessageToChannel(
         *channel,
-        kickMessage.serialize()
-    );
+        kickMessage.serialize());
 
     const std::string kickedFromChannel = channel->getName();
 
@@ -1102,62 +958,52 @@ void CommandDispatcher::handleKick(
 void CommandDispatcher::handleTopic(
     Client &client,
     const IrcMessage &message
-)
-{
+) {
     const std::string &channelName = message.params[0];
 
-    if (channelName.empty())
-    {
+    if (channelName.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
     Channel *channel = server.findChannel(channelName);
 
-    if (channel == NULL)
-    {
+    if (channel == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHCHANNEL,
             channelName,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+            NumericReply::MSG_NOSUCHCHANNEL);
         return;
     }
 
-    if (!channel->hasMember(&client))
-    {
+    if (!channel->hasMember(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTONCHANNEL,
             channel->getName(),
-            NumericReply::MSG_NOTONCHANNEL
-        );
+            NumericReply::MSG_NOTONCHANNEL);
         return;
     }
 
-    const bool topicProvided =
-        message.hasTrailingParameter || message.params.size() >= 2;
+    const bool topicProvided = message.hasTrailingParameter
+        || message.params.size() >= 2;
 
-    if (!topicProvided)
-    {
+    if (!topicProvided) {
         sendTopicReply(client, *channel);
         return;
     }
 
-    if (channel->isTopicRestricted() && !channel->hasOperator(&client))
-    {
+    if (channel->isTopicRestricted() && !channel->hasOperator(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_CHANOPRIVSNEEDED,
             channel->getName(),
-            NumericReply::MSG_CHANOPRIVSNEEDED
-        );
+            NumericReply::MSG_CHANOPRIVSNEEDED);
         return;
     }
 
@@ -1174,16 +1020,13 @@ void CommandDispatcher::handleTopic(
 void CommandDispatcher::sendTopicReply(
     Client &client,
     const Channel &channel
-)
-{
-    if (channel.getTopic().empty())
-    {
+) {
+    if (channel.getTopic().empty()) {
         server.queueNumericReply(
             client,
             NumericReply::RPL_NOTOPIC,
             channel.getName(),
-            NumericReply::MSG_NOTOPIC
-        );
+            NumericReply::MSG_NOTOPIC);
         return;
     }
 
@@ -1191,8 +1034,7 @@ void CommandDispatcher::sendTopicReply(
         client,
         NumericReply::RPL_TOPIC,
         channel.getName(),
-        channel.getTopic()
-    );
+        channel.getTopic());
 }
 
 /**
@@ -1204,8 +1046,7 @@ void CommandDispatcher::applyTopicChange(
     Client &client,
     Channel &channel,
     const std::string &newTopic
-)
-{
+) {
     channel.setTopic(newTopic);
 
     std::vector<std::string> topicParameters;
@@ -1217,8 +1058,7 @@ void CommandDispatcher::applyTopicChange(
         "TOPIC",
         topicParameters,
         server.getClientPrefix(client),
-        true
-    );
+        true);
 
     server.queueMessageToChannel(channel, topicMessage.serialize());
 }
@@ -1227,8 +1067,7 @@ CommandDispatcher::ModeOperation::ModeOperation()
     : action(MODE_ADD),
       mode('\0'),
       argument(),
-      numericArgument(0)
-{
+      numericArgument(0) {
 }
 
 /**
@@ -1240,8 +1079,7 @@ bool CommandDispatcher::parseChannelModeOperations(
     const std::vector<std::string> &params,
     std::vector<ModeOperation> &operations,
     char &unknownMode
-) const
-{
+) const {
     const std::string &modeString = params[1];
     ModeAction currentAction = MODE_ADD;
     std::size_t argumentIndex = 2;
@@ -1249,24 +1087,20 @@ bool CommandDispatcher::parseChannelModeOperations(
     unknownMode = '\0';
     operations.clear();
 
-    for (std::size_t index = 0; index < modeString.size(); ++index)
-    {
+    for (std::size_t index = 0; index < modeString.size(); ++index) {
         const char character = modeString[index];
 
-        if (character == '+')
-        {
+        if (character == '+') {
             currentAction = MODE_ADD;
             continue;
         }
 
-        if (character == '-')
-        {
+        if (character == '-') {
             currentAction = MODE_REMOVE;
             continue;
         }
 
-        if (!isSupportedChannelMode(character))
-        {
+        if (!isSupportedChannelMode(character)) {
             unknownMode = character;
             operations.clear();
             return false;
@@ -1277,10 +1111,9 @@ bool CommandDispatcher::parseChannelModeOperations(
         operation.action = currentAction;
         operation.mode = character;
 
-        if (modeRequiresArgument(character, currentAction == MODE_ADD))
-        {
-            if (argumentIndex >= params.size() || params[argumentIndex].empty())
-            {
+        if (modeRequiresArgument(character, currentAction == MODE_ADD)) {
+            if (argumentIndex >= params.size()
+                || params[argumentIndex].empty()) {
                 operations.clear();
                 return false;
             }
@@ -1306,30 +1139,24 @@ bool CommandDispatcher::validateChannelModeOperations(
     Client &client,
     Channel &channel,
     std::vector<ModeOperation> &operations
-)
-{
-    for (std::size_t index = 0; index < operations.size(); ++index)
-    {
+) {
+    for (std::size_t index = 0; index < operations.size(); ++index) {
         ModeOperation &operation = operations[index];
 
-        if (operation.mode == 'o')
-        {
+        if (operation.mode == 'o') {
             Client *targetClient =
                 server.findClientByNickname(operation.argument);
 
-            if (targetClient == NULL)
-            {
+            if (targetClient == NULL) {
                 server.queueNumericReply(
                     client,
                     NumericReply::ERR_NOSUCHNICK,
                     operation.argument,
-                    NumericReply::MSG_NOSUCHNICK
-                );
+                    NumericReply::MSG_NOSUCHNICK);
                 return false;
             }
 
-            if (!channel.hasMember(targetClient))
-            {
+            if (!channel.hasMember(targetClient)) {
                 std::vector<std::string> notInChannelParameters;
 
                 notInChannelParameters.push_back(targetClient->getNickname());
@@ -1339,8 +1166,7 @@ bool CommandDispatcher::validateChannelModeOperations(
                     client,
                     NumericReply::ERR_USERNOTINCHANNEL,
                     notInChannelParameters,
-                    NumericReply::MSG_USERNOTINCHANNEL
-                );
+                    NumericReply::MSG_USERNOTINCHANNEL);
                 return false;
             }
 
@@ -1348,35 +1174,28 @@ bool CommandDispatcher::validateChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'k' && operation.action == MODE_ADD)
-        {
-            if (operation.argument.empty())
-            {
+        if (operation.mode == 'k' && operation.action == MODE_ADD) {
+            if (operation.argument.empty()) {
                 server.queueNumericReply(
                     client,
                     NumericReply::ERR_NEEDMOREPARAMS,
                     "MODE",
-                    NumericReply::MSG_NEEDMOREPARAMS
-                );
+                    NumericReply::MSG_NEEDMOREPARAMS);
                 return false;
             }
 
             continue;
         }
 
-        if (operation.mode == 'l' && operation.action == MODE_ADD)
-        {
+        if (operation.mode == 'l' && operation.action == MODE_ADD) {
             if (!parsePositiveUserLimit(
                     operation.argument,
-                    operation.numericArgument
-                ))
-            {
+                    operation.numericArgument)) {
                 server.queueNumericReply(
                     client,
                     NumericReply::ERR_NEEDMOREPARAMS,
                     "MODE",
-                    NumericReply::MSG_NEEDMOREPARAMS
-                );
+                    NumericReply::MSG_NEEDMOREPARAMS);
                 return false;
             }
 
@@ -1394,27 +1213,22 @@ bool CommandDispatcher::validateChannelModeOperations(
 void CommandDispatcher::applyChannelModeOperations(
     Channel &channel,
     const std::vector<ModeOperation> &operations
-)
-{
-    for (std::size_t index = 0; index < operations.size(); ++index)
-    {
+) {
+    for (std::size_t index = 0; index < operations.size(); ++index) {
         const ModeOperation &operation = operations[index];
         const bool adding = operation.action == MODE_ADD;
 
-        if (operation.mode == 'i')
-        {
+        if (operation.mode == 'i') {
             channel.setInviteOnly(adding);
             continue;
         }
 
-        if (operation.mode == 't')
-        {
+        if (operation.mode == 't') {
             channel.setTopicRestricted(adding);
             continue;
         }
 
-        if (operation.mode == 'k')
-        {
+        if (operation.mode == 'k') {
             if (adding)
                 channel.setKey(operation.argument);
             else
@@ -1422,8 +1236,7 @@ void CommandDispatcher::applyChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'l')
-        {
+        if (operation.mode == 'l') {
             if (adding)
                 channel.setUserLimit(operation.numericArgument);
             else
@@ -1431,8 +1244,7 @@ void CommandDispatcher::applyChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'o')
-        {
+        if (operation.mode == 'o') {
             Client *targetClient =
                 server.findClientByNickname(operation.argument);
 
@@ -1452,8 +1264,7 @@ void CommandDispatcher::applyChannelModeOperations(
 void CommandDispatcher::sendChannelModeIs(
     Client &client,
     const Channel &channel
-)
-{
+) {
     std::string modeFlags = "+";
     std::vector<std::string> parameters;
 
@@ -1478,8 +1289,7 @@ void CommandDispatcher::sendChannelModeIs(
     server.queueNumericReply(
         client,
         NumericReply::RPL_CHANNELMODEIS,
-        parameters
-    );
+        parameters);
 }
 
 /**
@@ -1491,8 +1301,7 @@ void CommandDispatcher::notifyChannelModeChanges(
     Client &client,
     Channel &channel,
     const std::vector<ModeOperation> &operations
-)
-{
+) {
     if (operations.empty())
         return;
 
@@ -1502,13 +1311,11 @@ void CommandDispatcher::notifyChannelModeChanges(
 
     modeParameters.push_back(channel.getName());
 
-    for (std::size_t index = 0; index < operations.size(); ++index)
-    {
+    for (std::size_t index = 0; index < operations.size(); ++index) {
         const ModeOperation &operation = operations[index];
         const char sign = operation.action == MODE_ADD ? '+' : '-';
 
-        if (sign != currentSign)
-        {
+        if (sign != currentSign) {
             modeString += sign;
             currentSign = sign;
         }
@@ -1518,8 +1325,7 @@ void CommandDispatcher::notifyChannelModeChanges(
 
     modeParameters.push_back(modeString);
 
-    for (std::size_t index = 0; index < operations.size(); ++index)
-    {
+    for (std::size_t index = 0; index < operations.size(); ++index) {
         const ModeOperation &operation = operations[index];
 
         if (modeRequiresArgument(operation.mode, operation.action == MODE_ADD))
@@ -1530,8 +1336,7 @@ void CommandDispatcher::notifyChannelModeChanges(
         "MODE",
         modeParameters,
         server.getClientPrefix(client),
-        false
-    );
+        false);
 
     server.queueMessageToChannel(channel, modeMessage.serialize());
 }
@@ -1549,18 +1354,15 @@ void CommandDispatcher::notifyChannelModeChanges(
 void CommandDispatcher::handleMode(
     Client &client,
     const IrcMessage &message
-)
-{
+) {
     const std::string &target = message.params[0];
 
-    if (target.empty())
-    {
+    if (target.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
@@ -1569,58 +1371,48 @@ void CommandDispatcher::handleMode(
 
     Channel *channel = server.findChannel(target);
 
-    if (channel == NULL)
-    {
+    if (channel == NULL) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOSUCHCHANNEL,
             target,
-            NumericReply::MSG_NOSUCHCHANNEL
-        );
+            NumericReply::MSG_NOSUCHCHANNEL);
         return;
     }
 
-    if (message.params.size() < 2 || message.params[1].empty())
-    {
+    if (message.params.size() < 2 || message.params[1].empty()) {
         sendChannelModeIs(client, *channel);
         return;
     }
 
-    if (!channel->hasMember(&client))
-    {
+    if (!channel->hasMember(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTONCHANNEL,
             channel->getName(),
-            NumericReply::MSG_NOTONCHANNEL
-        );
+            NumericReply::MSG_NOTONCHANNEL);
         return;
     }
 
-    if (!channel->hasOperator(&client))
-    {
+    if (!channel->hasOperator(&client)) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_CHANOPRIVSNEEDED,
             channel->getName(),
-            NumericReply::MSG_CHANOPRIVSNEEDED
-        );
+            NumericReply::MSG_CHANOPRIVSNEEDED);
         return;
     }
 
     std::vector<ModeOperation> operations;
     char unknownMode = '\0';
 
-    if (!parseChannelModeOperations(message.params, operations, unknownMode))
-    {
-        if (unknownMode != '\0')
-        {
+    if (!parseChannelModeOperations(message.params, operations, unknownMode)) {
+        if (unknownMode != '\0') {
             server.queueNumericReply(
                 client,
                 NumericReply::ERR_UNKNOWNMODE,
                 std::string(1, unknownMode),
-                NumericReply::MSG_UNKNOWNMODE
-            );
+                NumericReply::MSG_UNKNOWNMODE);
             return;
         }
 
@@ -1628,8 +1420,7 @@ void CommandDispatcher::handleMode(
             client,
             NumericReply::ERR_NEEDMOREPARAMS,
             message.getCommand(),
-            NumericReply::MSG_NEEDMOREPARAMS
-        );
+            NumericReply::MSG_NEEDMOREPARAMS);
         return;
     }
 
@@ -1652,23 +1443,19 @@ void CommandDispatcher::handleMode(
 void CommandDispatcher::handlePrivateMessage(
     Client &client,
     const IrcMessage &message
-)
-{
+) {
     const std::string &target = message.params[0];
     const std::string &messageText = message.params[1];
 
-    if (messageText.empty())
-    {
+    if (messageText.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NOTEXTTOSEND,
-            NumericReply::MSG_NOTEXTTOSEND
-        );
+            NumericReply::MSG_NOTEXTTOSEND);
         return;
     }
 
-    if (isChannelTarget(target))
-    {
+    if (isChannelTarget(target)) {
         sendMessageToChannel(client, target, messageText, "PRIVMSG", true);
         return;
     }
@@ -1685,16 +1472,14 @@ void CommandDispatcher::handlePrivateMessage(
 void CommandDispatcher::handleNotice(
     Client &client,
     const IrcMessage &message
-)
-{
+) {
     if (message.params.size() < 2 || message.params[1].empty())
         return;
 
     const std::string &target = message.params[0];
     const std::string &messageText = message.params[1];
 
-    if (isChannelTarget(target))
-    {
+    if (isChannelTarget(target)) {
         sendMessageToChannel(client, target, messageText, "NOTICE", false);
         return;
     }
@@ -1702,8 +1487,7 @@ void CommandDispatcher::handleNotice(
     sendMessageToUser(client, target, messageText, "NOTICE", false);
 }
 
-bool CommandDispatcher::isChannelTarget(const std::string &target) const
-{
+bool CommandDispatcher::isChannelTarget(const std::string &target) const {
     return !target.empty() && target[0] == '#';
 }
 
@@ -1720,20 +1504,16 @@ void CommandDispatcher::sendMessageToUser(
     const std::string &messageText,
     const std::string &command,
     bool reportErrors
-)
-{
+) {
     Client *recipient = server.findClientByNickname(nickname);
 
-    if (recipient == NULL)
-    {
-        if (reportErrors)
-        {
+    if (recipient == NULL) {
+        if (reportErrors) {
             server.queueNumericReply(
                 sender,
                 NumericReply::ERR_NOSUCHNICK,
                 nickname,
-                NumericReply::MSG_NOSUCHNICK
-            );
+                NumericReply::MSG_NOSUCHNICK);
         }
         return;
     }
@@ -1747,8 +1527,7 @@ void CommandDispatcher::sendMessageToUser(
         command,
         privateMessageParameters,
         server.getClientPrefix(sender),
-        true
-    );
+        true);
 
     server.queueMessage(*recipient, privateMessage.serialize());
 
@@ -1768,35 +1547,27 @@ void CommandDispatcher::sendMessageToChannel(
     const std::string &channelName,
     const std::string &messageText,
     const std::string &command,
-    bool reportErrors
-)
-{
+    bool reportErrors) {
     Channel *channel = server.findChannel(channelName);
 
-    if (channel == NULL)
-    {
-        if (reportErrors)
-        {
+    if (channel == NULL) {
+        if (reportErrors) {
             server.queueNumericReply(
                 sender,
                 NumericReply::ERR_NOSUCHCHANNEL,
                 channelName,
-                NumericReply::MSG_NOSUCHCHANNEL
-            );
+                NumericReply::MSG_NOSUCHCHANNEL);
         }
         return;
     }
 
-    if (!channel->hasMember(&sender))
-    {
-        if (reportErrors)
-        {
+    if (!channel->hasMember(&sender)) {
+        if (reportErrors) {
             server.queueNumericReply(
                 sender,
                 NumericReply::ERR_CANNOTSENDTOCHAN,
                 channelName,
-                NumericReply::MSG_CANNOTSENDTOCHAN
-            );
+                NumericReply::MSG_CANNOTSENDTOCHAN);
         }
         return;
     }
@@ -1810,8 +1581,7 @@ void CommandDispatcher::sendMessageToChannel(
         command,
         privateMessageParameters,
         server.getClientPrefix(sender),
-        true
-    );
+        true);
 
     const std::string serializedMessage = privateMessage.serialize();
 
@@ -1823,8 +1593,7 @@ void CommandDispatcher::sendMessageToChannel(
     std::set<Client *>::const_iterator memberIterator =
         channelMembers.begin();
 
-    while (memberIterator != channelMembers.end())
-    {
+    while (memberIterator != channelMembers.end()) {
         Client *channelMember = *memberIterator;
 
         if (channelMember != NULL && channelMember != &sender)

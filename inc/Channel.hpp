@@ -1,5 +1,6 @@
-#ifndef CHANNEL_HPP
-# define CHANNEL_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_CHANNEL_HPP_
+#define INC_CHANNEL_HPP_
 
 #include <string>
 #include <set>
@@ -26,12 +27,11 @@ class Client;
 * @param topicRestricted Allow only channel operators to set the channel topic (MODE +t).
 * @param inviteOnly Allow only invited clients to join the channel (MODE +i).
 */
-class Channel
-{
-    private:
+class Channel {
+ private:
         std::string name;
         std::string topic;
-        
+
         std::set<Client *> members;
         std::set<Client *> operators;
         std::set<Client *> invitedClients;
@@ -45,7 +45,7 @@ class Channel
         std::size_t userLimit;
         std::vector<std::string> messageHistory;
 
-    public:
+ public:
         explicit Channel(const std::string &channelName);
         ~Channel();
         const std::string &getName() const;
@@ -87,4 +87,4 @@ class Channel
         const std::vector<std::string> &getMessageHistory() const;
 };
 
-#endif
+#endif  // INC_CHANNEL_HPP_

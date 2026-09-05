@@ -1,5 +1,6 @@
-#ifndef CONSOLE_HPP
-# define CONSOLE_HPP
+// Copyright 2026 @esettes, @danielfdez17
+#ifndef INC_CONSOLE_HPP_
+#define INC_CONSOLE_HPP_
 
 /**
  * @file Console.hpp
@@ -13,13 +14,12 @@
  * @param WARNING ANSI escape code for warning log messages (yellow).
  * @param ERROR ANSI escape code for error log messages (red).
  */
-namespace Console
-{
-    extern const char RESET[];
-    extern const char SERVER[];
-    extern const char CLIENT[];
-    extern const char WARNING[];
-    extern const char ERROR[];
-}
+namespace Console {
+extern const char RESET[];
+extern const char SERVER[];
+extern const char CLIENT[];
+extern const char WARNING[];
+extern const char ERROR[];
+}  // namespace Console
 
-#endif
+#endif  // INC_CONSOLE_HPP_

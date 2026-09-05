@@ -1,29 +1,27 @@
+// Copyright 2026 @esettes, @danielfdez17
 #include "IrcCasemap.hpp"
 
-namespace
-{
-    char toRfc1459Lower(char character)
-    {
-        const unsigned char value = static_cast<unsigned char>(character);
+namespace {
+char toRfc1459Lower(char character) {
+    const unsigned char value = static_cast<unsigned char>(character);
 
-        if (value >= 'A' && value <= 'Z')
-            return static_cast<char>(value - 'A' + 'a');
-        if (value == '[')
-            return '{';
-        if (value == ']')
-            return '}';
-        if (value == '\\')
-            return '|';
-        if (value == '~')
-            return '^';
-        if (value == '^')
-            return '^';
-        return static_cast<char>(value);
-    }
+    if (value >= 'A' && value <= 'Z')
+        return static_cast<char>(value - 'A' + 'a');
+    if (value == '[')
+        return '{';
+    if (value == ']')
+        return '}';
+    if (value == '\\')
+        return '|';
+    if (value == '~')
+        return '^';
+    if (value == '^')
+        return '^';
+    return static_cast<char>(value);
 }
+}  // namespace
 
-std::string IrcCasemap::normalize(const std::string &value)
-{
+std::string IrcCasemap::normalize(const std::string &value) {
     std::string normalized = value;
 
     for (std::size_t i = 0; i < normalized.size(); ++i)
@@ -32,7 +30,6 @@ std::string IrcCasemap::normalize(const std::string &value)
     return normalized;
 }
 
-bool IrcCasemap::equal(const std::string &left, const std::string &right)
-{
+bool IrcCasemap::equal(const std::string &left, const std::string &right) {
     return normalize(left) == normalize(right);
 }

@@ -1,3 +1,4 @@
+// Copyright 2026 @esettes, @danielfdez17
 #include "Channel.hpp"
 
 Channel::Channel(const std::string &channelName)
@@ -12,26 +13,21 @@ Channel::Channel(const std::string &channelName)
       limitEnabled(false),
       channelKey(""),
       userLimit(0),
-      messageHistory()
-{
+      messageHistory() {
 }
 
-Channel::~Channel()
-{
+Channel::~Channel() {
 }
 
-const std::string &Channel::getName() const
-{
+const std::string &Channel::getName() const {
     return name;
 }
 
-const std::string &Channel::getTopic() const
-{
+const std::string &Channel::getTopic() const {
     return topic;
 }
 
-void Channel::setTopic(const std::string &newTopic)
-{
+void Channel::setTopic(const std::string &newTopic) {
     topic = newTopic;
 }
 
@@ -39,8 +35,7 @@ void Channel::setTopic(const std::string &newTopic)
  * @brief Adds a non-null client to the channel membership.
  * Repeated insertions have no effect because members is a std::set.
  */
-void Channel::addMember(Client *client)
-{
+void Channel::addMember(Client *client) {
     if (client == NULL)
         return;
 
@@ -51,8 +46,7 @@ void Channel::addMember(Client *client)
  * @brief Removes a client from every collection that requires channel
  * membership.
  */
-void Channel::removeMember(Client *client)
-{
+void Channel::removeMember(Client *client) {
     if (client == NULL)
         return;
 
@@ -64,8 +58,7 @@ void Channel::removeMember(Client *client)
 /**
  * @brief Checks whether a client belongs to the channel.
  */
-bool Channel::hasMember(const Client *client) const
-{
+bool Channel::hasMember(const Client *client) const {
     if (client == NULL)
         return false;
 
@@ -75,32 +68,28 @@ bool Channel::hasMember(const Client *client) const
 /**
  * @brief Returns the number of clients currently in the channel.
  */
-std::size_t Channel::getMemberCount() const
-{
+std::size_t Channel::getMemberCount() const {
     return members.size();
 }
 
 /**
  * @brief Checks whether the channel currently has no members.
  */
-bool Channel::isEmpty() const
-{
+bool Channel::isEmpty() const {
     return members.empty();
 }
 
 /**
  * @brief Returns the channel membership collection for read-only iteration.
  */
-const std::set<Client *> &Channel::getMembers() const
-{
+const std::set<Client *> &Channel::getMembers() const {
     return members;
 }
 
 /**
  * @brief Grants channel operator privileges to an existing member (MODE +o).
  */
-void Channel::addOperator(Client *client)
-{
+void Channel::addOperator(Client *client) {
     if (client == NULL || !hasMember(client))
         return;
 
@@ -111,8 +100,7 @@ void Channel::addOperator(Client *client)
  * @brief Revokes a client's channel operator privileges without removing
  * channel membership (MODE -o).
  */
-void Channel::removeOperator(Client *client)
-{
+void Channel::removeOperator(Client *client) {
     if (client == NULL)
         return;
 
@@ -124,8 +112,7 @@ void Channel::removeOperator(Client *client)
  * @param client The client to check.
  * @return true if the client has operator privileges, false otherwise.
  */
-bool Channel::hasOperator(const Client *client) const
-{
+bool Channel::hasOperator(const Client *client) const {
     if (client == NULL)
         return false;
 
@@ -135,8 +122,7 @@ bool Channel::hasOperator(const Client *client) const
 /**
  * @brief Adds a non-member client to the channel invitation list.
  */
-void Channel::inviteClient(Client *client)
-{
+void Channel::inviteClient(Client *client) {
     if (client == NULL || hasMember(client))
         return;
 
@@ -147,8 +133,7 @@ void Channel::inviteClient(Client *client)
  * @brief Removes a client's pending invitation to the channel.
  * Its a pending invitation not a permanent privilege.
  */
-void Channel::removeInvitation(Client *client)
-{
+void Channel::removeInvitation(Client *client) {
     if (client == NULL)
         return;
 
@@ -158,8 +143,7 @@ void Channel::removeInvitation(Client *client)
 /**
  * @brief Checks whether a client has a pending invitation to the channel.
  */
-bool Channel::hasInvitation(const Client *client) const
-{
+bool Channel::hasInvitation(const Client *client) const {
     if (client == NULL)
         return false;
 
@@ -170,8 +154,7 @@ bool Channel::hasInvitation(const Client *client) const
 /**
  * @brief Checks whether the channel only accepts invited clients.
  */
-bool Channel::isInviteOnly() const
-{
+bool Channel::isInviteOnly() const {
     return inviteOnly;
 }
 
@@ -182,16 +165,14 @@ bool Channel::isInviteOnly() const
  * 
  * MODE -i: Any client can join the channel.
  */
-void Channel::setInviteOnly(bool enabled)
-{
+void Channel::setInviteOnly(bool enabled) {
     inviteOnly = enabled;
 }
 
 /**
  * @brief Checks whether topic changes are restricted to channel operators.
  */
-bool Channel::isTopicRestricted() const
-{
+bool Channel::isTopicRestricted() const {
     return topicRestricted;
 }
 
@@ -202,32 +183,28 @@ bool Channel::isTopicRestricted() const
  * 
  * MODE -t: Any channel member can change the topic.
  */
-void Channel::setTopicRestricted(bool enabled)
-{
+void Channel::setTopicRestricted(bool enabled) {
     topicRestricted = enabled;
 }
 
 /**
  * @brief Checks whether joining the channel requires a key.
  */
-bool Channel::isKeyEnabled() const
-{
+bool Channel::isKeyEnabled() const {
     return keyEnabled;
 }
 
 /**
  * @brief Returns the key currently required to join the channel.
  */
-const std::string &Channel::getKey() const
-{
+const std::string &Channel::getKey() const {
     return channelKey;
 }
 
 /**
  * @brief Sets a non-empty channel key and enables key mode.
  */
-void Channel::setKey(const std::string &newKey)
-{
+void Channel::setKey(const std::string &newKey) {
     if (newKey.empty())
         return;
 
@@ -238,8 +215,7 @@ void Channel::setKey(const std::string &newKey)
 /**
  * @brief Removes the stored channel key and disables key mode.
  */
-void Channel::removeKey()
-{
+void Channel::removeKey() {
     channelKey.clear();
     keyEnabled = false;
 }
@@ -247,16 +223,14 @@ void Channel::removeKey()
 /**
  * @brief Checks whether the channel has a member limit.
  */
-bool Channel::isLimitEnabled() const
-{
+bool Channel::isLimitEnabled() const {
     return limitEnabled;
 }
 
 /**
  * @brief Returns the maximum number of members allowed in the channel.
  */
-std::size_t Channel::getUserLimit() const
-{
+std::size_t Channel::getUserLimit() const {
     return userLimit;
 }
 
@@ -265,8 +239,7 @@ std::size_t Channel::getUserLimit() const
  * 
  * MODE +l: The channel will not accept new members if the limit is reached.
  */
-void Channel::setUserLimit(std::size_t newLimit)
-{
+void Channel::setUserLimit(std::size_t newLimit) {
     if (newLimit == 0)
         return;
 
@@ -281,8 +254,7 @@ void Channel::setUserLimit(std::size_t newLimit)
  * 
  * userLimit = 0 means that there is no limit on the number of members in the channel.
  */
-void Channel::removeUserLimit()
-{
+void Channel::removeUserLimit() {
     userLimit = 0;
     limitEnabled = false;
 }
@@ -291,8 +263,7 @@ void Channel::removeUserLimit()
  * @brief Stores a serialized channel PRIVMSG so later JOIN members can
  * receive messages that were sent before they entered the channel.
  */
-void Channel::addHistoryMessage(const std::string &serializedMessage)
-{
+void Channel::addHistoryMessage(const std::string &serializedMessage) {
     if (serializedMessage.empty())
         return;
 
@@ -302,7 +273,6 @@ void Channel::addHistoryMessage(const std::string &serializedMessage)
 /**
  * @brief Returns the PRIVMSG history preserved for clients that join later.
  */
-const std::vector<std::string> &Channel::getMessageHistory() const
-{
+const std::vector<std::string> &Channel::getMessageHistory() const {
     return messageHistory;
 }

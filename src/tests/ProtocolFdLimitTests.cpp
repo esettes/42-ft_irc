@@ -1,3 +1,4 @@
+// Copyright 2026 @esettes, @danielfdez17
 #include "ProtocolTestHarness.hpp"
 
 #include <vector>
