@@ -5,15 +5,12 @@
  * @brief Phase 17 — +k stores the channel key, JOIN must supply that exact
  * password, and -k removes the restriction without consuming an argument.
  */
-static void testChannelKeyModeAndJoin()
-{
+static void testChannelKeyModeAndJoin() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE +k tests"
-        ))
-    {
+            "Server should start for phase 17 MODE +k tests")) {
         return;
     }
 
@@ -23,13 +20,11 @@ static void testChannelKeyModeAndJoin()
 
     if (operatorSocketFd == -1
         || guestSocketFd == -1
-        || laterSocketFd == -1)
-    {
+        || laterSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE +k tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(guestSocketFd);
         closeSocket(laterSocketFd);
@@ -46,14 +41,11 @@ static void testChannelKeyModeAndJoin()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 17 MODE +k tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(guestSocketFd);
         closeSocket(laterSocketFd);
@@ -68,22 +60,19 @@ static void testChannelKeyModeAndJoin()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         ":" + operatorPrefix + " MODE #general +k secret\r\n",
-        "Phase 17: setting +k should broadcast the key"
-    );
+        "Phase 17: setting +k should broadcast the key");
 
     expectEqual(
         sendLineAndReceive(guestSocketFd, "JOIN #general incorrecta\r\n"),
         ":irc.42.local 475 roxana #general :Cannot join channel (+k)\r\n",
-        "Phase 17: JOIN with the wrong key should return 475"
-    );
+        "Phase 17: JOIN with the wrong key should return 475");
 
     sendAll(guestSocketFd, "JOIN #general secret\r\n");
 
     expectContains(
         receiveAvailableData(guestSocketFd, 500),
         " JOIN :#general\r\n",
-        "Phase 17: JOIN with the correct key should succeed"
-    );
+        "Phase 17: JOIN with the correct key should succeed");
 
     discardPendingData(operatorSocketFd);
 
@@ -95,21 +84,19 @@ static void testChannelKeyModeAndJoin()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedKeyRemoved,
-        "Phase 17: -k should notify the operator without consuming an argument"
-    );
+        "Phase 17: -k should notify the"
+        "operator without consuming an argument");
     expectEqual(
         receiveAvailableData(guestSocketFd, 500),
         expectedKeyRemoved,
-        "Phase 17: -k should notify every channel member"
-    );
+        "Phase 17: -k should notify every channel member");
 
     sendAll(laterSocketFd, "JOIN #general\r\n");
 
     expectContains(
         receiveAvailableData(laterSocketFd, 500),
         " JOIN :#general\r\n",
-        "Phase 17: JOIN without a key should succeed after -k"
-    );
+        "Phase 17: JOIN without a key should succeed after -k");
 
     closeSocket(operatorSocketFd);
     closeSocket(guestSocketFd);
@@ -120,15 +107,12 @@ static void testChannelKeyModeAndJoin()
  * @brief Phase 17 — +l stores a positive member limit, JOIN is rejected with
  * 471 once the channel is full, and -l removes the limit without an argument.
  */
-static void testUserLimitModeAndJoin()
-{
+static void testUserLimitModeAndJoin() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE +l tests"
-        ))
-    {
+            "Server should start for phase 17 MODE +l tests")) {
         return;
     }
 
@@ -138,13 +122,11 @@ static void testUserLimitModeAndJoin()
 
     if (operatorSocketFd == -1
         || memberSocketFd == -1
-        || guestSocketFd == -1)
-    {
+        || guestSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE +l tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(guestSocketFd);
@@ -161,14 +143,11 @@ static void testUserLimitModeAndJoin()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 17 MODE +l tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(guestSocketFd);
@@ -183,8 +162,7 @@ static void testUserLimitModeAndJoin()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         ":" + operatorPrefix + " MODE #general +l 2\r\n",
-        "Phase 17: setting +l should broadcast the user limit"
-    );
+        "Phase 17: setting +l should broadcast the user limit");
 
     sendAll(memberSocketFd, "JOIN #general\r\n");
     discardPendingData(operatorSocketFd);
@@ -193,8 +171,7 @@ static void testUserLimitModeAndJoin()
     expectEqual(
         sendLineAndReceive(guestSocketFd, "JOIN #general\r\n"),
         ":irc.42.local 471 roxana #general :Cannot join channel (+l)\r\n",
-        "Phase 17: JOIN should return 471 when the channel has reached +l"
-    );
+        "Phase 17: JOIN should return 471 when the channel has reached +l");
 
     sendAll(operatorSocketFd, "MODE #general -l\r\n");
 
@@ -204,29 +181,26 @@ static void testUserLimitModeAndJoin()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedLimitRemoved,
-        "Phase 17: -l should notify the operator without consuming an argument"
-    );
+        "Phase 17: -l should notify the"
+        "operator without consuming an argument");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedLimitRemoved,
-        "Phase 17: -l should notify every channel member"
-    );
+        "Phase 17: -l should notify every channel member");
 
     sendAll(guestSocketFd, "JOIN #general\r\n");
 
     expectContains(
         receiveAvailableData(guestSocketFd, 500),
         " JOIN :#general\r\n",
-        "Phase 17: JOIN should succeed after the user limit is removed"
-    );
+        "Phase 17: JOIN should succeed after the user limit is removed");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
     closeSocket(guestSocketFd);
 }
 
-int main()
-{
+int main() {
     testChannelKeyModeAndJoin();
     testUserLimitModeAndJoin();
 

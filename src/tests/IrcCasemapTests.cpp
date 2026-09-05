@@ -6,10 +6,8 @@
 
 static int g_failures = 0;
 
-static void expectTrue(bool condition, const std::string &message)
-{
-    if (!condition)
-    {
+static void expectTrue(bool condition, const std::string &message) {
+    if (!condition) {
         std::cerr << "FAIL: " << message << std::endl;
         ++g_failures;
     }
@@ -19,10 +17,8 @@ static void expectEqual(
     const std::string &actual,
     const std::string &expected,
     const std::string &message
-)
-{
-    if (actual != expected)
-    {
+) {
+    if (actual != expected) {
         std::cerr << "FAIL: " << message << std::endl;
         std::cerr << "  expected: " << expected << std::endl;
         std::cerr << "  actual  : " << actual << std::endl;
@@ -30,8 +26,7 @@ static void expectEqual(
     }
 }
 
-static void testAsciiCaseFolding()
-{
+static void testAsciiCaseFolding() {
     expectEqual(IrcCasemap::normalize("Roxana"), "roxana",
         "normalize should lowercase ASCII letters");
     expectEqual(IrcCasemap::normalize("ROXANA"), "roxana",
@@ -42,8 +37,7 @@ static void testAsciiCaseFolding()
         "equal should treat fully upper and lower nicknames as the same");
 }
 
-static void testRfc1459SpecialEquivalence()
-{
+static void testRfc1459SpecialEquivalence() {
     expectEqual(IrcCasemap::normalize("Nick[A]"), "nick{a}",
         "normalize should map [] to {} under rfc1459");
     expectEqual(IrcCasemap::normalize("Path\\X"), "path|x",
@@ -54,8 +48,7 @@ static void testRfc1459SpecialEquivalence()
         "equal should treat \\ and | as equivalent");
 }
 
-static void testChannelNames()
-{
+static void testChannelNames() {
     expectTrue(IrcCasemap::equal("#General", "#general"),
         "equal should ignore case in channel names");
     expectTrue(IrcCasemap::equal("#Chan[Test]", "#chan{test}"),
@@ -64,23 +57,20 @@ static void testChannelNames()
         "normalize should preserve channel prefix while lowercasing");
 }
 
-static void testNonEquivalence()
-{
+static void testNonEquivalence() {
     expectTrue(!IrcCasemap::equal("alice", "bob"),
         "equal should reject distinct nicknames");
     expectTrue(!IrcCasemap::equal("#chat", "#lounge"),
         "equal should reject distinct channel names");
 }
 
-int main()
-{
+int main() {
     testAsciiCaseFolding();
     testRfc1459SpecialEquivalence();
     testChannelNames();
     testNonEquivalence();
 
-    if (g_failures != 0)
-    {
+    if (g_failures != 0) {
         std::cerr << g_failures << " test(s) failed" << std::endl;
         return 1;
     }

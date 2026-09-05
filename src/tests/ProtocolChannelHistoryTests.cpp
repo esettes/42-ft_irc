@@ -6,15 +6,12 @@
  * that client after JOIN, topic and NAMES. The outsider must not receive
  * the live copy, and later messages still fan out normally.
  */
-static void testChannelHistoryIsReplayedOnJoin()
-{
+static void testChannelHistoryIsReplayedOnJoin() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for channel history JOIN tests"
-        ))
-    {
+            "Server should start for channel history JOIN tests")) {
         return;
     }
 
@@ -22,13 +19,11 @@ static void testChannelHistoryIsReplayedOnJoin()
     const int bobSocketFd = connectToServer(server.getPort());
     const int carolSocketFd = connectToServer(server.getPort());
 
-    if (aliceSocketFd == -1 || bobSocketFd == -1 || carolSocketFd == -1)
-    {
+    if (aliceSocketFd == -1 || bobSocketFd == -1 || carolSocketFd == -1) {
         reportFailure(
             "Clients should connect for channel history JOIN tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(aliceSocketFd);
         closeSocket(bobSocketFd);
         closeSocket(carolSocketFd);
@@ -45,14 +40,11 @@ static void testChannelHistoryIsReplayedOnJoin()
     if (!extractClientPrefixFromWelcome(
             aliceWelcome,
             "alice",
-            alicePrefix
-        ))
-    {
+            alicePrefix)) {
         reportFailure(
             "Welcome should expose a prefix for channel history JOIN tests",
             "welcome containing alice!alice@host",
-            aliceWelcome
-        );
+            aliceWelcome);
         closeSocket(aliceSocketFd);
         closeSocket(bobSocketFd);
         closeSocket(carolSocketFd);
@@ -68,13 +60,12 @@ static void testChannelHistoryIsReplayedOnJoin()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 200),
         "",
-        "Channel history: the sender should not receive an echo"
-    );
+        "Channel history: the sender should not receive an echo");
     expectEqual(
         receiveAvailableData(bobSocketFd, 200),
         "",
-        "Channel history: a client outside the channel should not receive live PRIVMSG"
-    );
+        "Channel history: a client outside"
+        "the channel should not receive live PRIVMSG");
 
     sendAll(bobSocketFd, "JOIN #general\r\n");
 
@@ -84,13 +75,11 @@ static void testChannelHistoryIsReplayedOnJoin()
     expectContains(
         bobJoinResponse,
         " JOIN :#general\r\n",
-        "Channel history: the joining client should receive its own JOIN"
-    );
+        "Channel history: the joining client should receive its own JOIN");
     expectContains(
         bobJoinResponse,
         ":irc.42.local 366 bob #general :End of /NAMES list\r\n",
-        "Channel history: history should follow the NAMES sequence"
-    );
+        "Channel history: history should follow the NAMES sequence");
 
     const std::string firstHistoryMessage =
         ":" + alicePrefix + " PRIVMSG #general :antes de que entre b\r\n";
@@ -100,13 +89,12 @@ static void testChannelHistoryIsReplayedOnJoin()
     expectContains(
         bobJoinResponse,
         firstHistoryMessage,
-        "Channel history: JOIN should replay messages sent before the client entered"
-    );
+        "Channel history: JOIN should"
+        "replay messages sent before the client entered");
     expectContains(
         bobJoinResponse,
         secondHistoryMessage,
-        "Channel history: JOIN should replay every stored channel message"
-    );
+        "Channel history: JOIN should replay every stored channel message");
 
     const std::string::size_type endNamesPosition =
         bobJoinResponse.find(" 366 bob #general ");
@@ -121,32 +109,30 @@ static void testChannelHistoryIsReplayedOnJoin()
             && secondHistoryPosition != std::string::npos
             && endNamesPosition < firstHistoryPosition
             && firstHistoryPosition < secondHistoryPosition,
-        "Channel history: stored PRIVMSG should arrive after 366 and keep order",
+        "Channel history: stored PRIVMSG"
+        "should arrive after 366 and keep order",
         "366 then first history then second history",
-        bobJoinResponse
-    );
+        bobJoinResponse);
 
     expectEqual(
         receiveAvailableData(carolSocketFd, 200),
         "",
-        "Channel history: an unrelated client should not receive replayed PRIVMSG"
-    );
+        "Channel history: an unrelated client"
+        "should not receive replayed PRIVMSG");
 
     sendAll(aliceSocketFd, "PRIVMSG #general :despues de que entre b\r\n");
 
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         ":" + alicePrefix + " PRIVMSG #general :despues de que entre b\r\n",
-        "Channel history: later PRIVMSG should still reach current members"
-    );
+        "Channel history: later PRIVMSG should still reach current members");
 
     closeSocket(aliceSocketFd);
     closeSocket(bobSocketFd);
     closeSocket(carolSocketFd);
 }
 
-int main()
-{
+int main() {
     testChannelHistoryIsReplayedOnJoin();
 
     return finishSuite("channel PRIVMSG history on JOIN");

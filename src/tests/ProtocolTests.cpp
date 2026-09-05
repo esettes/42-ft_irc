@@ -1,35 +1,34 @@
 // Copyright 2026 @esettes, @danielfdez17
+
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <poll.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
 #include "Client.hpp"
 #include "IrcCasemap.hpp"
 #include "IrcMessage.hpp"
 #include "NumericReplies.hpp"
 #include "Console.hpp"
 
-#include <arpa/inet.h>
-#include <cerrno>
-#include <csignal>
-#include <cstdlib>
-#include <cstring>
-#include <fcntl.h>
-#include <iostream>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sstream>
-#include <string>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <vector>
-
 static int g_failures = 0;
 
-static std::string escapeOutput(const std::string &value)
-{
+static std::string escapeOutput(const std::string &value) {
     std::string escaped;
 
-    for (std::size_t index = 0; index < value.size(); ++index)
-    {
+    for (std::size_t index = 0; index < value.size(); ++index) {
         const unsigned char character =
             static_cast<unsigned char>(value[index]);
 
@@ -50,8 +49,7 @@ static void reportFailure(
     const std::string &testName,
     const std::string &expected,
     const std::string &actual
-)
-{
+) {
     std::cerr << Console::ERROR << testName << std::endl;
     std::cerr << "  expected: " << escapeOutput(expected) << std::endl;
     std::cerr << "  actual  : " << escapeOutput(actual) << std::endl;
@@ -63,8 +61,7 @@ static void expectTrue(
     const std::string &testName,
     const std::string &expected,
     const std::string &actual
-)
-{
+) {
     if (!condition)
         reportFailure(testName, expected, actual);
 }
@@ -73,8 +70,7 @@ static void expectEqual(
     const std::string &actual,
     const std::string &expected,
     const std::string &testName
-)
-{
+) {
     if (actual != expected)
         reportFailure(testName, expected, actual);
 }
@@ -83,40 +79,32 @@ static void expectContains(
     const std::string &actual,
     const std::string &expectedFragment,
     const std::string &testName
-)
-{
-    if (actual.find(expectedFragment) == std::string::npos)
-    {
+) {
+    if (actual.find(expectedFragment) == std::string::npos) {
         reportFailure(
             testName,
             "output containing: " + expectedFragment,
-            actual
-        );
+            actual);
     }
 }
 
 static void expectSerializationFailure(
     const IrcMessage &message,
     const std::string &testName
-)
-{
-    try
-    {
+) {
+    try {
         const std::string serializedMessage = message.serialize();
 
         reportFailure(
             testName,
             "std::runtime_error",
-            serializedMessage
-        );
+            serializedMessage);
     }
-    catch (const std::runtime_error &)
-    {
+    catch (const std::runtime_error &) {
     }
 }
 
-static int findAvailablePort()
-{
+static int findAvailablePort() {
     const int socketFd = ::socket(AF_INET, SOCK_STREAM, 0);
 
     if (socketFd == -1)
@@ -132,9 +120,7 @@ static int findAvailablePort()
     if (::bind(
             socketFd,
             reinterpret_cast<const struct sockaddr *>(&address),
-            sizeof(address)
-        ) == -1)
-    {
+            sizeof(address)) == -1) {
         ::close(socketFd);
         return -1;
     }
@@ -144,9 +130,7 @@ static int findAvailablePort()
     if (::getsockname(
             socketFd,
             reinterpret_cast<struct sockaddr *>(&address),
-            &addressLength
-        ) == -1)
-    {
+            &addressLength) == -1) {
         ::close(socketFd);
         return -1;
     }
@@ -157,8 +141,7 @@ static int findAvailablePort()
     return availablePort;
 }
 
-static int connectToServer(int port)
-{
+static int connectToServer(int port) {
     const int socketFd = ::socket(AF_INET, SOCK_STREAM, 0);
 
     if (socketFd == -1)
@@ -169,14 +152,12 @@ static int connectToServer(int port)
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    address.sin_port = htons(static_cast<unsigned short>(port));
+    address.sin_port = htons(static_cast<uint16_t>(port));
 
     if (::connect(
             socketFd,
             reinterpret_cast<const struct sockaddr *>(&address),
-            sizeof(address)
-        ) == -1)
-    {
+            sizeof(address)) == -1) {
         ::close(socketFd);
         return -1;
     }
@@ -184,21 +165,17 @@ static int connectToServer(int port)
     return socketFd;
 }
 
-static bool sendAll(int socketFd, const std::string &data)
-{
+static bool sendAll(int socketFd, const std::string &data) {
     std::size_t sentByteCount = 0;
 
-    while (sentByteCount < data.size())
-    {
+    while (sentByteCount < data.size()) {
         const ssize_t result = ::send(
             socketFd,
             data.data() + sentByteCount,
             data.size() - sentByteCount,
-            0
-        );
+            0);
 
-        if (result > 0)
-        {
+        if (result > 0) {
             sentByteCount += static_cast<std::size_t>(result);
             continue;
         }
@@ -215,13 +192,11 @@ static bool sendAll(int socketFd, const std::string &data)
 static std::string receiveAvailableData(
     int socketFd,
     int timeoutMilliseconds
-)
-{
+) {
     std::string response;
     char buffer[4096];
 
-    while (true)
-    {
+    while (true) {
         struct pollfd descriptor;
 
         descriptor.fd = socketFd;
@@ -231,27 +206,22 @@ static std::string receiveAvailableData(
         const int pollResult = ::poll(
             &descriptor,
             1,
-            timeoutMilliseconds
-        );
+            timeoutMilliseconds);
 
         if (pollResult <= 0)
             break;
 
-        if (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))
-        {
+        if (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) {
             const ssize_t receivedByteCount = ::recv(
                 socketFd,
                 buffer,
                 sizeof(buffer),
-                0
-            );
+                0);
 
-            if (receivedByteCount > 0)
-            {
+            if (receivedByteCount > 0) {
                 response.append(
                     buffer,
-                    static_cast<std::size_t>(receivedByteCount)
-                );
+                    static_cast<std::size_t>(receivedByteCount));
             }
 
             break;
@@ -264,16 +234,14 @@ static std::string receiveAvailableData(
             socketFd,
             buffer,
             sizeof(buffer),
-            0
-        );
+            0);
 
         if (receivedByteCount <= 0)
             break;
 
         response.append(
             buffer,
-            static_cast<std::size_t>(receivedByteCount)
-        );
+            static_cast<std::size_t>(receivedByteCount));
 
         timeoutMilliseconds = 50;
     }
@@ -288,8 +256,7 @@ static std::string receiveAvailableData(
 static bool waitForSocketClosure(
     int socketFd,
     int timeoutMilliseconds
-)
-{
+) {
     struct pollfd descriptor;
 
     descriptor.fd = socketFd;
@@ -298,13 +265,11 @@ static bool waitForSocketClosure(
 
     int pollResult;
 
-    do
-    {
+    do {
         pollResult = ::poll(
             &descriptor,
             1,
-            timeoutMilliseconds
-        );
+            timeoutMilliseconds);
     }
     while (pollResult == -1 && errno == EINTR);
 
@@ -323,14 +288,12 @@ static bool waitForSocketClosure(
     char receivedByte;
     ssize_t receivedByteCount;
 
-    do
-    {
+    do {
         receivedByteCount = ::recv(
             socketFd,
             &receivedByte,
             sizeof(receivedByte),
-            0
-        );
+            0);
     }
     while (receivedByteCount == -1 && errno == EINTR);
 
@@ -338,31 +301,26 @@ static bool waitForSocketClosure(
         return true;
 
     if (receivedByteCount == -1
-        && (errno == ECONNRESET || errno == ENOTCONN))
-    {
+        && (errno == ECONNRESET || errno == ENOTCONN)) {
         return true;
     }
 
     return false;
 }
 
-class TestServerProcess
-{
-    private:
+class TestServerProcess {
+ private:
         pid_t processId;
         int port;
 
         TestServerProcess(const TestServerProcess &other);
         TestServerProcess &operator=(const TestServerProcess &other);
 
-        bool waitUntilReady()
-        {
-            for (int attempt = 0; attempt < 100; ++attempt)
-            {
+        bool waitUntilReady() {
+            for (int attempt = 0; attempt < 100; ++attempt) {
                 const int probeSocket = connectToServer(port);
 
-                if (probeSocket != -1)
-                {
+                if (probeSocket != -1) {
                     ::close(probeSocket);
                     return true;
                 }
@@ -376,20 +334,17 @@ class TestServerProcess
             return false;
         }
 
-    public:
+ public:
         TestServerProcess()
             : processId(-1),
-              port(findAvailablePort())
-        {
+              port(findAvailablePort()) {
         }
 
-        ~TestServerProcess()
-        {
+        ~TestServerProcess() {
             stop();
         }
 
-        bool start()
-        {
+        bool start() {
             if (port == -1)
                 return false;
 
@@ -398,12 +353,10 @@ class TestServerProcess
             if (processId == -1)
                 return false;
 
-            if (processId == 0)
-            {
+            if (processId == 0) {
                 const int nullFd = ::open("/dev/null", O_WRONLY);
 
-                if (nullFd != -1)
-                {
+                if (nullFd != -1) {
                     ::dup2(nullFd, STDOUT_FILENO);
                     ::dup2(nullFd, STDERR_FILENO);
                     ::close(nullFd);
@@ -417,8 +370,7 @@ class TestServerProcess
                     "./ircserv",
                     portStream.str().c_str(),
                     "secret",
-                    static_cast<char *>(NULL)
-                );
+                    static_cast<char *>(NULL));
 
                 ::_exit(EXIT_FAILURE);
             }
@@ -426,24 +378,20 @@ class TestServerProcess
             return waitUntilReady();
         }
 
-        void stop()
-        {
+        void stop() {
             if (processId <= 0)
                 return;
 
             ::kill(processId, SIGINT);
 
-            for (int attempt = 0; attempt < 100; ++attempt)
-            {
+            for (int attempt = 0; attempt < 100; ++attempt) {
                 int status = 0;
                 const pid_t result = ::waitpid(
                     processId,
                     &status,
-                    WNOHANG
-                );
+                    WNOHANG);
 
-                if (result == processId)
-                {
+                if (result == processId) {
                     processId = -1;
                     return;
                 }
@@ -456,8 +404,7 @@ class TestServerProcess
             processId = -1;
         }
 
-        bool isRunning()
-        {
+        bool isRunning() {
             if (processId <= 0)
                 return false;
 
@@ -465,8 +412,7 @@ class TestServerProcess
             const pid_t result = ::waitpid(
                 processId,
                 &status,
-                WNOHANG
-            );
+                WNOHANG);
 
             if (result == 0)
                 return true;
@@ -477,8 +423,7 @@ class TestServerProcess
             return false;
         }
 
-        int getPort() const
-        {
+        int getPort() const {
             return port;
         }
 };
@@ -486,15 +431,13 @@ class TestServerProcess
 static std::string sendCommandAndReceive(
     int port,
     const std::string &command
-)
-{
+) {
     const int socketFd = connectToServer(port);
 
     if (socketFd == -1)
         return "connection failed";
 
-    if (!sendAll(socketFd, command))
-    {
+    if (!sendAll(socketFd, command)) {
         ::close(socketFd);
         return "send failed";
     }
@@ -509,8 +452,7 @@ static std::string sendCommandAndReceive(
 static std::string registerClient(
     int socketFd,
     const std::string &nickname
-)
-{
+) {
     const std::string registration =
         "PASS secret\r\n"
         "NICK " + nickname + "\r\n"
@@ -522,8 +464,7 @@ static std::string registerClient(
     return receiveAvailableData(socketFd, 500);
 }
 
-static void testIrcMessageSerialization()
-{
+static void testIrcMessageSerialization() {
     std::vector<std::string> parameters;
 
     parameters.push_back("#general");
@@ -533,46 +474,40 @@ static void testIrcMessageSerialization()
         "PRIVMSG",
         parameters,
         "nick!user@host",
-        true
-    );
+        true);
 
     expectEqual(
         message.serialize(),
         ":nick!user@host PRIVMSG #general :Hello world\r\n",
-        "IrcMessage should serialize prefix, command, parameters, trailing and CRLF"
-    );
+        "IrcMessage should serialize"
+        "prefix, command, parameters, trailing and CRLF");
 }
 
-static void testGeneratedMessagesRejectControlCharacters()
-{
+static void testGeneratedMessagesRejectControlCharacters() {
     std::vector<std::string> parameters;
 
     parameters.push_back("bad\rvalue");
 
     expectSerializationFailure(
         IrcMessage("NOTICE", parameters, "", true),
-        "IrcMessage should reject carriage returns"
-    );
+        "IrcMessage should reject carriage returns");
 
     parameters.clear();
     parameters.push_back("bad\nvalue");
 
     expectSerializationFailure(
         IrcMessage("NOTICE", parameters, "", true),
-        "IrcMessage should reject line feeds"
-    );
+        "IrcMessage should reject line feeds");
 
     parameters.clear();
     parameters.push_back(std::string("bad\0value", 9));
 
     expectSerializationFailure(
         IrcMessage("NOTICE", parameters, "", true),
-        "IrcMessage should reject NUL bytes"
-    );
+        "IrcMessage should reject NUL bytes");
 }
 
-static void testSerializedMessageLengthLimit()
-{
+static void testSerializedMessageLengthLimit() {
     std::vector<std::string> parameters;
 
     parameters.push_back(std::string(502, 'A'));
@@ -581,8 +516,7 @@ static void testSerializedMessageLengthLimit()
         "NOTICE",
         parameters,
         "",
-        true
-    );
+        true);
 
     const std::string serializedMessage =
         maximumLengthMessage.serialize();
@@ -591,20 +525,17 @@ static void testSerializedMessageLengthLimit()
         serializedMessage.size() == IRC_MAX_MESSAGE_LENGTH,
         "IrcMessage should allow exactly 512 bytes",
         "serialized size equal to 512",
-        "serialized size equal to requested limit"
-    );
+        "serialized size equal to requested limit");
 
     parameters.clear();
     parameters.push_back(std::string(503, 'A'));
 
     expectSerializationFailure(
         IrcMessage("NOTICE", parameters, "", true),
-        "IrcMessage should reject messages longer than 512 bytes"
-    );
+        "IrcMessage should reject messages longer than 512 bytes");
 }
 
-static void testNumericCodeFormatting()
-{
+static void testNumericCodeFormatting() {
     const int requiredCodes[] = {
         1, 2, 3, 4, 5,
         324, 331, 332, 341, 353, 366,
@@ -616,8 +547,7 @@ static void testNumericCodeFormatting()
     const std::size_t codeCount =
         sizeof(requiredCodes) / sizeof(requiredCodes[0]);
 
-    for (std::size_t index = 0; index < codeCount; ++index)
-    {
+    for (std::size_t index = 0; index < codeCount; ++index) {
         const std::string formattedCode =
             NumericReply::formatCode(requiredCodes[index]);
 
@@ -629,43 +559,36 @@ static void testNumericCodeFormatting()
         expectEqual(
             formattedCode,
             expectedCode.str(),
-            "Numeric reply code should always contain three digits"
-        );
+            "Numeric reply code should always contain three digits");
     }
 }
 
-static void testRfc1459Casemapping()
-{
+static void testRfc1459Casemapping() {
     expectEqual(
         IrcCasemap::normalize("Roxana"),
         "roxana",
-        "Casemapping should normalize ASCII letters"
-    );
+        "Casemapping should normalize ASCII letters");
 
     expectTrue(
         IrcCasemap::equal("Nick[Test]", "nick{test}"),
         "Casemapping should treat brackets and braces as equivalent",
         "equivalent values",
-        "different values"
-    );
+        "different values");
 
     expectTrue(
         IrcCasemap::equal("Nick\\Path", "nick|path"),
         "Casemapping should treat backslash and pipe as equivalent",
         "equivalent values",
-        "different values"
-    );
+        "different values");
 
     expectTrue(
         IrcCasemap::equal("Nick~Name", "nick^name"),
         "RFC1459 casemapping should treat tilde and caret as equivalent",
         "equivalent values",
-        "different values"
-    );
+        "different values");
 }
 
-static void testClientLineLengthBoundaries()
-{
+static void testClientLineLengthBoundaries() {
     Client exactLengthClient(-1, "localhost");
 
     const std::string exactLengthLine =
@@ -680,8 +603,7 @@ static void testClientLineLengthBoundaries()
             == Client::LINE_COMPLETE,
         "Client should accept a CRLF line of exactly 512 bytes",
         "LINE_COMPLETE",
-        "status different from LINE_COMPLETE"
-    );
+        "status different from LINE_COMPLETE");
 
     Client excessiveLengthClient(-1, "localhost");
 
@@ -689,34 +611,30 @@ static void testClientLineLengthBoundaries()
         "PASS " + std::string(506, 'A') + "\r\n";
 
     excessiveLengthClient.appendToInputBuffer(
-        excessiveLengthLine
-    );
+        excessiveLengthLine);
 
     expectTrue(
         excessiveLengthClient.extractNextLine(completeLine)
             == Client::LINE_TOO_LONG,
         "Client should reject a CRLF line longer than 512 bytes",
         "LINE_TOO_LONG",
-        "status different from LINE_TOO_LONG"
-    );
+        "status different from LINE_TOO_LONG");
 }
 
-static void testFragmentedLfBoundary()
-{
+static void testFragmentedLfBoundary() {
     Client client(-1, "localhost");
     std::string completeLine;
 
     client.appendToInputBuffer(
-        "PASS " + std::string(506, 'A')
-    );
+        "PASS " + std::string(506, 'A'));
 
     expectTrue(
         client.extractNextLine(completeLine)
             == Client::LINE_INCOMPLETE,
-        "A fragmented 512-byte LF line should remain incomplete before LF arrives",
+        "A fragmented 512-byte LF line"
+        "should remain incomplete before LF arrives",
         "LINE_INCOMPLETE",
-        "LINE_TOO_LONG"
-    );
+        "LINE_TOO_LONG");
 
     client.appendToInputBuffer("\n");
 
@@ -725,59 +643,48 @@ static void testFragmentedLfBoundary()
             == Client::LINE_COMPLETE,
         "A fragmented LF line of exactly 512 bytes should be accepted",
         "LINE_COMPLETE",
-        "status different from LINE_COMPLETE"
-    );
+        "status different from LINE_COMPLETE");
 }
 
-static void testServerPrefixAndUnknownCommand()
-{
+static void testServerPrefixAndUnknownCommand() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for protocol tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const std::string response = sendCommandAndReceive(
         server.getPort(),
-        "UNKNOWN\r\n"
-    );
+        "UNKNOWN\r\n");
 
     expectEqual(
         response,
         ":irc.42.local 421 * UNKNOWN :Unknown command\r\n",
-        "Unknown commands should return 421 with server prefix and target *"
-    );
+        "Unknown commands should return 421 with server prefix and target *");
 }
 
-static void testWelcomeNumerics()
-{
+static void testWelcomeNumerics() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for welcome tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for welcome tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -787,32 +694,27 @@ static void testWelcomeNumerics()
     expectContains(
         response,
         ":irc.42.local 001 roxana :Welcome to the IRC Network roxana!roxana@",
-        "Welcome numeric should contain the server and complete client prefix"
-    );
+        "Welcome numeric should contain the server and complete client prefix");
 
     expectContains(
         response,
         ":irc.42.local 002 roxana ",
-        "Registration should send numeric 002"
-    );
+        "Registration should send numeric 002");
 
     expectContains(
         response,
         ":irc.42.local 003 roxana ",
-        "Registration should send numeric 003"
-    );
+        "Registration should send numeric 003");
 
     expectContains(
         response,
         ":irc.42.local 004 roxana ",
-        "Registration should send numeric 004"
-    );
+        "Registration should send numeric 004");
 
     expectContains(
         response,
         ":irc.42.local 005 roxana ",
-        "Registration should send numeric 005"
-    );
+        "Registration should send numeric 005");
 
     ::close(socketFd);
 }
@@ -826,48 +728,39 @@ static void testWelcomeNumerics()
  * Without an accepted password, 001 does not appear.
  * PASS after registration → 462.
  */
-static void testPassRegistrationRules()
-{
+static void testPassRegistrationRules() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for PASS tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "PASS\r\n"
-        ),
+            "PASS\r\n"),
         ":irc.42.local 461 * PASS :Not enough parameters\r\n",
-        "PASS without a password should return 461"
-    );
+        "PASS without a password should return 461");
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "PASS incorrect\r\n"
-        ),
+            "PASS incorrect\r\n"),
         ":irc.42.local 464 * :Password incorrect\r\n",
-        "An incorrect password should return 464"
-    );
+        "An incorrect password should return 464");
 
     const int resetPasswordSocketFd =
         connectToServer(server.getPort());
 
-    if (resetPasswordSocketFd == -1)
-    {
+    if (resetPasswordSocketFd == -1) {
         reportFailure(
             "Client should connect for password reset test",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -877,13 +770,11 @@ static void testPassRegistrationRules()
         "NICK resetpass\r\n"
         "USER resetpass 0 * :Reset Pass\r\n";
 
-    if (!sendAll(resetPasswordSocketFd, passwordResetCommands))
-    {
+    if (!sendAll(resetPasswordSocketFd, passwordResetCommands)) {
         reportFailure(
             "Password reset commands should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         ::close(resetPasswordSocketFd);
         return;
     }
@@ -894,40 +785,34 @@ static void testPassRegistrationRules()
     expectContains(
         passwordResetResponse,
         ":irc.42.local 464 * :Password incorrect\r\n",
-        "An incorrect PASS should reject the supplied password"
-    );
+        "An incorrect PASS should reject the supplied password");
 
     expectTrue(
         passwordResetResponse.find(" 001 ") == std::string::npos,
         "An incorrect PASS after a correct PASS should prevent registration",
         "output without numeric 001",
-        passwordResetResponse
-    );
+        passwordResetResponse);
 
     ::close(resetPasswordSocketFd);
 
     const int registeredClientSocketFd =
         connectToServer(server.getPort());
 
-    if (registeredClientSocketFd == -1)
-    {
+    if (registeredClientSocketFd == -1) {
         reportFailure(
             "Client should connect for repeated PASS test",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
     registerClient(registeredClientSocketFd, "passclient");
 
-    if (!sendAll(registeredClientSocketFd, "PASS secret\r\n"))
-    {
+    if (!sendAll(registeredClientSocketFd, "PASS secret\r\n")) {
         reportFailure(
             "Repeated PASS command should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         ::close(registeredClientSocketFd);
         return;
     }
@@ -935,52 +820,42 @@ static void testPassRegistrationRules()
     expectEqual(
         receiveAvailableData(registeredClientSocketFd, 500),
         ":irc.42.local 462 passclient :You may not reregister\r\n",
-        "PASS after registration should return 462"
-    );
+        "PASS after registration should return 462");
 
     ::close(registeredClientSocketFd);
 }
 
-static void testSpecificMissingParameterNumerics()
-{
+static void testSpecificMissingParameterNumerics() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for dispatcher tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "NICK\r\n"
-        ),
+            "NICK\r\n"),
         ":irc.42.local 431 * :No nickname given\r\n",
-        "NICK without a parameter should return 431"
-    );
+        "NICK without a parameter should return 431");
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "PING\r\n"
-        ),
+            "PING\r\n"),
         ":irc.42.local 409 * :No origin specified\r\n",
-        "PING without a token should return 409"
-    );
+        "PING without a token should return 409");
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "PRIVMSG target :hello\r\n"
-        ),
+            "PRIVMSG target :hello\r\n"),
         ":irc.42.local 451 * :You have not registered\r\n",
-        "PRIVMSG before registration should return 451"
-    );
+        "PRIVMSG before registration should return 451");
 }
 
 /**
@@ -991,8 +866,7 @@ static bool extractClientPrefixFromWelcome(
     const std::string &welcomeResponse,
     const std::string &nickname,
     std::string &clientPrefix
-)
-{
+) {
     const std::string prefixMarker = nickname + "!" + nickname + "@";
     const std::string::size_type prefixStart =
         welcomeResponse.find(prefixMarker);
@@ -1008,8 +882,7 @@ static bool extractClientPrefixFromWelcome(
 
     clientPrefix = welcomeResponse.substr(
         prefixStart,
-        prefixEnd - prefixStart
-    );
+        prefixEnd - prefixStart);
     return true;
 }
 
@@ -1018,38 +891,31 @@ static bool extractClientPrefixFromWelcome(
  * 451 before registration, 411/412 for missing data, 401/403/404 for
  * unreachable targets, and that invalid commands leave the server usable.
  */
-static void testPhase13PrivmsgErrors()
-{
+static void testPhase13PrivmsgErrors() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 13 PRIVMSG error tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "PRIVMSG target :hello\r\n"
-        ),
+            "PRIVMSG target :hello\r\n"),
         ":irc.42.local 451 * :You have not registered\r\n",
-        "Phase 13: PRIVMSG before registration should return 451"
-    );
+        "Phase 13: PRIVMSG before registration should return 451");
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for phase 13 PRIVMSG error tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1059,49 +925,42 @@ static void testPhase13PrivmsgErrors()
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 411 alice :No recipient given (PRIVMSG)\r\n",
-        "Phase 13: PRIVMSG without a recipient should return 411"
-    );
+        "Phase 13: PRIVMSG without a recipient should return 411");
 
     sendAll(socketFd, "PRIVMSG roxana\r\n");
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 412 alice :No text to send\r\n",
-        "Phase 13: PRIVMSG without text should return 412"
-    );
+        "Phase 13: PRIVMSG without text should return 412");
 
     sendAll(socketFd, "PRIVMSG roxana :\r\n");
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 412 alice :No text to send\r\n",
-        "Phase 13: PRIVMSG with empty trailing text should return 412"
-    );
+        "Phase 13: PRIVMSG with empty trailing text should return 412");
 
     sendAll(socketFd, "PRIVMSG nadie :Hola\r\n");
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 401 alice nadie :No such nick\r\n",
-        "Phase 13: PRIVMSG to an unknown nickname should return 401"
-    );
+        "Phase 13: PRIVMSG to an unknown nickname should return 401");
 
     sendAll(socketFd, "PRIVMSG #inexistente :Hola\r\n");
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 403 alice #inexistente :No such channel\r\n",
-        "Phase 13: PRIVMSG to an unknown channel should return 403"
-    );
+        "Phase 13: PRIVMSG to an unknown channel should return 403");
 
     sendAll(socketFd, "JOIN #general\r\n");
     receiveAvailableData(socketFd, 500);
 
     const int outsiderSocketFd = connectToServer(server.getPort());
 
-    if (outsiderSocketFd == -1)
-    {
+    if (outsiderSocketFd == -1) {
         reportFailure(
             "Outsider client should connect for phase 13 PRIVMSG tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         ::close(socketFd);
         return;
     }
@@ -1111,22 +970,19 @@ static void testPhase13PrivmsgErrors()
     expectEqual(
         receiveAvailableData(outsiderSocketFd, 500),
         ":irc.42.local 404 outsider #general :Cannot send to channel\r\n",
-        "Phase 13: PRIVMSG from a non-member should return 404"
-    );
+        "Phase 13: PRIVMSG from a non-member should return 404");
 
     sendAll(socketFd, "PRIVMSG nadie :still alive\r\n");
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 401 alice nadie :No such nick\r\n",
-        "Phase 13: server should keep answering after invalid PRIVMSG"
-    );
+        "Phase 13: server should keep answering after invalid PRIVMSG");
 
     expectTrue(
         server.isRunning(),
         "Phase 13: invalid PRIVMSG commands should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     ::close(outsiderSocketFd);
     ::close(socketFd);
@@ -1137,17 +993,14 @@ static void testPhase13PrivmsgErrors()
  * inside a channel: full sender prefix, CRLF termination, no echo to the
  * sender, casemapped nick lookup, and preserved trailing spaces.
  */
-static void testPhase13PrivmsgDelivery()
-{
+static void testPhase13PrivmsgDelivery() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 13 PRIVMSG delivery tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
@@ -1159,13 +1012,11 @@ static void testPhase13PrivmsgDelivery()
     if (aliceSocketFd == -1
         || roxanaSocketFd == -1
         || bobSocketFd == -1
-        || carolSocketFd == -1)
-    {
+        || carolSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 13 PRIVMSG delivery tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
 
         if (aliceSocketFd != -1)
             ::close(aliceSocketFd);
@@ -1189,14 +1040,11 @@ static void testPhase13PrivmsgDelivery()
     if (!extractClientPrefixFromWelcome(
             aliceWelcome,
             "alice",
-            alicePrefix
-        ))
-    {
+            alicePrefix)) {
         reportFailure(
             "Alice welcome should expose a usable client prefix",
             "welcome containing alice!alice@",
-            aliceWelcome
-        );
+            aliceWelcome);
         ::close(aliceSocketFd);
         ::close(roxanaSocketFd);
         ::close(bobSocketFd);
@@ -1207,8 +1055,7 @@ static void testPhase13PrivmsgDelivery()
     expectContains(
         alicePrefix,
         "alice!alice@",
-        "Phase 13: sender prefix must include nick!user@host"
-    );
+        "Phase 13: sender prefix must include nick!user@host");
 
     sendAll(aliceSocketFd, "PRIVMSG roxana :Hola\r\n");
 
@@ -1220,49 +1067,42 @@ static void testPhase13PrivmsgDelivery()
     expectEqual(
         userMessage,
         expectedUserMessage,
-        "Phase 13: PRIVMSG to a nickname should reach only the recipient"
-    );
+        "Phase 13: PRIVMSG to a nickname should reach only the recipient");
     expectTrue(
         userMessage.size() >= 2
             && userMessage[userMessage.size() - 2] == '\r'
             && userMessage[userMessage.size() - 1] == '\n',
         "Phase 13: delivered PRIVMSG must end with CRLF",
         "message ending with \\r\\n",
-        escapeOutput(userMessage)
-    );
+        escapeOutput(userMessage));
     expectEqual(
         receiveAvailableData(aliceSocketFd, 200),
         "",
-        "Phase 13: PRIVMSG to a nickname should not echo to the sender"
-    );
+        "Phase 13: PRIVMSG to a nickname should not echo to the sender");
     expectEqual(
         receiveAvailableData(bobSocketFd, 200),
         "",
-        "Phase 13: PRIVMSG to a nickname should not reach unrelated clients"
-    );
+        "Phase 13: PRIVMSG to a nickname should not reach unrelated clients");
     expectEqual(
         receiveAvailableData(carolSocketFd, 200),
         "",
-        "Phase 13: PRIVMSG to a nickname should not reach other unrelated clients"
-    );
+        "Phase 13: PRIVMSG to a nickname"
+        "should not reach other unrelated clients");
 
     sendAll(aliceSocketFd, "PRIVMSG ROXANA :Casemap\r\n");
     expectEqual(
         receiveAvailableData(roxanaSocketFd, 500),
         ":" + alicePrefix + " PRIVMSG ROXANA :Casemap\r\n",
-        "Phase 13: PRIVMSG should find nicknames with IRC casemapping"
-    );
+        "Phase 13: PRIVMSG should find nicknames with IRC casemapping");
 
     sendAll(
         aliceSocketFd,
-        "PRIVMSG roxana :Hola con espacios y CTCP\r\n"
-    );
+        "PRIVMSG roxana :Hola con espacios y CTCP\r\n");
     expectEqual(
         receiveAvailableData(roxanaSocketFd, 500),
         ":" + alicePrefix
             + " PRIVMSG roxana :Hola con espacios y CTCP\r\n",
-        "Phase 13: PRIVMSG trailing text must preserve spaces"
-    );
+        "Phase 13: PRIVMSG trailing text must preserve spaces");
 
     sendAll(aliceSocketFd, "JOIN #general\r\n");
     receiveAvailableData(aliceSocketFd, 500);
@@ -1287,23 +1127,19 @@ static void testPhase13PrivmsgDelivery()
     expectEqual(
         receiveAvailableData(roxanaSocketFd, 500),
         expectedChannelMessage,
-        "Phase 13: channel PRIVMSG should reach roxana"
-    );
+        "Phase 13: channel PRIVMSG should reach roxana");
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedChannelMessage,
-        "Phase 13: channel PRIVMSG should reach bob"
-    );
+        "Phase 13: channel PRIVMSG should reach bob");
     expectEqual(
         receiveAvailableData(carolSocketFd, 500),
         expectedChannelMessage,
-        "Phase 13: channel PRIVMSG should reach carol"
-    );
+        "Phase 13: channel PRIVMSG should reach carol");
     expectEqual(
         receiveAvailableData(aliceSocketFd, 200),
         "",
-        "Phase 13: channel PRIVMSG should not be echoed to the sender"
-    );
+        "Phase 13: channel PRIVMSG should not be echoed to the sender");
 
     ::close(aliceSocketFd);
     ::close(roxanaSocketFd);
@@ -1311,36 +1147,30 @@ static void testPhase13PrivmsgDelivery()
     ::close(carolSocketFd);
 }
 
-static void testOversizedErrorDoesNotStopServer()
-{
+static void testOversizedErrorDoesNotStopServer() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for oversized reply test",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for oversized reply test",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
     sendAll(
         socketFd,
-        std::string(490, 'X') + "\r\n"
-    );
+        std::string(490, 'X') + "\r\n");
 
     ::usleep(200000);
 
@@ -1348,35 +1178,29 @@ static void testOversizedErrorDoesNotStopServer()
         server.isRunning(),
         "A valid long command should not terminate the entire server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     ::close(socketFd);
 }
 
-static void testSlowClientDoesNotStopServer()
-{
+static void testSlowClientDoesNotStopServer() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for output buffer test",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int slowSocket = connectToServer(server.getPort());
 
-    if (slowSocket == -1)
-    {
+    if (slowSocket == -1) {
         reportFailure(
             "Slow client should connect",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1387,15 +1211,13 @@ static void testSlowClientDoesNotStopServer()
         SOL_SOCKET,
         SO_RCVBUF,
         &receiveBufferSize,
-        sizeof(receiveBufferSize)
-    );
+        sizeof(receiveBufferSize));
 
     std::string commandBurst;
 
     for (int commandIndex = 0;
          commandIndex < 50000;
-         ++commandIndex)
-    {
+         ++commandIndex) {
         commandBurst += "X\r\n";
     }
 
@@ -1406,19 +1228,17 @@ static void testSlowClientDoesNotStopServer()
         server.isRunning(),
         "A slow client exceeding the output buffer should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     const std::string probeResponse = sendCommandAndReceive(
         server.getPort(),
-        "UNKNOWN\r\n"
-    );
+        "UNKNOWN\r\n");
 
     expectEqual(
         probeResponse,
         ":irc.42.local 421 * UNKNOWN :Unknown command\r\n",
-        "Server should continue serving other clients after removing a slow client"
-    );
+        "Server should continue serving"
+        "other clients after removing a slow client");
 
     ::close(slowSocket);
 }
@@ -1427,29 +1247,24 @@ static void testSlowClientDoesNotStopServer()
  * @brief Verifies PING responses, missing-origin errors, PONG acceptance,
  * token preservation, and availability before client registration.
  */
-static void testPhase10PingAndPong()
-{
+static void testPhase10PingAndPong() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for PING and PONG tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for PING and PONG tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1460,13 +1275,11 @@ static void testPhase10PingAndPong()
         "PING :still-connected\r\n"
         "PONG\r\n";
 
-    if (!sendAll(socketFd, commands))
-    {
+    if (!sendAll(socketFd, commands)) {
         reportFailure(
             "PING and PONG commands should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         ::close(socketFd);
         return;
     }
@@ -1483,8 +1296,7 @@ static void testPhase10PingAndPong()
     expectEqual(
         response,
         expectedResponse,
-        "PING and PONG should work before registration"
-    );
+        "PING and PONG should work before registration");
 
     ::close(socketFd);
 }
@@ -1494,29 +1306,24 @@ static void testPhase10PingAndPong()
  * missing-parameter errors, empty capability lists, NAK responses, and the
  * correct client identifier before and after NICK.
  */
-static void testPhase10CapabilityNegotiation()
-{
+static void testPhase10CapabilityNegotiation() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for CAP tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for CAP tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1532,13 +1339,11 @@ static void testPhase10CapabilityNegotiation()
         "CAP list\r\n"
         "PING :cap-ended\r\n";
 
-    if (!sendAll(socketFd, commands))
-    {
+    if (!sendAll(socketFd, commands)) {
         reportFailure(
             "CAP commands should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         ::close(socketFd);
         return;
     }
@@ -1559,8 +1364,7 @@ static void testPhase10CapabilityNegotiation()
     expectEqual(
         response,
         expectedResponse,
-        "CAP negotiation commands should produce the expected responses"
-    );
+        "CAP negotiation commands should produce the expected responses");
 
     ::close(socketFd);
 }
@@ -1569,40 +1373,33 @@ static void testPhase10CapabilityNegotiation()
  * @brief Verifies QUIT before registration, QUIT with a reason after
  * registration, TCP connection closure, and nickname release.
  */
-static void testPhase10QuitAndNicknameRelease()
-{
+static void testPhase10QuitAndNicknameRelease() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for QUIT tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int unregisteredSocketFd =
         connectToServer(server.getPort());
 
-    if (unregisteredSocketFd == -1)
-    {
+    if (unregisteredSocketFd == -1) {
         reportFailure(
             "Unregistered client should connect for QUIT test",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
-    if (!sendAll(unregisteredSocketFd, "QUIT\r\n"))
-    {
+    if (!sendAll(unregisteredSocketFd, "QUIT\r\n")) {
         reportFailure(
             "QUIT without a reason should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         ::close(unregisteredSocketFd);
         return;
     }
@@ -1611,21 +1408,18 @@ static void testPhase10QuitAndNicknameRelease()
         waitForSocketClosure(unregisteredSocketFd, 1000),
         "QUIT should close an unregistered client connection",
         "closed TCP connection",
-        "connection remained open"
-    );
+        "connection remained open");
 
     ::close(unregisteredSocketFd);
 
     const int registeredSocketFd =
         connectToServer(server.getPort());
 
-    if (registeredSocketFd == -1)
-    {
+    if (registeredSocketFd == -1) {
         reportFailure(
             "Registered client should connect for QUIT test",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1635,19 +1429,15 @@ static void testPhase10QuitAndNicknameRelease()
     expectContains(
         registrationResponse,
         ":irc.42.local 001 quitclient ",
-        "Client should register before testing QUIT with a reason"
-    );
+        "Client should register before testing QUIT with a reason");
 
     if (!sendAll(
             registeredSocketFd,
-            "QUIT :Phase 10 complete\r\n"
-        ))
-    {
+            "QUIT :Phase 10 complete\r\n")) {
         reportFailure(
             "QUIT with a reason should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         ::close(registeredSocketFd);
         return;
     }
@@ -1656,21 +1446,18 @@ static void testPhase10QuitAndNicknameRelease()
         waitForSocketClosure(registeredSocketFd, 1000),
         "QUIT with a reason should close the client connection",
         "closed TCP connection",
-        "connection remained open"
-    );
+        "connection remained open");
 
     ::close(registeredSocketFd);
 
     const int reusedNicknameSocketFd =
         connectToServer(server.getPort());
 
-    if (reusedNicknameSocketFd == -1)
-    {
+    if (reusedNicknameSocketFd == -1) {
         reportFailure(
             "A new client should connect after QUIT",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1680,16 +1467,14 @@ static void testPhase10QuitAndNicknameRelease()
     expectContains(
         reusedNicknameResponse,
         ":irc.42.local 001 quitclient ",
-        "QUIT should release the client's nickname"
-    );
+        "QUIT should release the client's nickname");
 
     expectTrue(
         reusedNicknameResponse.find(" 433 ")
             == std::string::npos,
         "A nickname should be reusable after QUIT",
         "registration without numeric 433",
-        reusedNicknameResponse
-    );
+        reusedNicknameResponse);
 
     ::close(reusedNicknameSocketFd);
 }
@@ -1697,38 +1482,31 @@ static void testPhase10QuitAndNicknameRelease()
 /**
  * @brief Verifies JOIN registration, parameter, and channel-name errors.
  */
-static void testPhase12JoinErrors()
-{
+static void testPhase12JoinErrors() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 12 JOIN error tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "JOIN #general\r\n"
-        ),
+            "JOIN #general\r\n"),
         ":irc.42.local 451 * :You have not registered\r\n",
-        "Phase 12: JOIN before registration should return 451"
-    );
+        "Phase 12: JOIN before registration should return 451");
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for phase 12 JOIN error tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -1739,63 +1517,56 @@ static void testPhase12JoinErrors()
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 461 roxana JOIN :Not enough parameters\r\n",
-        "Phase 12: JOIN without parameters should return 461"
-    );
+        "Phase 12: JOIN without parameters should return 461");
 
     sendAll(socketFd, "JOIN :\r\n");
 
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 461 roxana JOIN :Not enough parameters\r\n",
-        "Phase 12: JOIN with an empty channel parameter should return 461"
-    );
+        "Phase 12: JOIN with an empty channel parameter should return 461");
 
     sendAll(socketFd, "JOIN general\r\n");
 
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 403 roxana general :No such channel\r\n",
-        "Phase 12: JOIN without a channel prefix should return 403"
-    );
+        "Phase 12: JOIN without a channel prefix should return 403");
 
     sendAll(socketFd, "JOIN #\r\n");
 
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 403 roxana # :No such channel\r\n",
-        "Phase 12: JOIN with only a channel prefix should return 403"
-    );
+        "Phase 12: JOIN with only a channel prefix should return 403");
 
     sendAll(socketFd, "JOIN #bad:channel\r\n");
 
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 403 roxana #bad:channel :No such channel\r\n",
-        "Phase 12: JOIN with a colon in the channel name should return 403"
-    );
+        "Phase 12: JOIN with a colon in the channel name should return 403");
 
     const std::string excessiveChannelName =
         "#" + std::string(50, 'a');
 
     sendAll(
         socketFd,
-        "JOIN " + excessiveChannelName + "\r\n"
-    );
+        "JOIN " + excessiveChannelName + "\r\n");
 
     expectEqual(
         receiveAvailableData(socketFd, 500),
         ":irc.42.local 403 roxana "
             + excessiveChannelName
             + " :No such channel\r\n",
-        "Phase 12: JOIN with a channel name longer than 50 bytes should return 403"
-    );
+        "Phase 12: JOIN with a channel name"
+        "longer than 50 bytes should return 403");
 
     expectTrue(
         server.isRunning(),
         "Phase 12: invalid JOIN commands should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     ::close(socketFd);
 }
@@ -1804,30 +1575,25 @@ static void testPhase12JoinErrors()
  * @brief Verifies channel creation, JOIN broadcasting, topic and NAMES
  * replies, operator prefixes, duplicate protection, and channel casemapping.
  */
-static void testPhase12JoinCreationAndMembership()
-{
+static void testPhase12JoinCreationAndMembership() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 12 JOIN membership tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int aliceSocketFd = connectToServer(server.getPort());
     const int bobSocketFd = connectToServer(server.getPort());
 
-    if (aliceSocketFd == -1 || bobSocketFd == -1)
-    {
+    if (aliceSocketFd == -1 || bobSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 12 JOIN membership tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
 
         if (aliceSocketFd != -1)
             ::close(aliceSocketFd);
@@ -1847,19 +1613,15 @@ static void testPhase12JoinCreationAndMembership()
     if (!extractClientPrefixFromWelcome(
             aliceWelcome,
             "alice",
-            alicePrefix
-        )
+            alicePrefix)
         || !extractClientPrefixFromWelcome(
             bobWelcome,
             "bob",
-            bobPrefix
-        ))
-    {
+            bobPrefix)) {
         reportFailure(
             "Welcome replies should expose prefixes for phase 12 JOIN tests",
             "welcome containing nick!nick@host",
-            aliceWelcome + bobWelcome
-        );
+            aliceWelcome + bobWelcome);
 
         ::close(aliceSocketFd);
         ::close(bobSocketFd);
@@ -1880,8 +1642,8 @@ static void testPhase12JoinCreationAndMembership()
     expectEqual(
         aliceJoinResponse,
         expectedAliceJoinResponse,
-        "Phase 12: creating a channel should return JOIN, 331, 353 and 366 in order"
-    );
+        "Phase 12: creating a channel"
+        "should return JOIN, 331, 353 and 366 in order");
 
     sendAll(bobSocketFd, "JOIN #general\r\n");
 
@@ -1894,51 +1656,43 @@ static void testPhase12JoinCreationAndMembership()
     expectEqual(
         aliceNotification,
         ":" + bobPrefix + " JOIN :#General\r\n",
-        "Phase 12: an existing member should receive the new member's JOIN"
-    );
+        "Phase 12: an existing member should receive the new member's JOIN");
 
     expectContains(
         bobJoinResponse,
         ":" + bobPrefix + " JOIN :#General\r\n",
-        "Phase 12: the joining client should receive its own JOIN"
-    );
+        "Phase 12: the joining client should receive its own JOIN");
 
     expectContains(
         bobJoinResponse,
         ":irc.42.local 331 bob #General :No topic is set\r\n",
-        "Phase 12: joining a channel without a topic should return 331"
-    );
+        "Phase 12: joining a channel without a topic should return 331");
 
     expectContains(
         bobJoinResponse,
         ":irc.42.local 353 bob = #General :",
-        "Phase 12: joining an existing channel should return 353"
-    );
+        "Phase 12: joining an existing channel should return 353");
 
     expectContains(
         bobJoinResponse,
         "@alice",
-        "Phase 12: NAMES should mark the channel creator as an operator"
-    );
+        "Phase 12: NAMES should mark the channel creator as an operator");
 
     expectContains(
         bobJoinResponse,
         "bob",
-        "Phase 12: NAMES should contain the joining client"
-    );
+        "Phase 12: NAMES should contain the joining client");
 
     expectTrue(
         bobJoinResponse.find("@bob") == std::string::npos,
         "Phase 12: a later member should not become a channel operator",
         "NAMES without @bob",
-        bobJoinResponse
-    );
+        bobJoinResponse);
 
     expectContains(
         bobJoinResponse,
         ":irc.42.local 366 bob #General :End of /NAMES list\r\n",
-        "Phase 12: the NAMES sequence should finish with 366"
-    );
+        "Phase 12: the NAMES sequence should finish with 366");
 
     const std::string::size_type joinPosition =
         bobJoinResponse.find(" JOIN :#General\r\n");
@@ -1962,22 +1716,20 @@ static void testPhase12JoinCreationAndMembership()
             && namesPosition < endNamesPosition,
         "Phase 12: JOIN replies should preserve protocol order",
         "JOIN before 331 before 353 before 366",
-        bobJoinResponse
-    );
+        bobJoinResponse);
 
     sendAll(bobSocketFd, "JOIN #GENERAL\r\n");
 
     expectEqual(
         receiveAvailableData(bobSocketFd, 200),
         "",
-        "Phase 12: joining the same channel with different case should be ignored"
-    );
+        "Phase 12: joining the same channel"
+        "with different case should be ignored");
 
     expectEqual(
         receiveAvailableData(aliceSocketFd, 200),
         "",
-        "Phase 12: a duplicate JOIN should not be broadcast to other members"
-    );
+        "Phase 12: a duplicate JOIN should not be broadcast to other members");
 
     ::close(aliceSocketFd);
     ::close(bobSocketFd);
@@ -1987,29 +1739,24 @@ static void testPhase12JoinCreationAndMembership()
  * @brief Verifies comma-separated JOIN lists and independent processing when
  * one requested channel is invalid.
  */
-static void testPhase12JoinChannelLists()
-{
+static void testPhase12JoinChannelLists() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 12 JOIN list tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int socketFd = connectToServer(server.getPort());
 
-    if (socketFd == -1)
-    {
+    if (socketFd == -1) {
         reportFailure(
             "Client should connect for phase 12 JOIN list tests",
             "successful connection",
-            "connection failed"
-        );
+            "connection failed");
         return;
     }
 
@@ -2021,14 +1768,11 @@ static void testPhase12JoinChannelLists()
     if (!extractClientPrefixFromWelcome(
             welcomeResponse,
             "roxana",
-            clientPrefix
-        ))
-    {
+            clientPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 12 JOIN list tests",
             "welcome containing roxana!roxana@host",
-            welcomeResponse
-        );
+            welcomeResponse);
 
         ::close(socketFd);
         return;
@@ -2049,16 +1793,15 @@ static void testPhase12JoinChannelLists()
     expectEqual(
         receiveAvailableData(socketFd, 500),
         expectedListResponse,
-        "Phase 12: JOIN should process every channel in a comma-separated list"
-    );
+        "Phase 12: JOIN should process"
+        "every channel in a comma-separated list");
 
     sendAll(socketFd, "JOIN #ONE,#TWO\r\n");
 
     expectEqual(
         receiveAvailableData(socketFd, 200),
         "",
-        "Phase 12: a duplicated case-insensitive JOIN list should be ignored"
-    );
+        "Phase 12: a duplicated case-insensitive JOIN list should be ignored");
 
     sendAll(socketFd, "JOIN invalid,#three\r\n");
 
@@ -2072,8 +1815,8 @@ static void testPhase12JoinChannelLists()
     expectEqual(
         receiveAvailableData(socketFd, 500),
         expectedIndependentResponse,
-        "Phase 12: one invalid JOIN list entry should not block later valid channels"
-    );
+        "Phase 12: one invalid JOIN list"
+        "entry should not block later valid channels");
 
     ::close(socketFd);
 }
@@ -2082,39 +1825,32 @@ static void testPhase12JoinChannelLists()
  * @brief Verifies PART registration, parameter, channel existence, and
  * membership errors.
  */
-static void testPhase12PartErrors()
-{
+static void testPhase12PartErrors() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 12 PART error tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     expectEqual(
         sendCommandAndReceive(
             server.getPort(),
-            "PART #general\r\n"
-        ),
+            "PART #general\r\n"),
         ":irc.42.local 451 * :You have not registered\r\n",
-        "Phase 12: PART before registration should return 451"
-    );
+        "Phase 12: PART before registration should return 451");
 
     const int ownerSocketFd = connectToServer(server.getPort());
     const int outsiderSocketFd = connectToServer(server.getPort());
 
-    if (ownerSocketFd == -1 || outsiderSocketFd == -1)
-    {
+    if (ownerSocketFd == -1 || outsiderSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 12 PART error tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
 
         if (ownerSocketFd != -1)
             ::close(ownerSocketFd);
@@ -2134,45 +1870,39 @@ static void testPhase12PartErrors()
     expectEqual(
         receiveAvailableData(ownerSocketFd, 500),
         ":irc.42.local 461 owner PART :Not enough parameters\r\n",
-        "Phase 12: PART without parameters should return 461"
-    );
+        "Phase 12: PART without parameters should return 461");
 
     sendAll(ownerSocketFd, "PART :\r\n");
 
     expectEqual(
         receiveAvailableData(ownerSocketFd, 500),
         ":irc.42.local 461 owner PART :Not enough parameters\r\n",
-        "Phase 12: PART with an empty channel parameter should return 461"
-    );
+        "Phase 12: PART with an empty channel parameter should return 461");
 
     sendAll(outsiderSocketFd, "PART #missing\r\n");
 
     expectEqual(
         receiveAvailableData(outsiderSocketFd, 500),
         ":irc.42.local 403 outsider #missing :No such channel\r\n",
-        "Phase 12: PART for an unknown channel should return 403"
-    );
+        "Phase 12: PART for an unknown channel should return 403");
 
     sendAll(outsiderSocketFd, "PART #general\r\n");
 
     expectEqual(
         receiveAvailableData(outsiderSocketFd, 500),
         ":irc.42.local 442 outsider #general :You're not on that channel\r\n",
-        "Phase 12: PART from outside an existing channel should return 442"
-    );
+        "Phase 12: PART from outside an existing channel should return 442");
 
     expectEqual(
         receiveAvailableData(ownerSocketFd, 200),
         "",
-        "Phase 12: rejected PART commands should not notify channel members"
-    );
+        "Phase 12: rejected PART commands should not notify channel members");
 
     expectTrue(
         server.isRunning(),
         "Phase 12: invalid PART commands should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     ::close(ownerSocketFd);
     ::close(outsiderSocketFd);
@@ -2182,30 +1912,25 @@ static void testPhase12PartErrors()
  * @brief Verifies PART broadcasting, optional reasons, membership cleanup,
  * multiple channels, and deletion and recreation of empty channels.
  */
-static void testPhase12PartFlowAndChannelDeletion()
-{
+static void testPhase12PartFlowAndChannelDeletion() {
     TestServerProcess server;
 
-    if (!server.start())
-    {
+    if (!server.start()) {
         reportFailure(
             "Server should start for phase 12 PART flow tests",
             "running ircserv",
-            "server startup failed"
-        );
+            "server startup failed");
         return;
     }
 
     const int aliceSocketFd = connectToServer(server.getPort());
     const int bobSocketFd = connectToServer(server.getPort());
 
-    if (aliceSocketFd == -1 || bobSocketFd == -1)
-    {
+    if (aliceSocketFd == -1 || bobSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 12 PART flow tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
 
         if (aliceSocketFd != -1)
             ::close(aliceSocketFd);
@@ -2226,19 +1951,15 @@ static void testPhase12PartFlowAndChannelDeletion()
     if (!extractClientPrefixFromWelcome(
             aliceWelcome,
             "alice",
-            alicePrefix
-        )
+            alicePrefix)
         || !extractClientPrefixFromWelcome(
             bobWelcome,
             "bob",
-            bobPrefix
-        ))
-    {
+            bobPrefix)) {
         reportFailure(
             "Welcome replies should expose prefixes for phase 12 PART tests",
             "welcome containing nick!nick@host",
-            aliceWelcome + bobWelcome
-        );
+            aliceWelcome + bobWelcome);
 
         ::close(aliceSocketFd);
         ::close(bobSocketFd);
@@ -2254,8 +1975,7 @@ static void testPhase12PartFlowAndChannelDeletion()
 
     sendAll(
         aliceSocketFd,
-        "PART #general :Hasta luego\r\n"
-    );
+        "PART #general :Hasta luego\r\n");
 
     const std::string expectedAlicePart =
         ":" + alicePrefix
@@ -2264,22 +1984,21 @@ static void testPhase12PartFlowAndChannelDeletion()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedAlicePart,
-        "Phase 12: PART with a reason should notify the leaving client"
-    );
+        "Phase 12: PART with a reason should notify the leaving client");
 
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedAlicePart,
-        "Phase 12: PART with a reason should notify remaining members"
-    );
+        "Phase 12: PART with a reason should notify remaining members");
 
     sendAll(aliceSocketFd, "PART #general\r\n");
 
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
-        ":irc.42.local 442 alice #general :You're not on that channel\r\n",
-        "Phase 12: a client removed by PART should no longer belong to the channel"
-    );
+        ":irc.42.local 442 alice #general"
+        " :You're not on that channel\r\n",
+        "Phase 12: a client removed by"
+        "PART should no longer belong to the channel");
 
     sendAll(bobSocketFd, "PART #general\r\n");
 
@@ -2289,14 +2008,12 @@ static void testPhase12PartFlowAndChannelDeletion()
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedBobPart,
-        "Phase 12: PART without a reason should not add a trailing parameter"
-    );
+        "Phase 12: PART without a reason should not add a trailing parameter");
 
     expectEqual(
         receiveAvailableData(aliceSocketFd, 200),
         "",
-        "Phase 12: a former member should not receive later PART broadcasts"
-    );
+        "Phase 12: a former member should not receive later PART broadcasts");
 
     sendAll(aliceSocketFd, "JOIN #general\r\n");
 
@@ -2309,16 +2026,15 @@ static void testPhase12PartFlowAndChannelDeletion()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedRecreatedChannel,
-        "Phase 12: joining an emptied channel should recreate it and grant operator status"
-    );
+        "Phase 12: joining an emptied channel"
+        "should recreate it and grant operator status");
 
     sendAll(aliceSocketFd, "JOIN #one,#two\r\n");
     receiveAvailableData(aliceSocketFd, 500);
 
     sendAll(
         aliceSocketFd,
-        "PART #one,#two :Leaving both\r\n"
-    );
+        "PART #one,#two :Leaving both\r\n");
 
     const std::string expectedMultiplePart =
         ":" + alicePrefix + " PART #one :Leaving both\r\n"
@@ -2327,15 +2043,14 @@ static void testPhase12PartFlowAndChannelDeletion()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedMultiplePart,
-        "Phase 12: PART should process every channel in a comma-separated list"
-    );
+        "Phase 12: PART should process"
+        "every channel in a comma-separated list");
 
     ::close(aliceSocketFd);
     ::close(bobSocketFd);
 }
 
-int main()
-{
+int main() {
     testIrcMessageSerialization();
     testGeneratedMessagesRejectControlCharacters();
     testSerializedMessageLengthLimit();
@@ -2360,8 +2075,7 @@ int main()
     testPhase12PartErrors();
     testPhase12PartFlowAndChannelDeletion();
 
-    if (g_failures != 0)
-    {
+    if (g_failures != 0) {
         std::cerr
             << g_failures
             << " protocol checklist test(s) failed"

@@ -6,15 +6,12 @@
  * nicknames, join the same channel, exchange private and channel messages,
  * and survive one peer closing while the others continue.
  */
-static void testMultipleClientsIndependentRegistrationAndMessaging()
-{
+static void testMultipleClientsIndependentRegistrationAndMessaging() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 19 multi-client tests"
-        ))
-    {
+            "Server should start for phase 19 multi-client tests")) {
         return;
     }
 
@@ -22,13 +19,11 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     const int bobSocketFd = connectToServer(server.getPort());
     const int carolSocketFd = connectToServer(server.getPort());
 
-    if (aliceSocketFd == -1 || bobSocketFd == -1 || carolSocketFd == -1)
-    {
+    if (aliceSocketFd == -1 || bobSocketFd == -1 || carolSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 19 multi-client tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(aliceSocketFd);
         closeSocket(bobSocketFd);
         closeSocket(carolSocketFd);
@@ -45,13 +40,11 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     std::string bobPrefix;
 
     if (!extractClientPrefixFromWelcome(aliceWelcome, "alice", alicePrefix)
-        || !extractClientPrefixFromWelcome(bobWelcome, "bob", bobPrefix))
-    {
+        || !extractClientPrefixFromWelcome(bobWelcome, "bob", bobPrefix)) {
         reportFailure(
             "Welcome should expose prefixes for phase 19 multi-client tests",
             "welcome containing alice and bob prefixes",
-            aliceWelcome + bobWelcome
-        );
+            aliceWelcome + bobWelcome);
         closeSocket(aliceSocketFd);
         closeSocket(bobSocketFd);
         closeSocket(carolSocketFd);
@@ -61,8 +54,7 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     expectEqual(
         sendLineAndReceive(carolSocketFd, "NICK alice\r\n"),
         ":irc.42.local 433 carol alice :Nickname is already in use\r\n",
-        "Phase 19: nicknames must stay unique across simultaneous clients"
-    );
+        "Phase 19: nicknames must stay unique across simultaneous clients");
 
     sendAll(aliceSocketFd, "JOIN #room\r\n");
     discardPendingData(aliceSocketFd);
@@ -78,13 +70,11 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         ":" + alicePrefix + " PRIVMSG bob :privado\r\n",
-        "Phase 19: private messages should reach only the intended client"
-    );
+        "Phase 19: private messages should reach only the intended client");
     expectEqual(
         receiveAvailableData(carolSocketFd, 200),
         "",
-        "Phase 19: a private message should not reach an unrelated client"
-    );
+        "Phase 19: a private message should not reach an unrelated client");
 
     sendAll(aliceSocketFd, "PRIVMSG #room :canal\r\n");
     const std::string expectedChannelMessage =
@@ -93,13 +83,11 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedChannelMessage,
-        "Phase 19: channel messages should reach bob"
-    );
+        "Phase 19: channel messages should reach bob");
     expectEqual(
         receiveAvailableData(carolSocketFd, 500),
         expectedChannelMessage,
-        "Phase 19: channel messages should reach carol"
-    );
+        "Phase 19: channel messages should reach carol");
 
     sendAll(aliceSocketFd, "TOPIC #room :tema compartido\r\n");
     const std::string expectedTopic =
@@ -108,18 +96,15 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedTopic,
-        "Phase 19: a topic change should notify the sender"
-    );
+        "Phase 19: a topic change should notify the sender");
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedTopic,
-        "Phase 19: a topic change should notify bob"
-    );
+        "Phase 19: a topic change should notify bob");
     expectEqual(
         receiveAvailableData(carolSocketFd, 500),
         expectedTopic,
-        "Phase 19: a topic change should notify carol"
-    );
+        "Phase 19: a topic change should notify carol");
 
     closeSocket(carolSocketFd);
 
@@ -131,27 +116,25 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
     expectContains(
         aliceAfterClose,
         " QUIT :",
-        "Phase 19: remaining clients should be notified when another client closes"
-    );
+        "Phase 19: remaining clients should"
+        "be notified when another client closes");
     expectContains(
         bobAfterClose,
         " QUIT :",
-        "Phase 19: every remaining member should receive the closing client's QUIT"
-    );
+        "Phase 19: every remaining member"
+        "should receive the closing client's QUIT");
 
     sendAll(bobSocketFd, "PRIVMSG #room :seguimos\r\n");
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         ":" + bobPrefix + " PRIVMSG #room :seguimos\r\n",
-        "Phase 19: remaining clients should keep exchanging channel messages"
-    );
+        "Phase 19: remaining clients should keep exchanging channel messages");
 
     expectTrue(
         server.isRunning(),
         "Phase 19: closing one of several clients should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     closeSocket(aliceSocketFd);
     closeSocket(bobSocketFd);
@@ -161,15 +144,12 @@ static void testMultipleClientsIndependentRegistrationAndMessaging()
  * @brief Phase 19 — invitations, kicks and mode changes remain consistent
  * when three clients interact on the same channel.
  */
-static void testMultipleClientsInviteKickAndMode()
-{
+static void testMultipleClientsInviteKickAndMode() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 19 multi-client operator tests"
-        ))
-    {
+            "Server should start for phase 19 multi-client operator tests")) {
         return;
     }
 
@@ -179,13 +159,11 @@ static void testMultipleClientsInviteKickAndMode()
 
     if (operatorSocketFd == -1
         || memberSocketFd == -1
-        || guestSocketFd == -1)
-    {
+        || guestSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 19 multi-client operator tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(guestSocketFd);
@@ -202,14 +180,12 @@ static void testMultipleClientsInviteKickAndMode()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
-            "Welcome should expose a prefix for phase 19 multi-client operator tests",
+            "Welcome should expose a"
+            "prefix for phase 19 multi-client operator tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(guestSocketFd);
@@ -230,8 +206,7 @@ static void testMultipleClientsInviteKickAndMode()
     expectEqual(
         sendLineAndReceive(guestSocketFd, "JOIN #ops\r\n"),
         ":irc.42.local 473 invitado #ops :Cannot join channel (+i)\r\n",
-        "Phase 19: invite-only should reject an uninvited simultaneous client"
-    );
+        "Phase 19: invite-only should reject an uninvited simultaneous client");
 
     sendAll(operatorSocketFd, "INVITE invitado #ops\r\n");
     discardPendingData(operatorSocketFd);
@@ -241,8 +216,8 @@ static void testMultipleClientsInviteKickAndMode()
     expectContains(
         receiveAvailableData(guestSocketFd, 500),
         " JOIN :#ops\r\n",
-        "Phase 19: an invited client should be able to join while others remain connected"
-    );
+        "Phase 19: an invited client should"
+        "be able to join while others remain connected");
     discardPendingData(operatorSocketFd);
     discardPendingData(memberSocketFd);
 
@@ -253,38 +228,32 @@ static void testMultipleClientsInviteKickAndMode()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedKick,
-        "Phase 19: the operator should receive the KICK broadcast"
-    );
+        "Phase 19: the operator should receive the KICK broadcast");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedKick,
-        "Phase 19: a remaining member should receive the KICK broadcast"
-    );
+        "Phase 19: a remaining member should receive the KICK broadcast");
     expectEqual(
         receiveAvailableData(guestSocketFd, 500),
         expectedKick,
-        "Phase 19: the kicked client should receive the KICK broadcast"
-    );
+        "Phase 19: the kicked client should receive the KICK broadcast");
 
     expectEqual(
         sendLineAndReceive(guestSocketFd, "PING :kicked-but-connected\r\n"),
         "PONG :kicked-but-connected\r\n",
-        "Phase 19: kicking one client should keep that TCP connection open"
-    );
+        "Phase 19: kicking one client should keep that TCP connection open");
 
     expectEqual(
         sendLineAndReceive(memberSocketFd, "PING :untouched\r\n"),
         "PONG :untouched\r\n",
-        "Phase 19: a kick should not disconnect unrelated clients"
-    );
+        "Phase 19: a kick should not disconnect unrelated clients");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
     closeSocket(guestSocketFd);
 }
 
-int main()
-{
+int main() {
     testMultipleClientsIndependentRegistrationAndMessaging();
     testMultipleClientsInviteKickAndMode();
 

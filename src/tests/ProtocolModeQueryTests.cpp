@@ -6,15 +6,12 @@
  * A new channel has no flags. Querying does not require operator privileges
  * and does not require membership.
  */
-static void testModeQueryDefaultAndPrivileges()
-{
+static void testModeQueryDefaultAndPrivileges() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE query tests"
-        ))
-    {
+            "Server should start for phase 17 MODE query tests")) {
         return;
     }
 
@@ -24,13 +21,11 @@ static void testModeQueryDefaultAndPrivileges()
 
     if (operatorSocketFd == -1
         || memberSocketFd == -1
-        || outsiderSocketFd == -1)
-    {
+        || outsiderSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE query tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(outsiderSocketFd);
@@ -51,26 +46,23 @@ static void testModeQueryDefaultAndPrivileges()
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +\r\n",
-        "Phase 17: a new channel should report no active modes"
-    );
+        "Phase 17: a new channel should report no active modes");
 
     expectEqual(
         sendLineAndReceive(memberSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 roxana #general +\r\n",
-        "Phase 17: a regular member should be able to query channel modes"
-    );
+        "Phase 17: a regular member should be able to query channel modes");
 
     expectEqual(
         sendLineAndReceive(outsiderSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 outsider #general +\r\n",
-        "Phase 17: querying modes should not require channel membership"
-    );
+        "Phase 17: querying modes should not require channel membership");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #GENERAL\r\n"),
         ":irc.42.local 324 operador #general +\r\n",
-        "Phase 17: MODE query should resolve the channel through IRC casemapping"
-    );
+        "Phase 17: MODE query should"
+        "resolve the channel through IRC casemapping");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
@@ -82,28 +74,23 @@ static void testModeQueryDefaultAndPrivileges()
  * key and user limit when those modes are set, and omits +o because operator
  * status is a per-user privilege shown in NAMES instead.
  */
-static void testModeQueryReportsActiveFlags()
-{
+static void testModeQueryReportsActiveFlags() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE query flag tests"
-        ))
-    {
+            "Server should start for phase 17 MODE query flag tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE query flag tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -121,8 +108,7 @@ static void testModeQueryReportsActiveFlags()
 
     sendAll(
         operatorSocketFd,
-        "MODE #general +kol secret roxana 10\r\n"
-    );
+        "MODE #general +kol secret roxana 10\r\n");
     discardPendingData(operatorSocketFd);
     discardPendingData(memberSocketFd);
 
@@ -133,21 +119,18 @@ static void testModeQueryReportsActiveFlags()
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +itkl secret 10\r\n",
-        "Phase 17: MODE query should list itkl flags, the key and the limit"
-    );
+        "Phase 17: MODE query should list itkl flags, the key and the limit");
 
     expectEqual(
         sendLineAndReceive(memberSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 roxana #general +itkl secret 10\r\n",
-        "Phase 17: MODE query should not include +o in the channel flag list"
-    );
+        "Phase 17: MODE query should not include +o in the channel flag list");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
 }
 
-int main()
-{
+int main() {
     testModeQueryDefaultAndPrivileges();
     testModeQueryReportsActiveFlags();
 

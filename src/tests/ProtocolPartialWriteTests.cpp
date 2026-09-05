@@ -1,48 +1,41 @@
 // Copyright 2026 @esettes, @danielfdez17
-#include "ProtocolTestHarness.hpp"
-
 #include <sstream>
 
-namespace
-{
-    std::string formatMessageIndex(int index)
-    {
-        std::ostringstream stream;
+#include "ProtocolTestHarness.hpp"
 
-        stream << "msg-";
-        if (index < 10)
-            stream << '0';
-        stream << index;
-        return stream.str();
-    }
+namespace {
+std::string formatMessageIndex(int index) {
+    std::ostringstream stream;
+
+    stream << "msg-";
+    if (index < 10)
+        stream << '0';
+    stream << index;
+    return stream.str();
 }
+}  // namespace
 
 /**
  * @brief Phase 19 — queued channel traffic is delivered in order without
  * lost or duplicated payloads when the recipient drains the socket slowly.
  */
-static void testSlowDrainPreservesMessageOrder()
-{
+static void testSlowDrainPreservesMessageOrder() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 19 partial-write tests"
-        ))
-    {
+            "Server should start for phase 19 partial-write tests")) {
         return;
     }
 
     const int senderSocketFd = connectToServer(server.getPort());
     const int slowSocketFd = connectToServer(server.getPort());
 
-    if (senderSocketFd == -1 || slowSocketFd == -1)
-    {
+    if (senderSocketFd == -1 || slowSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 19 partial-write tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(senderSocketFd);
         closeSocket(slowSocketFd);
         return;
@@ -57,14 +50,11 @@ static void testSlowDrainPreservesMessageOrder()
     if (!extractClientPrefixFromWelcome(
             senderWelcome,
             "alice",
-            senderPrefix
-        ))
-    {
+            senderPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 19 partial-write tests",
             "welcome containing alice!alice@host",
-            senderWelcome
-        );
+            senderWelcome);
         closeSocket(senderSocketFd);
         closeSocket(slowSocketFd);
         return;
@@ -84,24 +74,20 @@ static void testSlowDrainPreservesMessageOrder()
         SOL_SOCKET,
         SO_RCVBUF,
         &receiveBufferSize,
-        sizeof(receiveBufferSize)
-    );
+        sizeof(receiveBufferSize));
 
     const int messageCount = 80;
     std::string burst;
 
-    for (int index = 0; index < messageCount; ++index)
-    {
+    for (int index = 0; index < messageCount; ++index) {
         burst += "PRIVMSG #burst :" + formatMessageIndex(index) + "\r\n";
     }
 
-    if (!sendAll(senderSocketFd, burst))
-    {
+    if (!sendAll(senderSocketFd, burst)) {
         reportFailure(
             "Burst PRIVMSG commands should be sent",
             "successful send",
-            "send failed"
-        );
+            "send failed");
         closeSocket(senderSocketFd);
         closeSocket(slowSocketFd);
         return;
@@ -116,11 +102,9 @@ static void testSlowDrainPreservesMessageOrder()
         everyLineUsesCrlf(drainedOutput),
         "Phase 19: drained output after a slow receive window should use CRLF",
         "every line ending with \\r\\n",
-        drainedOutput
-    );
+        drainedOutput);
 
-    for (int index = 0; index < messageCount; ++index)
-    {
+    for (int index = 0; index < messageCount; ++index) {
         const std::string expectedPayload =
             " PRIVMSG #burst :" + formatMessageIndex(index) + "\r\n";
 
@@ -129,22 +113,20 @@ static void testSlowDrainPreservesMessageOrder()
             "Phase 19: each burst payload should arrive once: "
                 + formatMessageIndex(index),
             "exactly one occurrence",
-            drainedOutput
-        );
+            drainedOutput);
     }
 
     expectEqual(
         receiveAvailableData(senderSocketFd, 200),
         "",
-        "Phase 19: channel PRIVMSG should not echo to the sender during a burst"
-    );
+        "Phase 19: channel PRIVMSG should"
+        "not echo to the sender during a burst");
 
     expectTrue(
         server.isRunning(),
         "Phase 19: a slow recipient should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     closeSocket(senderSocketFd);
     closeSocket(slowSocketFd);
@@ -154,28 +136,25 @@ static void testSlowDrainPreservesMessageOrder()
  * @brief Phase 19 — closing a client that still has pending output must not
  * stop the server or break an unrelated connection.
  */
-static void testDisconnectWithPendingOutputKeepsServerAlive()
-{
+static void testDisconnectWithPendingOutputKeepsServerAlive() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 19 pending-output disconnect tests"
-        ))
-    {
+            "Server should start for"
+            "phase 19 pending-output disconnect tests")) {
         return;
     }
 
     const int senderSocketFd = connectToServer(server.getPort());
     const int pendingSocketFd = connectToServer(server.getPort());
 
-    if (senderSocketFd == -1 || pendingSocketFd == -1)
-    {
+    if (senderSocketFd == -1 || pendingSocketFd == -1) {
         reportFailure(
-            "Clients should connect for phase 19 pending-output disconnect tests",
+            "Clients should connect for"
+            "phase 19 pending-output disconnect tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(senderSocketFd);
         closeSocket(pendingSocketFd);
         return;
@@ -198,8 +177,7 @@ static void testDisconnectWithPendingOutputKeepsServerAlive()
         SOL_SOCKET,
         SO_RCVBUF,
         &receiveBufferSize,
-        sizeof(receiveBufferSize)
-    );
+        sizeof(receiveBufferSize));
 
     std::string burst;
 
@@ -215,27 +193,26 @@ static void testDisconnectWithPendingOutputKeepsServerAlive()
     expectEqual(
         sendLineAndReceive(senderSocketFd, "PING :after-pending-close\r\n"),
         "PONG :after-pending-close\r\n",
-        "Phase 19: the remaining client should stay usable after a pending-output disconnect"
-    );
+        "Phase 19: the remaining client should"
+        "stay usable after a pending-output disconnect");
 
     expectEqual(
         sendCommandAndReceive(server.getPort(), "UNKNOWN\r\n"),
         ":irc.42.local 421 * UNKNOWN :Unknown command\r\n",
-        "Phase 19: a new client should be served after a pending-output disconnect"
-    );
+        "Phase 19: a new client should"
+        "be served after a pending-output disconnect");
 
     expectTrue(
         server.isRunning(),
-        "Phase 19: disconnecting a client with pending output should not stop the server",
+        "Phase 19: disconnecting a client"
+        "with pending output should not stop the server",
         "ircserv remains running",
-        "ircserv exited"
-    );
+        "ircserv exited");
 
     closeSocket(senderSocketFd);
 }
 
-int main()
-{
+int main() {
     testSlowDrainPreservesMessageOrder();
     testDisconnectWithPendingOutputKeepsServerAlive();
 

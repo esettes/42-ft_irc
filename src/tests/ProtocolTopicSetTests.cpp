@@ -7,28 +7,23 @@
  * TOPIC message with the sender's full prefix to every member, including the
  * client that requested the change.
  */
-static void testTopicSetModifyAndClear()
-{
+static void testTopicSetModifyAndClear() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 14 TOPIC set tests"
-        ))
-    {
+            "Server should start for phase 14 TOPIC set tests")) {
         return;
     }
 
     const int aliceSocketFd = connectToServer(server.getPort());
     const int bobSocketFd = connectToServer(server.getPort());
 
-    if (aliceSocketFd == -1 || bobSocketFd == -1)
-    {
+    if (aliceSocketFd == -1 || bobSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 14 TOPIC set tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(aliceSocketFd);
         closeSocket(bobSocketFd);
         return;
@@ -43,14 +38,11 @@ static void testTopicSetModifyAndClear()
     if (!extractClientPrefixFromWelcome(
             aliceWelcome,
             "alice",
-            alicePrefix
-        ))
-    {
+            alicePrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 14 TOPIC set tests",
             "welcome containing alice!alice@host",
-            aliceWelcome
-        );
+            aliceWelcome);
         closeSocket(aliceSocketFd);
         closeSocket(bobSocketFd);
         return;
@@ -65,8 +57,7 @@ static void testTopicSetModifyAndClear()
 
     sendAll(
         aliceSocketFd,
-        "TOPIC #general :Nuevo tema del canal\r\n"
-    );
+        "TOPIC #general :Nuevo tema del canal\r\n");
 
     const std::string expectedTopicBroadcast =
         ":" + alicePrefix + " TOPIC #general :Nuevo tema del canal\r\n";
@@ -74,13 +65,11 @@ static void testTopicSetModifyAndClear()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedTopicBroadcast,
-        "Phase 14: setting a topic should notify the sender"
-    );
+        "Phase 14: setting a topic should notify the sender");
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedTopicBroadcast,
-        "Phase 14: setting a topic should notify every channel member"
-    );
+        "Phase 14: setting a topic should notify every channel member");
 
     sendAll(aliceSocketFd, "TOPIC #general :Tema actualizado\r\n");
 
@@ -90,13 +79,11 @@ static void testTopicSetModifyAndClear()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedUpdatedBroadcast,
-        "Phase 14: replacing a topic should notify the sender"
-    );
+        "Phase 14: replacing a topic should notify the sender");
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedUpdatedBroadcast,
-        "Phase 14: replacing a topic should notify every channel member"
-    );
+        "Phase 14: replacing a topic should notify every channel member");
 
     sendAll(aliceSocketFd, "TOPIC #general :\r\n");
 
@@ -106,19 +93,17 @@ static void testTopicSetModifyAndClear()
     expectEqual(
         receiveAvailableData(aliceSocketFd, 500),
         expectedClearedBroadcast,
-        "Phase 14: clearing a topic should notify the sender with an empty trailing parameter"
-    );
+        "Phase 14: clearing a topic"
+        "should notify the sender with an empty trailing parameter");
     expectEqual(
         receiveAvailableData(bobSocketFd, 500),
         expectedClearedBroadcast,
-        "Phase 14: clearing a topic should notify every channel member"
-    );
+        "Phase 14: clearing a topic should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(bobSocketFd, "TOPIC #general\r\n"),
         ":irc.42.local 331 bob #general :No topic is set\r\n",
-        "Phase 14: querying after clearing the topic should return 331"
-    );
+        "Phase 14: querying after clearing the topic should return 331");
 
     closeSocket(aliceSocketFd);
     closeSocket(bobSocketFd);
@@ -129,28 +114,23 @@ static void testTopicSetModifyAndClear()
  * enabled only a channel operator may, and a rejected change must leave the
  * stored topic unchanged.
  */
-static void testTopicRestrictionMode()
-{
+static void testTopicRestrictionMode() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 14 TOPIC +t tests"
-        ))
-    {
+            "Server should start for phase 14 TOPIC +t tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 14 TOPIC +t tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -166,14 +146,11 @@ static void testTopicRestrictionMode()
     if (!extractClientPrefixFromWelcome(
             memberWelcome,
             "roxana",
-            memberPrefix
-        ))
-    {
+            memberPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 14 TOPIC +t tests",
             "welcome containing roxana!roxana@host",
-            memberWelcome
-        );
+            memberWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -194,13 +171,12 @@ static void testTopicRestrictionMode()
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         unrestrictedBroadcast,
-        "Phase 14: a regular member should be able to set the topic when +t is off"
-    );
+        "Phase 14: a regular member"
+        "should be able to set the topic when +t is off");
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         unrestrictedBroadcast,
-        "Phase 14: an unrestricted topic change should reach the operator"
-    );
+        "Phase 14: an unrestricted topic change should reach the operator");
 
     sendAll(operatorSocketFd, "MODE #general +t\r\n");
     discardPendingData(operatorSocketFd);
@@ -209,39 +185,34 @@ static void testTopicRestrictionMode()
     expectEqual(
         sendLineAndReceive(
             memberSocketFd,
-            "TOPIC #general :Intento denegado\r\n"
-        ),
+            "TOPIC #general :Intento denegado\r\n"),
         ":irc.42.local 482 roxana #general :You're not channel operator\r\n",
-        "Phase 14: a regular member should receive 482 when +t is on"
-    );
+        "Phase 14: a regular member should receive 482 when +t is on");
 
     expectEqual(
         receiveAvailableData(operatorSocketFd, 200),
         "",
-        "Phase 14: a rejected topic change should not be broadcast"
-    );
+        "Phase 14: a rejected topic change should not be broadcast");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "TOPIC #general\r\n"),
         ":irc.42.local 332 operador #general :Cualquier miembro\r\n",
-        "Phase 14: a rejected topic change should leave the stored topic unchanged"
-    );
+        "Phase 14: a rejected topic"
+        "change should leave the stored topic unchanged");
 
     sendAll(
         operatorSocketFd,
-        "TOPIC #general :Solo el operador\r\n"
-    );
+        "TOPIC #general :Solo el operador\r\n");
 
     expectContains(
         receiveAvailableData(operatorSocketFd, 500),
         " TOPIC #general :Solo el operador\r\n",
-        "Phase 14: a channel operator should still be able to set the topic with +t"
-    );
+        "Phase 14: a channel operator should"
+        "still be able to set the topic with +t");
     expectContains(
         receiveAvailableData(memberSocketFd, 500),
         " TOPIC #general :Solo el operador\r\n",
-        "Phase 14: an operator topic change should reach regular members"
-    );
+        "Phase 14: an operator topic change should reach regular members");
 
     sendAll(operatorSocketFd, "MODE #general -t\r\n");
     discardPendingData(operatorSocketFd);
@@ -255,15 +226,13 @@ static void testTopicRestrictionMode()
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         restoredBroadcast,
-        "Phase 14: disabling +t should restore unrestricted topic changes"
-    );
+        "Phase 14: disabling +t should restore unrestricted topic changes");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
 }
 
-int main()
-{
+int main() {
     testTopicSetModifyAndClear();
     testTopicRestrictionMode();
 

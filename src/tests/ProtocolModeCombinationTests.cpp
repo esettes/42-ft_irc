@@ -5,28 +5,23 @@
  * @brief Phase 17 — several flags in one MODE string are applied together and
  * broadcast with a single reconstructed mode list.
  */
-static void testCombinedModeFlags()
-{
+static void testCombinedModeFlags() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE combination tests"
-        ))
-    {
+            "Server should start for phase 17 MODE combination tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE combination tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -41,14 +36,12 @@ static void testCombinedModeFlags()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
-            "Welcome should expose a prefix for phase 17 MODE combination tests",
+            "Welcome should expose a"
+            "prefix for phase 17 MODE combination tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -69,19 +62,16 @@ static void testCombinedModeFlags()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedEnable,
-        "Phase 17: +it should notify the operator as a single MODE message"
-    );
+        "Phase 17: +it should notify the operator as a single MODE message");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedEnable,
-        "Phase 17: +it should notify every channel member"
-    );
+        "Phase 17: +it should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +it\r\n",
-        "Phase 17: +it should enable both invite-only and topic restriction"
-    );
+        "Phase 17: +it should enable both invite-only and topic restriction");
 
     sendAll(operatorSocketFd, "MODE #general -it\r\n");
 
@@ -91,19 +81,16 @@ static void testCombinedModeFlags()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedDisable,
-        "Phase 17: -it should notify the operator as a single MODE message"
-    );
+        "Phase 17: -it should notify the operator as a single MODE message");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedDisable,
-        "Phase 17: -it should notify every channel member"
-    );
+        "Phase 17: -it should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +\r\n",
-        "Phase 17: -it should clear both invite-only and topic restriction"
-    );
+        "Phase 17: -it should clear both invite-only and topic restriction");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
@@ -113,28 +100,25 @@ static void testCombinedModeFlags()
  * @brief Phase 17 — modes that take arguments consume them in letter order,
  * including when + and - appear in the same string.
  */
-static void testCombinedModeArgumentsAndSignChange()
-{
+static void testCombinedModeArgumentsAndSignChange() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE argument combination tests"
-        ))
-    {
+            "Server should start for"
+            "phase 17 MODE argument combination tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
-            "Clients should connect for phase 17 MODE argument combination tests",
+            "Clients should connect for"
+            "phase 17 MODE argument combination tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -149,14 +133,12 @@ static void testCombinedModeArgumentsAndSignChange()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
-            "Welcome should expose a prefix for phase 17 MODE argument combination tests",
+            "Welcome should expose a prefix"
+            "for phase 17 MODE argument combination tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -177,19 +159,16 @@ static void testCombinedModeArgumentsAndSignChange()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedKeyAndLimit,
-        "Phase 17: +kl should consume the key then the limit"
-    );
+        "Phase 17: +kl should consume the key then the limit");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedKeyAndLimit,
-        "Phase 17: +kl should notify every channel member"
-    );
+        "Phase 17: +kl should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +kl secret 10\r\n",
-        "Phase 17: +kl should store both the key and the user limit"
-    );
+        "Phase 17: +kl should store both the key and the user limit");
 
     sendAll(operatorSocketFd, "MODE #general +o-l roxana\r\n");
 
@@ -199,27 +178,23 @@ static void testCombinedModeArgumentsAndSignChange()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedSignChange,
-        "Phase 17: +o-l should grant operator status then remove the limit"
-    );
+        "Phase 17: +o-l should grant operator status then remove the limit");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedSignChange,
-        "Phase 17: +o-l should notify every channel member"
-    );
+        "Phase 17: +o-l should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +k secret\r\n",
-        "Phase 17: +o-l should leave the key set and clear the user limit"
-    );
+        "Phase 17: +o-l should leave the key set and clear the user limit");
 
     sendAll(memberSocketFd, "MODE #general +i\r\n");
 
     expectContains(
         receiveAvailableData(memberSocketFd, 500),
         " MODE #general +i\r\n",
-        "Phase 17: +o should allow the promoted member to change modes"
-    );
+        "Phase 17: +o should allow the promoted member to change modes");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
@@ -228,28 +203,23 @@ static void testCombinedModeArgumentsAndSignChange()
 /**
  * @brief Phase 17 — +kol consumes the key, nickname and limit in that order.
  */
-static void testCombinedKolParameterOrder()
-{
+static void testCombinedKolParameterOrder() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE +kol tests"
-        ))
-    {
+            "Server should start for phase 17 MODE +kol tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE +kol tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -271,14 +241,11 @@ static void testCombinedKolParameterOrder()
         || !extractClientPrefixFromWelcome(
             memberWelcome,
             "roxana",
-            memberPrefix
-        ))
-    {
+            memberPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 17 MODE +kol tests",
             "welcome containing operador and roxana prefixes",
-            operatorWelcome + memberWelcome
-        );
+            operatorWelcome + memberWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -299,19 +266,17 @@ static void testCombinedKolParameterOrder()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedKol,
-        "Phase 17: +kol should consume key, nickname and limit in letter order"
-    );
+        "Phase 17: +kol should consume key,"
+        "nickname and limit in letter order");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedKol,
-        "Phase 17: +kol should notify every channel member"
-    );
+        "Phase 17: +kol should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +kl secret 10\r\n",
-        "Phase 17: +kol should set the key and limit without listing +o"
-    );
+        "Phase 17: +kol should set the key and limit without listing +o");
 
     sendAll(memberSocketFd, "MODE #general +it-k\r\n");
 
@@ -321,26 +286,23 @@ static void testCombinedKolParameterOrder()
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedSignFlip,
-        "Phase 17: +it-k should add i and t then remove the key"
-    );
+        "Phase 17: +it-k should add i and t then remove the key");
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedSignFlip,
-        "Phase 17: +it-k should notify every channel member"
-    );
+        "Phase 17: +it-k should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(operatorSocketFd, "MODE #general\r\n"),
         ":irc.42.local 324 operador #general +itl 10\r\n",
-        "Phase 17: +it-k should leave invite-only, topic restriction and the limit"
-    );
+        "Phase 17: +it-k should"
+        "leave invite-only, topic restriction and the limit");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
 }
 
-int main()
-{
+int main() {
     testCombinedModeFlags();
     testCombinedModeArgumentsAndSignChange();
     testCombinedKolParameterOrder();

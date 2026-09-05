@@ -1,25 +1,25 @@
 // Copyright 2026 @esettes, @danielfdez17
-#ifndef PROTOCOL_TEST_HARNESS_HPP
-#define PROTOCOL_TEST_HARNESS_HPP
-
-#include "Console.hpp"
+#ifndef SRC_TESTS_PROTOCOLTESTHARNESS_HPP_
+#define SRC_TESTS_PROTOCOLTESTHARNESS_HPP_
 
 #include <arpa/inet.h>
-#include <cerrno>
-#include <csignal>
-#include <cstdlib>
-#include <cstring>
-#include <fcntl.h>
-#include <iostream>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sstream>
-#include <string>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include "Console.hpp"
 
 /**
  * @file ProtocolTestHarness.hpp
@@ -30,12 +30,10 @@
 
 static int g_failures = 0;
 
-inline std::string escapeOutput(const std::string &value)
-{
+inline std::string escapeOutput(const std::string &value) {
     std::string escaped;
 
-    for (std::size_t index = 0; index < value.size(); ++index)
-    {
+    for (std::size_t index = 0; index < value.size(); ++index) {
         const unsigned char character =
             static_cast<unsigned char>(value[index]);
 
@@ -58,8 +56,7 @@ inline void reportFailure(
     const std::string &testName,
     const std::string &expected,
     const std::string &actual
-)
-{
+) {
     std::cerr << Console::ERROR << testName << std::endl;
     std::cerr << "  expected: " << escapeOutput(expected) << std::endl;
     std::cerr << "  actual  : " << escapeOutput(actual) << std::endl;
@@ -71,8 +68,7 @@ inline void expectTrue(
     const std::string &testName,
     const std::string &expected,
     const std::string &actual
-)
-{
+) {
     if (!condition)
         reportFailure(testName, expected, actual);
 }
@@ -81,8 +77,7 @@ inline void expectEqual(
     const std::string &actual,
     const std::string &expected,
     const std::string &testName
-)
-{
+) {
     if (actual != expected)
         reportFailure(testName, expected, actual);
 }
@@ -91,20 +86,16 @@ inline void expectContains(
     const std::string &actual,
     const std::string &expectedFragment,
     const std::string &testName
-)
-{
-    if (actual.find(expectedFragment) == std::string::npos)
-    {
+) {
+    if (actual.find(expectedFragment) == std::string::npos) {
         reportFailure(
             testName,
             "output containing: " + expectedFragment,
-            actual
-        );
+            actual);
     }
 }
 
-inline int findAvailablePort()
-{
+inline int findAvailablePort() {
     const int socketFd = ::socket(AF_INET, SOCK_STREAM, 0);
 
     if (socketFd == -1)
@@ -120,9 +111,7 @@ inline int findAvailablePort()
     if (::bind(
             socketFd,
             reinterpret_cast<const struct sockaddr *>(&address),
-            sizeof(address)
-        ) == -1)
-    {
+            sizeof(address)) == -1) {
         ::close(socketFd);
         return -1;
     }
@@ -132,9 +121,7 @@ inline int findAvailablePort()
     if (::getsockname(
             socketFd,
             reinterpret_cast<struct sockaddr *>(&address),
-            &addressLength
-        ) == -1)
-    {
+            &addressLength) == -1) {
         ::close(socketFd);
         return -1;
     }
@@ -145,8 +132,7 @@ inline int findAvailablePort()
     return availablePort;
 }
 
-inline int connectToServer(int port)
-{
+inline int connectToServer(int port) {
     const int socketFd = ::socket(AF_INET, SOCK_STREAM, 0);
 
     if (socketFd == -1)
@@ -157,14 +143,12 @@ inline int connectToServer(int port)
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    address.sin_port = htons(static_cast<unsigned short>(port));
+    address.sin_port = htons(static_cast<uint16_t>(port));
 
     if (::connect(
             socketFd,
             reinterpret_cast<const struct sockaddr *>(&address),
-            sizeof(address)
-        ) == -1)
-    {
+            sizeof(address)) == -1) {
         ::close(socketFd);
         return -1;
     }
@@ -172,21 +156,17 @@ inline int connectToServer(int port)
     return socketFd;
 }
 
-inline bool sendAll(int socketFd, const std::string &data)
-{
+inline bool sendAll(int socketFd, const std::string &data) {
     std::size_t sentByteCount = 0;
 
-    while (sentByteCount < data.size())
-    {
+    while (sentByteCount < data.size()) {
         const ssize_t result = ::send(
             socketFd,
             data.data() + sentByteCount,
             data.size() - sentByteCount,
-            0
-        );
+            0);
 
-        if (result > 0)
-        {
+        if (result > 0) {
             sentByteCount += static_cast<std::size_t>(result);
             continue;
         }
@@ -203,13 +183,11 @@ inline bool sendAll(int socketFd, const std::string &data)
 inline std::string receiveAvailableData(
     int socketFd,
     int timeoutMilliseconds
-)
-{
+) {
     std::string response;
     char buffer[4096];
 
-    while (true)
-    {
+    while (true) {
         struct pollfd descriptor;
 
         descriptor.fd = socketFd;
@@ -219,27 +197,22 @@ inline std::string receiveAvailableData(
         const int pollResult = ::poll(
             &descriptor,
             1,
-            timeoutMilliseconds
-        );
+            timeoutMilliseconds);
 
         if (pollResult <= 0)
             break;
 
-        if (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))
-        {
+        if (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) {
             const ssize_t receivedByteCount = ::recv(
                 socketFd,
                 buffer,
                 sizeof(buffer),
-                0
-            );
+                0);
 
-            if (receivedByteCount > 0)
-            {
+            if (receivedByteCount > 0) {
                 response.append(
                     buffer,
-                    static_cast<std::size_t>(receivedByteCount)
-                );
+                    static_cast<std::size_t>(receivedByteCount));
             }
 
             break;
@@ -252,16 +225,14 @@ inline std::string receiveAvailableData(
             socketFd,
             buffer,
             sizeof(buffer),
-            0
-        );
+            0);
 
         if (receivedByteCount <= 0)
             break;
 
         response.append(
             buffer,
-            static_cast<std::size_t>(receivedByteCount)
-        );
+            static_cast<std::size_t>(receivedByteCount));
 
         timeoutMilliseconds = 50;
     }
@@ -272,8 +243,7 @@ inline std::string receiveAvailableData(
 inline bool waitForSocketClosure(
     int socketFd,
     int timeoutMilliseconds
-)
-{
+) {
     struct pollfd descriptor;
 
     descriptor.fd = socketFd;
@@ -282,13 +252,11 @@ inline bool waitForSocketClosure(
 
     int pollResult;
 
-    do
-    {
+    do {
         pollResult = ::poll(
             &descriptor,
             1,
-            timeoutMilliseconds
-        );
+            timeoutMilliseconds);
     }
     while (pollResult == -1 && errno == EINTR);
 
@@ -307,14 +275,12 @@ inline bool waitForSocketClosure(
     char receivedByte;
     ssize_t receivedByteCount;
 
-    do
-    {
+    do {
         receivedByteCount = ::recv(
             socketFd,
             &receivedByte,
             sizeof(receivedByte),
-            0
-        );
+            0);
     }
     while (receivedByteCount == -1 && errno == EINTR);
 
@@ -322,31 +288,26 @@ inline bool waitForSocketClosure(
         return true;
 
     if (receivedByteCount == -1
-        && (errno == ECONNRESET || errno == ENOTCONN))
-    {
+        && (errno == ECONNRESET || errno == ENOTCONN)) {
         return true;
     }
 
     return false;
 }
 
-class TestServerProcess
-{
-    private:
+class TestServerProcess {
+ private:
         pid_t processId;
         int port;
 
         TestServerProcess(const TestServerProcess &other);
         TestServerProcess &operator=(const TestServerProcess &other);
 
-        bool waitUntilReady()
-        {
-            for (int attempt = 0; attempt < 100; ++attempt)
-            {
+        bool waitUntilReady() {
+            for (int attempt = 0; attempt < 100; ++attempt) {
                 const int probeSocket = connectToServer(port);
 
-                if (probeSocket != -1)
-                {
+                if (probeSocket != -1) {
                     ::close(probeSocket);
                     return true;
                 }
@@ -360,20 +321,17 @@ class TestServerProcess
             return false;
         }
 
-    public:
+ public:
         TestServerProcess()
             : processId(-1),
-              port(findAvailablePort())
-        {
+              port(findAvailablePort()) {
         }
 
-        ~TestServerProcess()
-        {
+        ~TestServerProcess() {
             stop();
         }
 
-        bool start(int fileDescriptorLimit = 0)
-        {
+        bool start(int fileDescriptorLimit = 0) {
             if (port == -1)
                 return false;
 
@@ -382,10 +340,8 @@ class TestServerProcess
             if (processId == -1)
                 return false;
 
-            if (processId == 0)
-            {
-                if (fileDescriptorLimit > 0)
-                {
+            if (processId == 0) {
+                if (fileDescriptorLimit > 0) {
                     struct rlimit limit;
 
                     limit.rlim_cur = static_cast<rlim_t>(fileDescriptorLimit);
@@ -397,8 +353,7 @@ class TestServerProcess
 
                 const int nullFd = ::open("/dev/null", O_WRONLY);
 
-                if (nullFd != -1)
-                {
+                if (nullFd != -1) {
                     ::dup2(nullFd, STDOUT_FILENO);
                     ::dup2(nullFd, STDERR_FILENO);
                     ::close(nullFd);
@@ -412,8 +367,7 @@ class TestServerProcess
                     "./ircserv",
                     portStream.str().c_str(),
                     "secret",
-                    static_cast<char *>(NULL)
-                );
+                    static_cast<char *>(NULL));
 
                 ::_exit(EXIT_FAILURE);
             }
@@ -421,24 +375,20 @@ class TestServerProcess
             return waitUntilReady();
         }
 
-        void stop()
-        {
+        void stop() {
             if (processId <= 0)
                 return;
 
             ::kill(processId, SIGINT);
 
-            for (int attempt = 0; attempt < 100; ++attempt)
-            {
+            for (int attempt = 0; attempt < 100; ++attempt) {
                 int status = 0;
                 const pid_t result = ::waitpid(
                     processId,
                     &status,
-                    WNOHANG
-                );
+                    WNOHANG);
 
-                if (result == processId)
-                {
+                if (result == processId) {
                     processId = -1;
                     return;
                 }
@@ -451,8 +401,7 @@ class TestServerProcess
             processId = -1;
         }
 
-        bool isRunning()
-        {
+        bool isRunning() {
             if (processId <= 0)
                 return false;
 
@@ -460,8 +409,7 @@ class TestServerProcess
             const pid_t result = ::waitpid(
                 processId,
                 &status,
-                WNOHANG
-            );
+                WNOHANG);
 
             if (result == 0)
                 return true;
@@ -472,8 +420,7 @@ class TestServerProcess
             return false;
         }
 
-        int getPort() const
-        {
+        int getPort() const {
             return port;
         }
 };
@@ -481,15 +428,13 @@ class TestServerProcess
 inline std::string sendCommandAndReceive(
     int port,
     const std::string &command
-)
-{
+) {
     const int socketFd = connectToServer(port);
 
     if (socketFd == -1)
         return "connection failed";
 
-    if (!sendAll(socketFd, command))
-    {
+    if (!sendAll(socketFd, command)) {
         ::close(socketFd);
         return "send failed";
     }
@@ -504,8 +449,7 @@ inline std::string sendCommandAndReceive(
 inline std::string registerClient(
     int socketFd,
     const std::string &nickname
-)
-{
+) {
     const std::string registration =
         "PASS secret\r\n"
         "NICK " + nickname + "\r\n"
@@ -521,8 +465,7 @@ inline bool extractClientPrefixFromWelcome(
     const std::string &welcomeResponse,
     const std::string &nickname,
     std::string &clientPrefix
-)
-{
+) {
     const std::string prefixMarker = nickname + "!" + nickname + "@";
     const std::string::size_type prefixStart =
         welcomeResponse.find(prefixMarker);
@@ -538,13 +481,11 @@ inline bool extractClientPrefixFromWelcome(
 
     clientPrefix = welcomeResponse.substr(
         prefixStart,
-        prefixEnd - prefixStart
-    );
+        prefixEnd - prefixStart);
     return true;
 }
 
-inline void closeSocket(int socketFd)
-{
+inline void closeSocket(int socketFd) {
     if (socketFd != -1)
         ::close(socketFd);
 }
@@ -552,32 +493,28 @@ inline void closeSocket(int socketFd)
 inline std::string sendLineAndReceive(
     int socketFd,
     const std::string &line
-)
-{
+) {
     if (!sendAll(socketFd, line))
         return "send failed";
 
     return receiveAvailableData(socketFd, 500);
 }
 
-inline void discardPendingData(int socketFd)
-{
+inline void discardPendingData(int socketFd) {
     receiveAvailableData(socketFd, 200);
 }
 
 inline std::size_t countOccurrences(
     const std::string &haystack,
     const std::string &needle
-)
-{
+) {
     if (needle.empty())
         return 0;
 
     std::size_t count = 0;
     std::string::size_type position = 0;
 
-    while (true)
-    {
+    while (true) {
         position = haystack.find(needle, position);
 
         if (position == std::string::npos)
@@ -592,10 +529,8 @@ inline bool sendChunks(
     int socketFd,
     const std::string *chunks,
     std::size_t chunkCount
-)
-{
-    for (std::size_t index = 0; index < chunkCount; ++index)
-    {
+) {
+    for (std::size_t index = 0; index < chunkCount; ++index) {
         if (!sendAll(socketFd, chunks[index]))
             return false;
 
@@ -606,19 +541,16 @@ inline bool sendChunks(
     return true;
 }
 
-inline bool everyLineUsesCrlf(const std::string &data)
-{
+inline bool everyLineUsesCrlf(const std::string &data) {
     if (data.empty())
         return true;
 
     if (data[data.size() - 1] != '\n')
         return false;
 
-    for (std::size_t index = 0; index < data.size(); ++index)
-    {
+    for (std::size_t index = 0; index < data.size(); ++index) {
         if (data[index] == '\n'
-            && (index == 0 || data[index - 1] != '\r'))
-        {
+            && (index == 0 || data[index - 1] != '\r')) {
             return false;
         }
     }
@@ -629,8 +561,7 @@ inline bool everyLineUsesCrlf(const std::string &data)
 inline bool startServerOrFail(
     TestServerProcess &server,
     const std::string &testName
-)
-{
+) {
     if (server.start())
         return true;
 
@@ -638,10 +569,8 @@ inline bool startServerOrFail(
     return false;
 }
 
-inline int finishSuite(const std::string &suiteName)
-{
-    if (g_failures != 0)
-    {
+inline int finishSuite(const std::string &suiteName) {
+    if (g_failures != 0) {
         std::cerr
             << g_failures
             << " " << suiteName << " test(s) failed"
@@ -657,4 +586,4 @@ inline int finishSuite(const std::string &suiteName)
     return EXIT_SUCCESS;
 }
 
-#endif
+#endif  // SRC_TESTS_PROTOCOLTESTHARNESS_HPP_

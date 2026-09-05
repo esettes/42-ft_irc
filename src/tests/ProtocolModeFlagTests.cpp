@@ -6,15 +6,12 @@
  * operator. While +i is set, JOIN without an invitation is rejected; -i
  * restores unrestricted entry.
  */
-static void testInviteOnlyModeToggle()
-{
+static void testInviteOnlyModeToggle() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE +i tests"
-        ))
-    {
+            "Server should start for phase 17 MODE +i tests")) {
         return;
     }
 
@@ -24,13 +21,11 @@ static void testInviteOnlyModeToggle()
 
     if (operatorSocketFd == -1
         || memberSocketFd == -1
-        || guestSocketFd == -1)
-    {
+        || guestSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE +i tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(guestSocketFd);
@@ -47,14 +42,11 @@ static void testInviteOnlyModeToggle()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 17 MODE +i tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(guestSocketFd);
@@ -76,19 +68,16 @@ static void testInviteOnlyModeToggle()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedInviteOnly,
-        "Phase 17: enabling +i should notify the operator"
-    );
+        "Phase 17: enabling +i should notify the operator");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedInviteOnly,
-        "Phase 17: enabling +i should notify every channel member"
-    );
+        "Phase 17: enabling +i should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(guestSocketFd, "JOIN #general\r\n"),
         ":irc.42.local 473 roxana #general :Cannot join channel (+i)\r\n",
-        "Phase 17: JOIN without an invitation should fail while +i is set"
-    );
+        "Phase 17: JOIN without an invitation should fail while +i is set");
 
     sendAll(operatorSocketFd, "MODE #general -i\r\n");
 
@@ -98,21 +87,18 @@ static void testInviteOnlyModeToggle()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedInviteOpen,
-        "Phase 17: disabling +i should notify the operator"
-    );
+        "Phase 17: disabling +i should notify the operator");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedInviteOpen,
-        "Phase 17: disabling +i should notify every channel member"
-    );
+        "Phase 17: disabling +i should notify every channel member");
 
     sendAll(guestSocketFd, "JOIN #general\r\n");
 
     expectContains(
         receiveAvailableData(guestSocketFd, 500),
         " JOIN :#general\r\n",
-        "Phase 17: JOIN should succeed after +i is removed"
-    );
+        "Phase 17: JOIN should succeed after +i is removed");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
@@ -123,28 +109,23 @@ static void testInviteOnlyModeToggle()
  * @brief Phase 17 — +t restricts TOPIC to operators and -t restores the
  * default where any member may change the topic. Both toggles are broadcast.
  */
-static void testTopicRestrictedModeToggle()
-{
+static void testTopicRestrictedModeToggle() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 17 MODE +t tests"
-        ))
-    {
+            "Server should start for phase 17 MODE +t tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 17 MODE +t tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -159,14 +140,11 @@ static void testTopicRestrictedModeToggle()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "operador",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 17 MODE +t tests",
             "welcome containing operador!operador@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -187,22 +165,19 @@ static void testTopicRestrictedModeToggle()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedTopicRestricted,
-        "Phase 17: enabling +t should notify the operator"
-    );
+        "Phase 17: enabling +t should notify the operator");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedTopicRestricted,
-        "Phase 17: enabling +t should notify every channel member"
-    );
+        "Phase 17: enabling +t should notify every channel member");
 
     expectEqual(
         sendLineAndReceive(
             memberSocketFd,
-            "TOPIC #general :Intento denegado\r\n"
-        ),
+            "TOPIC #general :Intento denegado\r\n"),
         ":irc.42.local 482 roxana #general :You're not channel operator\r\n",
-        "Phase 17: a regular member should not change the topic while +t is set"
-    );
+        "Phase 17: a regular member should"
+        "not change the topic while +t is set");
 
     sendAll(operatorSocketFd, "MODE #general -t\r\n");
 
@@ -212,28 +187,24 @@ static void testTopicRestrictedModeToggle()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedTopicOpen,
-        "Phase 17: disabling +t should notify the operator"
-    );
+        "Phase 17: disabling +t should notify the operator");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedTopicOpen,
-        "Phase 17: disabling +t should notify every channel member"
-    );
+        "Phase 17: disabling +t should notify every channel member");
 
     sendAll(memberSocketFd, "TOPIC #general :Ahora permitido\r\n");
 
     expectContains(
         receiveAvailableData(memberSocketFd, 500),
         " TOPIC #general :Ahora permitido\r\n",
-        "Phase 17: a regular member should be able to set the topic after -t"
-    );
+        "Phase 17: a regular member should be able to set the topic after -t");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
 }
 
-int main()
-{
+int main() {
     testInviteOnlyModeToggle();
     testTopicRestrictedModeToggle();
 

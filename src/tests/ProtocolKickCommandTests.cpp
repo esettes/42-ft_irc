@@ -6,15 +6,12 @@
  * channel name and target nickname to every current member, including the
  * expelled user, then removes only that membership.
  */
-static void testValidKickBroadcastAndMembership()
-{
+static void testValidKickBroadcastAndMembership() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 16 KICK delivery tests"
-        ))
-    {
+            "Server should start for phase 16 KICK delivery tests")) {
         return;
     }
 
@@ -24,13 +21,11 @@ static void testValidKickBroadcastAndMembership()
 
     if (operatorSocketFd == -1
         || memberSocketFd == -1
-        || targetSocketFd == -1)
-    {
+        || targetSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 16 KICK delivery tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(targetSocketFd);
@@ -47,14 +42,11 @@ static void testValidKickBroadcastAndMembership()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "admin",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 16 KICK delivery tests",
             "welcome containing admin!admin@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         closeSocket(targetSocketFd);
@@ -75,8 +67,7 @@ static void testValidKickBroadcastAndMembership()
 
     sendAll(
         operatorSocketFd,
-        "KICK #general roxana :Comportamiento inapropiado\r\n"
-    );
+        "KICK #general roxana :Comportamiento inapropiado\r\n");
 
     const std::string expectedKick =
         ":" + operatorPrefix
@@ -85,43 +76,37 @@ static void testValidKickBroadcastAndMembership()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedKick,
-        "Phase 16: the operator should receive the KICK broadcast"
-    );
+        "Phase 16: the operator should receive the KICK broadcast");
     expectEqual(
         receiveAvailableData(memberSocketFd, 500),
         expectedKick,
-        "Phase 16: remaining members should receive the KICK broadcast"
-    );
+        "Phase 16: remaining members should receive the KICK broadcast");
     expectEqual(
         receiveAvailableData(targetSocketFd, 500),
         expectedKick,
-        "Phase 16: the expelled user should receive the KICK before removal"
-    );
+        "Phase 16: the expelled user should receive the KICK before removal");
 
     expectEqual(
         sendLineAndReceive(targetSocketFd, "PRIVMSG #general :ya no estoy\r\n"),
         ":irc.42.local 404 roxana #general :Cannot send to channel\r\n",
-        "Phase 16: the expelled user should no longer belong to the channel"
-    );
+        "Phase 16: the expelled user should no longer belong to the channel");
 
     expectEqual(
         receiveAvailableData(memberSocketFd, 200),
         "",
-        "Phase 16: remaining members should not receive messages from a kicked user"
-    );
+        "Phase 16: remaining members"
+        "should not receive messages from a kicked user");
 
     sendAll(operatorSocketFd, "PRIVMSG #general :despues del kick\r\n");
 
     expectContains(
         receiveAvailableData(memberSocketFd, 500),
         " PRIVMSG #general :despues del kick\r\n",
-        "Phase 16: remaining members should still receive channel messages"
-    );
+        "Phase 16: remaining members should still receive channel messages");
     expectEqual(
         receiveAvailableData(targetSocketFd, 200),
         "",
-        "Phase 16: a kicked user should not receive later channel messages"
-    );
+        "Phase 16: a kicked user should not receive later channel messages");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
@@ -133,28 +118,23 @@ static void testValidKickBroadcastAndMembership()
  * casemapping resolves channel and nick, and kicking a user does not close
  * their server connection or remove them from other channels.
  */
-static void testKickDefaultReasonCasemapAndConnection()
-{
+static void testKickDefaultReasonCasemapAndConnection() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 16 KICK casemap tests"
-        ))
-    {
+            "Server should start for phase 16 KICK casemap tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int targetSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || targetSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || targetSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 16 KICK casemap tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(targetSocketFd);
         return;
@@ -171,19 +151,15 @@ static void testKickDefaultReasonCasemapAndConnection()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "admin",
-            operatorPrefix
-        )
+            operatorPrefix)
         || !extractClientPrefixFromWelcome(
             targetWelcome,
             "roxana",
-            targetPrefix
-        ))
-    {
+            targetPrefix)) {
         reportFailure(
             "Welcome should expose prefixes for phase 16 KICK casemap tests",
             "welcome containing admin!admin@host and roxana!roxana@host",
-            operatorWelcome + targetWelcome
-        );
+            operatorWelcome + targetWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(targetSocketFd);
         return;
@@ -207,38 +183,34 @@ static void testKickDefaultReasonCasemapAndConnection()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         expectedDefaultKick,
-        "Phase 16: KICK without a reason should default to the operator nickname"
-    );
+        "Phase 16: KICK without a"
+        "reason should default to the operator nickname");
     expectEqual(
         receiveAvailableData(targetSocketFd, 500),
         expectedDefaultKick,
-        "Phase 16: KICK should resolve nicknames and channels with casemapping"
-    );
+        "Phase 16: KICK should resolve"
+        "nicknames and channels with casemapping");
 
     expectEqual(
         sendLineAndReceive(targetSocketFd, "PING :still-here\r\n"),
         "PONG :still-here\r\n",
-        "Phase 16: kicking a user should keep their server connection open"
-    );
+        "Phase 16: kicking a user should keep their server connection open");
 
     sendAll(operatorSocketFd, "PRIVMSG roxana :sigues conectada\r\n");
 
     expectEqual(
         receiveAvailableData(targetSocketFd, 500),
         ":" + operatorPrefix + " PRIVMSG roxana :sigues conectada\r\n",
-        "Phase 16: a kicked user should still receive private messages"
-    );
+        "Phase 16: a kicked user should still receive private messages");
 
     sendAll(
         targetSocketFd,
-        "PRIVMSG #otro :sigo en el otro canal\r\n"
-    );
+        "PRIVMSG #otro :sigo en el otro canal\r\n");
 
     expectEqual(
         receiveAvailableData(targetSocketFd, 200),
         "",
-        "Phase 16: a kicked user should keep membership of other channels"
-    );
+        "Phase 16: a kicked user should keep membership of other channels");
 
     sendAll(targetSocketFd, "JOIN #general\r\n");
 
@@ -248,19 +220,16 @@ static void testKickDefaultReasonCasemapAndConnection()
     expectContains(
         rejoinResponse,
         ":" + targetPrefix + " JOIN :#general\r\n",
-        "Phase 16: a kicked user should be able to JOIN the channel again"
-    );
+        "Phase 16: a kicked user should be able to JOIN the channel again");
     expectContains(
         rejoinResponse,
         ":irc.42.local 353 roxana = #general :",
-        "Phase 16: rejoining after a KICK should report the current members"
-    );
+        "Phase 16: rejoining after a KICK should report the current members");
     expectTrue(
         rejoinResponse.find("@roxana") == std::string::npos,
         "Phase 16: rejoining after a KICK should not restore operator status",
         "NAMES without @roxana",
-        rejoinResponse
-    );
+        rejoinResponse);
 
     closeSocket(operatorSocketFd);
     closeSocket(targetSocketFd);
@@ -271,28 +240,23 @@ static void testKickDefaultReasonCasemapAndConnection()
  * keeps the channel, while kicking the last member deletes it so a later
  * JOIN recreates it and grants operator status.
  */
-static void testKickEmptyChannelDeletion()
-{
+static void testKickEmptyChannelDeletion() {
     TestServerProcess server;
 
     if (!startServerOrFail(
             server,
-            "Server should start for phase 16 KICK cleanup tests"
-        ))
-    {
+            "Server should start for phase 16 KICK cleanup tests")) {
         return;
     }
 
     const int operatorSocketFd = connectToServer(server.getPort());
     const int memberSocketFd = connectToServer(server.getPort());
 
-    if (operatorSocketFd == -1 || memberSocketFd == -1)
-    {
+    if (operatorSocketFd == -1 || memberSocketFd == -1) {
         reportFailure(
             "Clients should connect for phase 16 KICK cleanup tests",
             "successful connections",
-            "connection failed"
-        );
+            "connection failed");
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -307,14 +271,11 @@ static void testKickEmptyChannelDeletion()
     if (!extractClientPrefixFromWelcome(
             operatorWelcome,
             "admin",
-            operatorPrefix
-        ))
-    {
+            operatorPrefix)) {
         reportFailure(
             "Welcome should expose a prefix for phase 16 KICK cleanup tests",
             "welcome containing admin!admin@host",
-            operatorWelcome
-        );
+            operatorWelcome);
         closeSocket(operatorSocketFd);
         closeSocket(memberSocketFd);
         return;
@@ -336,16 +297,14 @@ static void testKickEmptyChannelDeletion()
     expectEqual(
         receiveAvailableData(operatorSocketFd, 200),
         "",
-        "Phase 16: kicking a non-last member should keep the channel"
-    );
+        "Phase 16: kicking a non-last member should keep the channel");
 
     sendAll(operatorSocketFd, "KICK #general admin :me voy\r\n");
 
     expectEqual(
         receiveAvailableData(operatorSocketFd, 500),
         ":" + operatorPrefix + " KICK #general admin :me voy\r\n",
-        "Phase 16: an operator should be able to kick themselves"
-    );
+        "Phase 16: an operator should be able to kick themselves");
 
     sendAll(memberSocketFd, "JOIN #general\r\n");
 
@@ -355,20 +314,18 @@ static void testKickEmptyChannelDeletion()
     expectContains(
         expectedRecreatedChannel,
         " JOIN :#general\r\n",
-        "Phase 16: joining a channel emptied by KICK should recreate it"
-    );
+        "Phase 16: joining a channel emptied by KICK should recreate it");
     expectContains(
         expectedRecreatedChannel,
         ":irc.42.local 353 roxana = #general :@roxana\r\n",
-        "Phase 16: the first member of a recreated channel should become operator"
-    );
+        "Phase 16: the first member of"
+        "a recreated channel should become operator");
 
     closeSocket(operatorSocketFd);
     closeSocket(memberSocketFd);
 }
 
-int main()
-{
+int main() {
     testValidKickBroadcastAndMembership();
     testKickDefaultReasonCasemapAndConnection();
     testKickEmptyChannelDeletion();

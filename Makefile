@@ -268,7 +268,7 @@ run: ## 🚀 Runs the server
 
 lint: ## Run cpplint on source and header files (pipx install cpplint)
 	@$(call print_banner,Running cpplint)
-	@cpplint --filter=-build/include_what_you_use,-build/include_subdir --recursive --exclude=src/tests/* src inc
+	@cpplint --filter=-build/include_what_you_use,-build/include_subdir,-whitespace/empty_loop_body --recursive src inc
 	@$(call print_success,cpplint completed successfully!)
 
 .PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites run lint
