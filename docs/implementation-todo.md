@@ -135,7 +135,6 @@ Referencia: [fase 19](phases/phase_19.md).
 - [ ] Añadir al README el comando real de ejecución.
 - [ ] Añadir al README una descripción explícita del uso de IA, obligatoria por el subject.
 - [ ] Añadir referencias técnicas clásicas y corregir erratas del README.
-- [ ] Implementar `LIST` o dejar de anunciarlo en el README.
 - [ ] Sacar `-fsanitize=address` de la compilación final y conservarlo en un target de depuración.
 - [ ] Verificar un build limpio, `clean`, `fclean`, `re`, ausencia de relink innecesario y compatibilidad C++98 final.
 

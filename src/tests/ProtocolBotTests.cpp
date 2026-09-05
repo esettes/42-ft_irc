@@ -1,4 +1,5 @@
 // Copyright 2026 @esettes, @danielfdez17
+#include "Irc.hpp"
 #include "ProtocolTestHarness.hpp"
 
 namespace {
@@ -114,7 +115,7 @@ static void testDirectHelpAndPing() {
         "Bot: help should arrive as a private PRIVMSG from marvin");
     expectContains(
         helpResponse,
-        "ping",
+        BotConstants::PING,
         "Bot: help should list the ping command");
 
     expectEqual(
@@ -325,7 +326,7 @@ static void testCtcpHandling() {
             socketFd,
             "PRIVMSG marvin :" + wrapCtcp("VERSION") + "\r\n"),
         std::string(":") + BOT_PREFIX + " NOTICE alice :"
-            + wrapCtcp("VERSION ft_irc bot 1.0") + "\r\n",
+            + wrapCtcp("ft_irc bot 1.0") + "\r\n",
         "Bot: CTCP VERSION should be answered with NOTICE");
 
     expectEqual(

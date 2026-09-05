@@ -137,7 +137,6 @@ SRCS 			= $(SRC_SRCS)
 
 COMMANDS_DIR	= src/commands/
 COMMANDS_SRC	= $(addprefix $(COMMANDS_DIR), \
-					RegistrationCommands.cpp \
 					CommandDispatcher.cpp)
 
 SRCS			+= $(COMMANDS_SRC)
@@ -268,7 +267,7 @@ run: ## 🚀 Runs the server
 
 lint: ## 🔍 Run cpplint on source and header files (pipx install cpplint)
 	@$(call print_banner,Running cpplint)
-	@cpplint --filter=-build/include_what_you_use,-build/include_subdir,-whitespace/empty_loop_body --recursive src inc
+	@cpplint --filter=-build/include_what_you_use,-build/include_subdir,-whitespace/empty_loop_body,-runtime/string --recursive src inc
 	@$(call print_success,cpplint completed successfully!)
 
 .PHONY: all obj clean fclean re help test test-parser test-message test-channel test-protocol test-protocol-suites run lint

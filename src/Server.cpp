@@ -3,33 +3,14 @@
 #include <set>
 #include <utility>
 
+#include "Irc.hpp"
 #include "Server.hpp"
 #include "Console.hpp"
 #include "MessageParser.hpp"
 #include "Bot.hpp"
 
-/** por el momento debe:
- * 
- * Crea un socket TCP.
- * Activa SO_REUSEADDR.
- * Configura sockets no bloqueantes.
- * Hace bind() y listen().
- * Espera eventos con poll().
- * Acepta varios clientes.
- * Conserva mensajes fragmentados en el buffer.
- * Gestiona envíos parciales.
- * Implementa CAP, PASS, NICK, USER, PING y QUIT.
- * Envía los mensajes de bienvenida cuando termina el registro.
- * 
- */
-
 namespace {
-const int INVALID_FD = -1;
-const int POLL_TIMEOUT_MS = 1000;
-const std::size_t RECEIVE_BUFFER_SIZE = 4096;
-const std::size_t MAX_SEND_SIZE = 16384;
-const char *DEFAULT_SERVER_NAME = "irc.42.local";
-const char *UNKNOWN_CLIENT_HOST = "unknown";
+const std::string UNKNOWN_CLIENT_HOST = BotConstants::UNKNOWN;
 
 std::runtime_error createSystemError(
     const std::string &operation,
@@ -42,15 +23,15 @@ std::runtime_error createSystemError(
 Server::Server(int port, const std::string &password)
     : port(port),
       password(password),
-      serverName(DEFAULT_SERVER_NAME),
-      listenSocket(INVALID_FD),
+    serverName(Constants::DEFAULT_SERVER_NAME),
+    listenSocket(Constants::INVALID_FD),
       dispatcher(*this),
       bot(NULL) {
-    if (port < 1 || port > 65535)
-        throw std::invalid_argument("invalid server port");
+    if (port < Constants::MIN_PORT || port > Constants::MAX_PORT)
+        throw std::invalid_argument(Constants::INVALID_SERVER_PORT_MSG);
 
     if (password.empty())
-        throw std::invalid_argument("password cannot be empty");
+        throw std::invalid_argument(Constants::EMPTY_PASSWORD_MSG);
 
     createListeningSocket();
     registerListeningSocket();
@@ -79,7 +60,7 @@ void Server::configureSocketAsNonBlocking(int socketFd) {
 */
 void Server::createListeningSocket() {
     listenSocket = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (listenSocket == INVALID_FD)
+    if (listenSocket == Constants::INVALID_FD)
         throw createSystemError("socket", errno);
 
     try {
@@ -150,7 +131,7 @@ void Server::acceptClient() {
         reinterpret_cast<struct sockaddr *>(&clientAddress),
         &clientAddressLength);
 
-    if (clientSocketFd == INVALID_FD) {
+    if (clientSocketFd == Constants::INVALID_FD) {
         const int errorNumber = errno;
 
         if (errorNumber == EAGAIN
@@ -234,7 +215,7 @@ void Server::pauseAcceptingConnections() {
 }
 
 void Server::resumeAcceptingConnections() {
-    if (pollFds.empty() || pollFds[0].fd == INVALID_FD)
+    if (pollFds.empty() || pollFds[0].fd == Constants::INVALID_FD)
         return;
 
     if ((pollFds[0].events & POLLIN) == 0) {
@@ -430,10 +411,8 @@ std::string Server::normalizeChannelName(const std::string &channelName) const {
  * @return true if the channel name is valid, false otherwise.
  */
 bool Server::isValidChannelName(const std::string &channelName) const {
-    const std::size_t maximumChannelNameLength = 50;
-
     if (channelName.size() < 2
-        || channelName.size() > maximumChannelNameLength) {
+        || channelName.size() > Constants::MAX_CHANNEL_NAME_LENGTH) {
         return false;
     }
 
@@ -950,7 +929,7 @@ bool Server::receiveClientData(std::size_t descriptorIndex) {
     }
 
     Client *client = clientIterator->second;
-    char receiveBuffer[RECEIVE_BUFFER_SIZE];
+    char receiveBuffer[Constants::RECEIVE_BUFFER_SIZE];
 
     const ssize_t receivedBytes = ::recv(
         clientSocketFd,
@@ -1104,7 +1083,7 @@ void Server::disconnectClient(int clientSocketFd, const std::string &reason) {
                 quitParameters.push_back(disconnectReason);
 
                 const IrcMessage quitMessage(
-                    "QUIT",
+                    Constants::QUIT_CMD,
                     quitParameters,
                     getClientPrefix(*client),
                     true);
@@ -1216,7 +1195,7 @@ void Server::run() {
         const int pollResult = ::poll(
             &pollFds[0],
             static_cast<nfds_t>(pollFds.size()),
-            POLL_TIMEOUT_MS);
+            Constants::POLL_TIMEOUT_MS);
 
         if (pollResult == -1) {
             if (errno == EINTR)
@@ -1394,8 +1373,9 @@ bool Server::flushClientOutput(int socketFd) {
         return true;
     }
 
-    const std::size_t bytesToSend = pendingOutput.size() > MAX_SEND_SIZE
-        ? MAX_SEND_SIZE : pendingOutput.size();
+    const std::size_t bytesToSend = pendingOutput.size()
+        > Constants::MAX_SEND_SIZE
+        ? Constants::MAX_SEND_SIZE : pendingOutput.size();
 
     const ssize_t bytes = ::send(socketFd, pendingOutput.c_str(),
         bytesToSend, 0);
@@ -1677,16 +1657,16 @@ bool Server::processClientBuffer(Client &client) {
 }
 
 void Server::closeFd(int &fd) {
-    if (fd == INVALID_FD)
+    if (fd == Constants::INVALID_FD)
         return;
 
     const int fdToClose = fd;
 
     // Evitar cerrar el mismo descriptor varias veces
-    fd = INVALID_FD;
+    fd = Constants::INVALID_FD;
 
     // los destructores no deben lanzar errores, solo informar
-    if (::close(fdToClose) == INVALID_FD) {
+    if (::close(fdToClose) == Constants::INVALID_FD) {
         std::cerr
             << Console::WARNING
             << " close: "

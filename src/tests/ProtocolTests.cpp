@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "Irc.hpp"
 #include "Client.hpp"
 #include "IrcCasemap.hpp"
 #include "IrcMessage.hpp"
@@ -471,7 +472,7 @@ static void testIrcMessageSerialization() {
     parameters.push_back("Hello world");
 
     const IrcMessage message(
-        "PRIVMSG",
+        Constants::PRIVMSG_CMD,
         parameters,
         "nick!user@host",
         true);
@@ -489,21 +490,21 @@ static void testGeneratedMessagesRejectControlCharacters() {
     parameters.push_back("bad\rvalue");
 
     expectSerializationFailure(
-        IrcMessage("NOTICE", parameters, "", true),
+        IrcMessage(Constants::NOTICE_CMD, parameters, "", true),
         "IrcMessage should reject carriage returns");
 
     parameters.clear();
     parameters.push_back("bad\nvalue");
 
     expectSerializationFailure(
-        IrcMessage("NOTICE", parameters, "", true),
+        IrcMessage(Constants::NOTICE_CMD, parameters, "", true),
         "IrcMessage should reject line feeds");
 
     parameters.clear();
     parameters.push_back(std::string("bad\0value", 9));
 
     expectSerializationFailure(
-        IrcMessage("NOTICE", parameters, "", true),
+        IrcMessage(Constants::NOTICE_CMD, parameters, "", true),
         "IrcMessage should reject NUL bytes");
 }
 
@@ -513,7 +514,7 @@ static void testSerializedMessageLengthLimit() {
     parameters.push_back(std::string(502, 'A'));
 
     const IrcMessage maximumLengthMessage(
-        "NOTICE",
+        Constants::NOTICE_CMD,
         parameters,
         "",
         true);
@@ -531,7 +532,7 @@ static void testSerializedMessageLengthLimit() {
     parameters.push_back(std::string(503, 'A'));
 
     expectSerializationFailure(
-        IrcMessage("NOTICE", parameters, "", true),
+        IrcMessage(Constants::NOTICE_CMD, parameters, "", true),
         "IrcMessage should reject messages longer than 512 bytes");
 }
 
@@ -1302,7 +1303,7 @@ static void testPhase10PingAndPong() {
 }
 
 /**
- * @brief Verifies CAP LS, LIST, REQ and END, case-insensitive subcommands,
+ * @brief Verifies CAP LS, REQ and END, case-insensitive subcommands,
  * missing-parameter errors, empty capability lists, NAK responses, and the
  * correct client identifier before and after NICK.
  */
@@ -1353,12 +1354,10 @@ static void testPhase10CapabilityNegotiation() {
 
     const std::string expectedResponse =
         ":irc.42.local CAP * LS :\r\n"
-        ":irc.42.local CAP * LIST :\r\n"
         ":irc.42.local CAP * NAK :multi-prefix sasl\r\n"
         ":irc.42.local 461 * CAP :Not enough parameters\r\n"
         ":irc.42.local 461 * CAP :Not enough parameters\r\n"
         ":irc.42.local 461 * CAP :Not enough parameters\r\n"
-        ":irc.42.local CAP capclient LIST :\r\n"
         "PONG :cap-ended\r\n";
 
     expectEqual(

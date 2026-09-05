@@ -6,6 +6,7 @@
 #include <set>
 #include <iostream>
 
+#include "Irc.hpp"
 #include "Bot.hpp"
 #include "Server.hpp"
 #include "Client.hpp"
@@ -22,7 +23,7 @@ const char *Bot::HOME_CHANNEL = "#bot";
 const char *Bot::HOME_TOPIC = "Ask me with !help or /msg marvin help";
 
 namespace {
-const int VIRTUAL_CLIENT_FD = -1;
+const int VIRTUAL_CLIENT_FD = Constants::INVALID_FD;
 const char CTCP_MARKER = '\x01';
 
 std::string wrapCtcp(const std::string &payload) {
@@ -136,7 +137,7 @@ void Bot::joinChannel(Channel &channel, bool greet) {
     if (greet) {
         sendChannelReply(
             channel,
-            "Hello! Type !help to see my commands.");
+            Constants::BOT_HOME_GREETING);
     }
 }
 
@@ -146,7 +147,7 @@ void Bot::broadcastJoin(Channel &channel) {
     joinParameters.push_back(channel.getName());
 
     const IrcMessage joinMessage(
-        "JOIN",
+        Constants::JOIN_CMD,
         joinParameters,
         server.getClientPrefix(*user),
         true);
@@ -155,15 +156,15 @@ void Bot::broadcastJoin(Channel &channel) {
 }
 
 void Bot::sendPrivateReply(Client &recipient, const std::string &text) {
-    sendText(&recipient, NULL, "PRIVMSG", text);
+    sendText(&recipient, NULL, Constants::PRIVMSG_CMD, text);
 }
 
 void Bot::sendChannelReply(Channel &channel, const std::string &text) {
-    sendText(NULL, &channel, "PRIVMSG", text);
+    sendText(NULL, &channel, Constants::PRIVMSG_CMD, text);
 }
 
 void Bot::sendNotice(Client &recipient, const std::string &text) {
-    sendText(&recipient, NULL, "NOTICE", text);
+    sendText(&recipient, NULL, Constants::NOTICE_CMD, text);
 }
 
 /**
@@ -338,19 +339,21 @@ bool Bot::handleCtcp(Client &sender, const std::string &text) {
         ctcpArgument = payload.substr(spacePosition + 1);
     }
 
-    if (ctcpCommand == "version") {
-        sendNotice(sender, wrapCtcp("VERSION ft_irc bot 1.0"));
+    if (ctcpCommand == BotConstants::VERSION) {
+        sendNotice(sender, wrapCtcp(Constants::BOT_VERSION));
         return true;
     }
 
-    if (ctcpCommand == "ping") {
+    if (ctcpCommand == BotConstants::PING) {
         sendNotice(
             sender,
-            wrapCtcp(ctcpArgument.empty() ? "PING" : "PING " + ctcpArgument));
+            wrapCtcp(ctcpArgument.empty() ?
+                Constants::PING_CMD :
+                "PING " + ctcpArgument));
         return true;
     }
 
-    if (ctcpCommand == "time") {
+    if (ctcpCommand == BotConstants::TIME) {
         sendNotice(
             sender,
             wrapCtcp("TIME " + formatNow("%Y-%m-%d %H:%M:%S")));
@@ -365,28 +368,26 @@ std::string Bot::runCommand(
     const std::string &command,
     const std::string &argument
 ) {
-    if (command == "help") {
-        return "Commands: help, ping, time, date, info, uptime, version, "
-            "users, whoami, echo <text>, dice. "
-            "Use /msg marvin <cmd> or talk in #bot with !cmd";
+    if (command == BotConstants::HELP) {
+        return Constants::BOT_HELP;
     }
 
-    if (command == "ping")
-        return "pong";
+    if (command == BotConstants::PING)
+        return BotConstants::PONG;
 
-    if (command == "time")
+    if (command == BotConstants::TIME)
         return "Local time is " + formatNow("%Y-%m-%d %H:%M:%S");
 
-    if (command == "date")
+    if (command == BotConstants::DATE)
         return "Local date is " + formatNow("%Y-%m-%d");
 
-    if (command == "version")
-        return "ft_irc bot 1.0 (C++98)";
+    if (command == BotConstants::VERSION)
+        return Constants::BOT_VERSION_CXX98;
 
-    if (command == "uptime")
+    if (command == BotConstants::UPTIME)
         return "I have been online for " + formatUptime();
 
-    if (command == "users") {
+    if (command == BotConstants::USERS) {
         std::ostringstream stream;
 
         stream << server.getRegisteredNicknameCount()
@@ -394,7 +395,7 @@ std::string Bot::runCommand(
         return stream.str();
     }
 
-    if (command == "info") {
+    if (command == BotConstants::INFO) {
         std::ostringstream stream;
 
         stream << "I am " << NICKNAME
@@ -405,16 +406,16 @@ std::string Bot::runCommand(
         return stream.str();
     }
 
-    if (command == "whoami")
+    if (command == BotConstants::WHOAMI)
         return "You are " + server.getClientPrefix(sender);
 
-    if (command == "echo") {
+    if (command == BotConstants::ECHO) {
         if (argument.empty())
-            return "Usage: echo <text>";
+            return Constants::BOT_ECHO_USAGE;
         return argument;
     }
 
-    if (command == "dice" || command == "roll") {
+    if (command == BotConstants::DICE || command == BotConstants::ROLL) {
         std::ostringstream stream;
 
         stream << "You rolled a " << (std::rand() % 6 + 1);
@@ -428,17 +429,17 @@ std::string Bot::formatNow(const char *format) const {
     const std::time_t now = std::time(NULL);
 
     if (now == static_cast<std::time_t>(-1))
-        return "unknown";
+        return BotConstants::UNKNOWN;
 
     const std::tm *localTime = std::localtime(&now);
 
     if (localTime == NULL)
-        return "unknown";
+        return BotConstants::UNKNOWN;
 
     char buffer[64];
 
     if (std::strftime(buffer, sizeof(buffer), format, localTime) == 0)
-        return "unknown";
+        return BotConstants::UNKNOWN;
 
     return buffer;
 }
@@ -447,7 +448,7 @@ std::string Bot::formatUptime() const {
     const std::time_t now = std::time(NULL);
 
     if (now == static_cast<std::time_t>(-1) || startedAt <= 0)
-        return "unknown";
+        return BotConstants::UNKNOWN;
 
     int64_t elapsed = static_cast<int64_t>(now - startedAt);
 

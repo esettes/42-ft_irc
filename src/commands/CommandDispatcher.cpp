@@ -2,6 +2,7 @@
 #include <cctype>
 #include <sstream>
 
+#include "Irc.hpp"
 #include "CommandDispatcher.hpp"
 #include "Server.hpp"
 #include "Client.hpp"
@@ -10,21 +11,21 @@
 
 namespace {
 bool isSupportedChannelMode(char mode) {
-        return mode == 'i'
-            || mode == 't'
-            || mode == 'k'
-            || mode == 'o'
-            || mode == 'l';
+        return mode == Constants::INVITE_MODE
+            || mode == Constants::TOPIC_MODE
+            || mode == Constants::KEY_MODE
+            || mode == Constants::OPERATOR_MODE
+            || mode == Constants::LIMIT_MODE;
 }
 
 bool modeRequiresArgument(char mode, bool adding) {
-        if (mode == 'o')
+        if (mode == Constants::OPERATOR_MODE)
             return true;
 
-        if (mode == 'k' && adding)
+        if (mode == Constants::KEY_MODE && adding)
             return true;
 
-        if (mode == 'l' && adding)
+        if (mode == Constants::LIMIT_MODE && adding)
             return true;
 
         return false;
@@ -89,64 +90,64 @@ CommandDispatcher::CommandDispatcher(Server &server) : server(server) {
 void CommandDispatcher::registerCommands() {
     cmmds.insert(
         std::make_pair(
-            "PASS",
+            Constants::PASS_CMD,
             CommandDefinition(&CommandDispatcher::handlePass, 1, false)));
     cmmds.insert(
         std::make_pair(
-            "NICK",
+            Constants::NICK_CMD,
             CommandDefinition(&CommandDispatcher::handleNick, 1, false)));
     cmmds.insert(
         std::make_pair(
-            "USER",
+            Constants::USER_CMD,
             CommandDefinition(&CommandDispatcher::handleUser, 4, false)));
     cmmds.insert(
         std::make_pair(
-            "PING",
+            Constants::PING_CMD,
             CommandDefinition(&CommandDispatcher::handlePing, 0, false)));
     cmmds.insert(
         std::make_pair(
-            "PONG",
+            Constants::PONG_CMD,
             CommandDefinition(&CommandDispatcher::handlePong, 0, false)));
     cmmds.insert(
         std::make_pair(
-            "QUIT",
+            Constants::QUIT_CMD,
             CommandDefinition(&CommandDispatcher::handleQuit, 0, false)));
     cmmds.insert(
         std::make_pair(
-            "CAP",
+            Constants::CAP_CMD,
             CommandDefinition(&CommandDispatcher::handleCap, 1, false)));
     cmmds.insert(
         std::make_pair(
-            "JOIN",
+            Constants::JOIN_CMD,
             CommandDefinition(&CommandDispatcher::handleJoin, 1, true)));
     cmmds.insert(
         std::make_pair(
-            "PART",
+            Constants::PART_CMD,
             CommandDefinition(&CommandDispatcher::handlePart, 1, true)));
     cmmds.insert(
         std::make_pair(
-            "PRIVMSG",
+            Constants::PRIVMSG_CMD,
             CommandDefinition(&CommandDispatcher::handlePrivateMessage, 2,
                 true)));
     cmmds.insert(
         std::make_pair(
-            "NOTICE",
+            Constants::NOTICE_CMD,
             CommandDefinition(&CommandDispatcher::handleNotice, 0, true)));
     cmmds.insert(
         std::make_pair(
-            "TOPIC",
+            Constants::TOPIC_CMD,
             CommandDefinition(&CommandDispatcher::handleTopic, 1, true)));
     cmmds.insert(
         std::make_pair(
-            "INVITE",
+            Constants::INVITE_CMD,
             CommandDefinition(&CommandDispatcher::handleInvite, 2, true)));
     cmmds.insert(
         std::make_pair(
-            "KICK",
+            Constants::KICK_CMD,
             CommandDefinition(&CommandDispatcher::handleKick, 2, true)));
     cmmds.insert(
         std::make_pair(
-            "MODE",
+            Constants::MODE_CMD,
             CommandDefinition(&CommandDispatcher::handleMode, 1, true)));
 }
 
@@ -179,7 +180,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message) {
         return;
     }
 
-    if (message.getCommand() == "NICK" && message.params.empty()) {
+    if (message.getCommand() == Constants::NICK_CMD && message.params.empty()) {
         server.queueNumericReply(
             client,
             NumericReply::ERR_NONICKNAMEGIVEN,
@@ -187,8 +188,8 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message) {
         return;
     }
 
-    if ((message.getCommand() == "PING"
-            || message.getCommand() == "PONG")
+    if ((message.getCommand() == Constants::PING_CMD
+        || message.getCommand() == Constants::PONG_CMD  )
         && message.params.empty()) {
         server.queueNumericReply(
             client,
@@ -197,7 +198,7 @@ void CommandDispatcher::execute(Client &client, const IrcMessage &message) {
         return;
     }
 
-    if (message.getCommand() == "PRIVMSG") {
+    if (message.getCommand() == Constants::PRIVMSG_CMD) {
         if (message.params.empty()) {
             server.queueNumericReply(
                 client,
@@ -300,7 +301,7 @@ void CommandDispatcher::handleNick(Client &client, const IrcMessage &message) {
     nicknameParameters.push_back(requestedNickname);
 
     const IrcMessage nicknameMessage(
-        "NICK",
+        Constants::NICK_CMD,
         nicknameParameters,
         previousClientPrefix,
         true);
@@ -351,7 +352,7 @@ void CommandDispatcher::handlePing(Client &client, const IrcMessage &message) {
     pongParameters.push_back(message.params[0]);
 
     const IrcMessage pongMessage(
-        "PONG",
+        Constants::PONG_CMD,
         pongParameters,
         "",
         true);
@@ -390,7 +391,7 @@ void CommandDispatcher::handleQuit(Client &client, const IrcMessage &message) {
 
 /**
  * @brief Processes CAP LS, CAP LIST, CAP REQ and CAP ENDbefore or after client
- * registration, returning empty capability lists for LS and LIST and rejecting
+ * registration, returning empty capability lists for LS and rejecting
  * requested capabilities through NAK.
  */
 void CommandDispatcher::handleCap(Client &client, const IrcMessage &message) {
@@ -404,15 +405,15 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message) {
                 static_cast<unsigned char>(
                     capabilitySubcommand[characterIndex])));
     }
-    if (capabilitySubcommand == "END")
+    if (capabilitySubcommand == Constants::END_SUB_CMD)
         return;
 
     std::string responseSubcommand;
     std::string responseCapabilityList;
 
-    if (capabilitySubcommand == "LS" || capabilitySubcommand == "LIST") {
+    if (capabilitySubcommand == Constants::LS_SUB_CMD) {
         responseSubcommand = capabilitySubcommand;
-    } else if (capabilitySubcommand == "REQ") {
+    } else if (capabilitySubcommand == Constants::REQ_SUB_CMD) {
         if (message.params.size() < 2 || message.params[1].empty()) {
             server.queueNumericReply(
                 client,
@@ -422,7 +423,7 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message) {
             return;
         }
 
-        responseSubcommand = "NAK";
+        responseSubcommand = Constants::NAK_SUB_CMD;
         responseCapabilityList = message.params[1];
     } else {
         return;
@@ -440,7 +441,7 @@ void CommandDispatcher::handleCap(Client &client, const IrcMessage &message) {
     capabilityParameters.push_back(responseCapabilityList);
 
     const IrcMessage capabilityMessage(
-        "CAP",
+        Constants::CAP_CMD,
         capabilityParameters,
         server.getServerName(),
         true);
@@ -526,7 +527,7 @@ void CommandDispatcher::joinClientToSingleChannel(
     joinParameters.push_back(channel->getName());
 
     const IrcMessage joinMessage(
-        "JOIN",
+        Constants::JOIN_CMD,
         joinParameters,
         server.getClientPrefix(client),
         true);
@@ -638,7 +639,7 @@ void CommandDispatcher::partClientFromSingleChannel(
         partParameters.push_back(partReason);
 
     const IrcMessage partMessage(
-        "PART",
+        Constants::PART_CMD,
         partParameters,
         server.getClientPrefix(client),
         hasPartReason);
@@ -830,7 +831,7 @@ void CommandDispatcher::handleInvite(
     inviteParameters.push_back(channel->getName());
 
     const IrcMessage inviteMessage(
-        "INVITE",
+        Constants::INVITE_CMD,
         inviteParameters,
         server.getClientPrefix(client),
         true);
@@ -930,7 +931,7 @@ void CommandDispatcher::handleKick(
     kickParameters.push_back(kickReason);
 
     const IrcMessage kickMessage(
-        "KICK",
+        Constants::KICK_CMD,
         kickParameters,
         server.getClientPrefix(client),
         true);
@@ -1055,7 +1056,7 @@ void CommandDispatcher::applyTopicChange(
     topicParameters.push_back(newTopic);
 
     const IrcMessage topicMessage(
-        "TOPIC",
+        Constants::TOPIC_CMD,
         topicParameters,
         server.getClientPrefix(client),
         true);
@@ -1090,12 +1091,12 @@ bool CommandDispatcher::parseChannelModeOperations(
     for (std::size_t index = 0; index < modeString.size(); ++index) {
         const char character = modeString[index];
 
-        if (character == '+') {
+        if (character == Constants::ADD_FLAG_MODE) {
             currentAction = MODE_ADD;
             continue;
         }
 
-        if (character == '-') {
+        if (character == Constants::REMOVE_FLAG_MODE) {
             currentAction = MODE_REMOVE;
             continue;
         }
@@ -1143,7 +1144,7 @@ bool CommandDispatcher::validateChannelModeOperations(
     for (std::size_t index = 0; index < operations.size(); ++index) {
         ModeOperation &operation = operations[index];
 
-        if (operation.mode == 'o') {
+        if (operation.mode == Constants::OPERATOR_MODE) {
             Client *targetClient =
                 server.findClientByNickname(operation.argument);
 
@@ -1174,12 +1175,13 @@ bool CommandDispatcher::validateChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'k' && operation.action == MODE_ADD) {
+        if (operation.mode == Constants::KEY_MODE
+            && operation.action == MODE_ADD) {
             if (operation.argument.empty()) {
                 server.queueNumericReply(
                     client,
                     NumericReply::ERR_NEEDMOREPARAMS,
-                    "MODE",
+                    Constants::MODE_CMD,
                     NumericReply::MSG_NEEDMOREPARAMS);
                 return false;
             }
@@ -1187,14 +1189,15 @@ bool CommandDispatcher::validateChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'l' && operation.action == MODE_ADD) {
+        if (operation.mode == Constants::LIMIT_MODE
+                && operation.action == MODE_ADD) {
             if (!parsePositiveUserLimit(
                     operation.argument,
                     operation.numericArgument)) {
                 server.queueNumericReply(
                     client,
                     NumericReply::ERR_NEEDMOREPARAMS,
-                    "MODE",
+                    Constants::MODE_CMD,
                     NumericReply::MSG_NEEDMOREPARAMS);
                 return false;
             }
@@ -1218,17 +1221,17 @@ void CommandDispatcher::applyChannelModeOperations(
         const ModeOperation &operation = operations[index];
         const bool adding = operation.action == MODE_ADD;
 
-        if (operation.mode == 'i') {
+        if (operation.mode == Constants::INVITE_MODE) {
             channel.setInviteOnly(adding);
             continue;
         }
 
-        if (operation.mode == 't') {
+        if (operation.mode == Constants::TOPIC_MODE) {
             channel.setTopicRestricted(adding);
             continue;
         }
 
-        if (operation.mode == 'k') {
+        if (operation.mode == Constants::KEY_MODE) {
             if (adding)
                 channel.setKey(operation.argument);
             else
@@ -1236,7 +1239,7 @@ void CommandDispatcher::applyChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'l') {
+        if (operation.mode == Constants::LIMIT_MODE) {
             if (adding)
                 channel.setUserLimit(operation.numericArgument);
             else
@@ -1244,7 +1247,7 @@ void CommandDispatcher::applyChannelModeOperations(
             continue;
         }
 
-        if (operation.mode == 'o') {
+        if (operation.mode == Constants::OPERATOR_MODE) {
             Client *targetClient =
                 server.findClientByNickname(operation.argument);
 
@@ -1265,19 +1268,19 @@ void CommandDispatcher::sendChannelModeIs(
     Client &client,
     const Channel &channel
 ) {
-    std::string modeFlags = "+";
+    std::string modeFlags = Constants::ADD_FLAG;
     std::vector<std::string> parameters;
 
     parameters.push_back(channel.getName());
 
     if (channel.isInviteOnly())
-        modeFlags += 'i';
+        modeFlags += Constants::INVITE_MODE;
     if (channel.isTopicRestricted())
-        modeFlags += 't';
+        modeFlags += Constants::TOPIC_MODE;
     if (channel.isKeyEnabled())
-        modeFlags += 'k';
+        modeFlags += Constants::KEY_MODE;
     if (channel.isLimitEnabled())
-        modeFlags += 'l';
+        modeFlags += Constants::LIMIT_MODE;
 
     parameters.push_back(modeFlags);
 
@@ -1313,7 +1316,8 @@ void CommandDispatcher::notifyChannelModeChanges(
 
     for (std::size_t index = 0; index < operations.size(); ++index) {
         const ModeOperation &operation = operations[index];
-        const char sign = operation.action == MODE_ADD ? '+' : '-';
+        const char sign = operation.action ==
+            MODE_ADD ? Constants::ADD_FLAG_MODE : Constants::REMOVE_FLAG_MODE;
 
         if (sign != currentSign) {
             modeString += sign;
@@ -1333,7 +1337,7 @@ void CommandDispatcher::notifyChannelModeChanges(
     }
 
     const IrcMessage modeMessage(
-        "MODE",
+        Constants::MODE_CMD,
         modeParameters,
         server.getClientPrefix(client),
         false);
@@ -1456,11 +1460,13 @@ void CommandDispatcher::handlePrivateMessage(
     }
 
     if (isChannelTarget(target)) {
-        sendMessageToChannel(client, target, messageText, "PRIVMSG", true);
+        sendMessageToChannel(client, target, messageText,
+            Constants::PRIVMSG_CMD, true);
         return;
     }
 
-    sendMessageToUser(client, target, messageText, "PRIVMSG", true);
+    sendMessageToUser(client, target, messageText,
+        Constants::PRIVMSG_CMD, true);
 }
 
 /**
@@ -1480,11 +1486,13 @@ void CommandDispatcher::handleNotice(
     const std::string &messageText = message.params[1];
 
     if (isChannelTarget(target)) {
-        sendMessageToChannel(client, target, messageText, "NOTICE", false);
+        sendMessageToChannel(client, target, messageText,
+            Constants::NOTICE_CMD, false);
         return;
     }
 
-    sendMessageToUser(client, target, messageText, "NOTICE", false);
+    sendMessageToUser(client, target, messageText,
+        Constants::NOTICE_CMD, false);
 }
 
 bool CommandDispatcher::isChannelTarget(const std::string &target) const {
@@ -1531,7 +1539,7 @@ void CommandDispatcher::sendMessageToUser(
 
     server.queueMessage(*recipient, privateMessage.serialize());
 
-    if (command == "PRIVMSG" && server.isBotClient(*recipient))
+    if (command == Constants::PRIVMSG_CMD && server.isBotClient(*recipient))
         server.notifyBotPrivateMessage(sender, messageText);
 }
 
@@ -1585,7 +1593,7 @@ void CommandDispatcher::sendMessageToChannel(
 
     const std::string serializedMessage = privateMessage.serialize();
 
-    if (command == "PRIVMSG")
+    if (command == Constants::PRIVMSG_CMD)
         channel->addHistoryMessage(serializedMessage);
 
     const std::set<Client *> &channelMembers = channel->getMembers();
@@ -1602,6 +1610,6 @@ void CommandDispatcher::sendMessageToChannel(
         ++memberIterator;
     }
 
-    if (command == "PRIVMSG")
+    if (command == Constants::PRIVMSG_CMD)
         server.notifyBotChannelMessage(sender, *channel, messageText);
 }

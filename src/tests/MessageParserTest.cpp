@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <iostream>
 
+#include "Irc.hpp"
 #include "MessageParser.hpp"
 
 namespace {
@@ -15,7 +16,7 @@ int main() {
     const IrcMessage message = MessageParser::parse(
         "privmsg #general :Hola a todo el mundo");
 
-    if (message.cmd != "PRIVMSG") {
+    if (message.cmd != Constants::PRIVMSG_CMD) {
         return fail("command must be normalized to uppercase");
     }
     if (message.params.size() != 2) {
@@ -53,7 +54,7 @@ int main() {
     const IrcMessage emptyTopicMessage =
         MessageParser::parse("TOPIC #general :");
 
-    if (emptyTopicMessage.cmd != "TOPIC") {
+    if (emptyTopicMessage.cmd != Constants::TOPIC_CMD) {
         return fail("TOPIC command must be recognized");
     }
     if (emptyTopicMessage.params.size() != 2) {
@@ -79,7 +80,7 @@ int main() {
         "\x01";
     const IrcMessage dccMessage = MessageParser::parse(dccLine);
 
-    if (dccMessage.cmd != "PRIVMSG") {
+    if (dccMessage.cmd != Constants::PRIVMSG_CMD) {
         return fail("DCC CTCP must parse as PRIVMSG");
     }
     if (dccMessage.params.size() != 2) {

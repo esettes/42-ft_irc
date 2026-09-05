@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Irc.hpp"
 #include "IrcMessage.hpp"
 
 static int g_failures = 0;
@@ -29,7 +30,7 @@ static void testSerializeWithTrailingParameter() {
     std::vector<std::string> params;
     params.push_back("#general");
     params.push_back("Hola a todo el mundo");
-    IrcMessage message("PRIVMSG", params);
+    IrcMessage message(Constants::PRIVMSG_CMD, params);
 
     expectEqual(message.serialize(),
     "PRIVMSG #general :Hola a todo el mundo\r\n",
@@ -42,7 +43,7 @@ static void testSerializeWithPrefixAndMultipleParameters() {
     params.push_back("0");
     params.push_back("*");
     params.push_back("Roxana Example");
-    IrcMessage message("USER", params, "nick!user@host");
+    IrcMessage message(Constants::USER_CMD, params, "nick!user@host");
 
     expectEqual(message.serialize(),
         ":nick!user@host USER roxana 0 * :Roxana Example\r\n",
@@ -193,7 +194,7 @@ static void testPreservesColonAtStartOfTrailingParameter() {
     std::vector<std::string> parameters;
     parameters.push_back(":literal");
 
-    const IrcMessage message("NOTICE", parameters);
+    const IrcMessage message(Constants::NOTICE_CMD, parameters);
 
     expectEqual(
         message.serialize(),
@@ -203,7 +204,7 @@ static void testPreservesColonAtStartOfTrailingParameter() {
 
 static void testRejectsTrailingWithoutParameter() {
     const std::vector<std::string> parameters;
-    const IrcMessage message("QUIT", parameters, "", true);
+    const IrcMessage message(Constants::QUIT_CMD, parameters, "", true);
 
     expectSerializationFailure(
         message,
@@ -217,8 +218,8 @@ static void testSerializesDccCtcpPayloadExactly() {
         std::string("\x01") + "DCC SEND example.txt 2130706433 5000 1200"
             + "\x01");
 
-    const IrcMessage message("PRIVMSG", parameters, "alice!alice@localhost",
-        true);
+    const IrcMessage message(Constants::PRIVMSG_CMD, parameters,
+        "alice!alice@localhost", true);
 
     expectEqual(
         message.serialize(),
@@ -233,7 +234,8 @@ static void testSerializesDccCtcpPayloadExactly() {
 static void testRejectsMessageExceedingMaxLength() {
     std::vector<std::string> params;
     params.push_back(std::string(IRC_MAX_MESSAGE_LENGTH, 'A'));
-    const IrcMessage message("PRIVMSG", params, "nick!user@host", true);
+    const IrcMessage message(Constants::PRIVMSG_CMD,
+        params, "nick!user@host", true);
 
     expectSerializationFailure(
         message,

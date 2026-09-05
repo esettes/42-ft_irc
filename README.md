@@ -74,6 +74,3 @@ In order to process a command, you have to first aggregate the received packets 
 
 - Handle file transfer
 - A bot.
-
-### More commands
-- LIST - Lists all the clients connected to the channel

@@ -329,8 +329,6 @@ El enunciado marca como bonus:
 - Transferencia de archivos (DCC sobre `PRIVMSG` CTCP; el servidor retransmite el mensaje).
 - Un bot.
 
-Y como comando extra: `LIST`.
-
 No forman parte de la checklist obligatoria. Si existen, probarlos con irssi (`/dcc send`, mensaje al bot, `/list`) además de `make test`.
 
 ### Transferencia de archivos (DCC)
