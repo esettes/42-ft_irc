@@ -266,7 +266,7 @@ test-protocol-suites: $(NAME) ## 🧪 Runs split protocol suites (TOPIC, INVITE,
 run: ## 🚀 Runs the server
 	@./$(NAME) 6667 secret
 
-lint: ## Run cpplint on source and header files (pipx install cpplint)
+lint: ## 🔍 Run cpplint on source and header files (pipx install cpplint)
 	@$(call print_banner,Running cpplint)
 	@cpplint --filter=-build/include_what_you_use,-build/include_subdir,-whitespace/empty_loop_body --recursive src inc
 	@$(call print_success,cpplint completed successfully!)
