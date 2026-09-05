@@ -13,14 +13,53 @@ The project consists of developing an IRC server using C++ 98 standard. This mea
 # **Instructions**
 ## Makefile rules
 Run `make help` to know which rules are availabe in this project
+
+There will be listed rules like: `all`, `clean`, `fclean`, and `re`
+
 ## Installation
 Clone the repository: `git clone https://github.com/esettes/42-ft_irc && cd 42-ft_irc`
+
 ## Compilation
-Run `make || make all`
+Run `make || make all || make ircserv`
+
+## Execution
+Execute `make run` to start the server in port `6667` with password `secret` 
 
 # **Resources**
-- [Visual guide](https://deepwiki.com/42YerevanProjects/ft_irc)
+- [Visual guide](https://deepwiki.com/42YerevanProjects/ft_irc) to get a general understanding on how to organize the project.
+- [CPP linter](https://github.com/cpplint/cpplint) to follow some of Google's CPP code style. Note: install cpplint via `pipx install cpplint`.
+- IRC client reference [irssi](https://irssi.org/New-users/).
 
+## Use of AI
+AI has been mainly used to automate the Makefile testing rules, as well as writing documentation such [architecture](/docs/architecture.md), or [testing](/docs/testing.md).
+
+Also AI has been used to explain us how to use our IRC client reference, which is `irssi`:
+
+### After executing `irssi` in the terminal:
+
+#### How to connect to the server
+```
+/connect 127.0.0.1 6667 secret
+```
+
+#### How to join channels
+```
+/join #general
+```
+
+> Once inside a channel you can send messges without following any specific format
+
+#### Invite users
+```
+/invite marvin #general
+```
+
+#### Kick users
+```
+/kick marvin reason
+```
+
+#### See the `irssi` guide linked in the [resources](#resources) section
 
 # **Requirements**
 
@@ -30,7 +69,7 @@ Run `make || make all`
 
 >
 
-- Several IRC clients exist. You have to chooke one of them as **reference**. Your reference client will be used during the evaluation process.
+- Several IRC clients exist. You have to choose one of them as **reference**. Your reference client will be used during the evaluation process.
 - Your reference client must be able to connect to your server without encountering any error.
 - Using your reference client with your server must be similar to using it with any official IRC server. However, you only have to implement the following features:
     - You must be able to authenticate, set a nickname, a username, join a channel, send and receive private messages using your reference client.
@@ -55,7 +94,7 @@ Verify every possible error and issue, such as receiving partial data, low bandw
 
 To ensure that your server correctly processes all data sent to it, the following simple test using **nc** can be performed:
 
-```bash
+```
 \$> nc -C 127.0.0.1 6667
 com^Dman^Dd
 \$>
