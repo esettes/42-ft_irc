@@ -20,7 +20,6 @@ Run `make || make all`
 
 # **Resources**
 - [Visual guide](https://deepwiki.com/42YerevanProjects/ft_irc)
-- [To-do list](https://42-serv.github.io/ft_irc/index.html)
 
 
 # **Requirements**
