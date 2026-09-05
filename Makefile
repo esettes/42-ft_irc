@@ -214,8 +214,8 @@ test-parser: ## 🧪 Runs message parser test case
 		$(TESTS_SRCS) \
 		$(SRC_DIR)IrcMessage.cpp \
 		$(SRC_DIR)MessageParser.cpp \
-		-o $(MSG_PARSER_TEST)
-	@./$(MSG_PARSER_TEST)
+		-o $(OBJ_DIR)$(MSG_PARSER_TEST)
+	@./$(OBJ_DIR)$(MSG_PARSER_TEST)
 
 test-message: ## 🧪 Runs the IRC message serialization and casemap tests
 	@mkdir -p $(TEST_DIR)
