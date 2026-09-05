@@ -17,13 +17,23 @@ Run `make help` to know which rules are availabe in this project
 There will be listed rules like: `all`, `clean`, `fclean`, and `re`
 
 ## Installation
-Clone the repository: `git clone https://github.com/esettes/42-ft_irc && cd 42-ft_irc`
 
-## Compilation
-Run `make || make all || make ircserv`
+### Clone the repository
+```
+git clone https://github.com/esettes/42-ft_irc && cd 42-ft_irc
+```
 
-## Execution
-Execute `make run` to start the server in port `6667` with password `secret` 
+### Compile the project
+```
+make || make all || make ircserv
+```
+
+### Execute the project
+```
+make run
+```
+
+This rule will start the server in port `6667` with password `secret` 
 
 # **Resources**
 - [Visual guide](https://deepwiki.com/42YerevanProjects/ft_irc) to get a general understanding on how to organize the project.
@@ -37,12 +47,12 @@ Also AI has been used to explain us how to use our IRC client reference, which i
 
 ### After executing `irssi` in the terminal:
 
-#### How to connect to the server
+#### Connect to the server
 ```
 /connect 127.0.0.1 6667 secret
 ```
 
-#### How to join channels
+#### Join channels
 ```
 /join #general
 ```
