@@ -1,49 +1,49 @@
-# Fase 14 — Comando `TOPIC`
+# Phase 14 — `TOPIC` command
 
-## Objetivo
+## Goal
 
-Implementar el comando `TOPIC`, encargado de gestionar el tema de un canal.
+Implement the `TOPIC` command, which manages a channel’s topic.
 
-Debe permitir:
+It must allow:
 
-- Consultar el tema actual.
-- Establecer un nuevo tema.
-- Modificar el tema existente.
-- Eliminar el tema.
-- Respetar la restricción del modo `+t`.
-- Notificar los cambios a todos los miembros del canal.
+- Querying the current topic.
+- Setting a new topic.
+- Changing the existing topic.
+- Removing the topic.
+- Respecting the `+t` mode restriction.
+- Notifying changes to every channel member.
 
 ---
 
-## Sintaxis
+## Syntax
 
-### Consultar el tema
+### Query the topic
 
 ```irc
 TOPIC #general
 ```
 
-### Establecer o modificar el tema
+### Set or change the topic
 
 ```irc
-TOPIC #general :Nuevo tema del canal
+TOPIC #general :New channel topic
 ```
 
-El texto situado después de `:` constituye un único parámetro y puede contener espacios.
+The text after `:` constitutes a single parameter and may contain spaces.
 
-### Eliminar el tema
+### Remove the topic
 
 ```irc
 TOPIC #general :
 ```
 
-Un parámetro final vacío indica que el canal debe quedarse sin tema.
+An empty final parameter indicates that the channel must be left without a topic.
 
 ---
 
-## Estado necesario en `Channel`
+## Required state in `Channel`
 
-Cada canal debe almacenar:
+Each channel must store:
 
 ```cpp
 class Channel
@@ -54,129 +54,129 @@ private:
 };
 ```
 
-El atributo `topicRestricted` representa el modo `+t`:
+The `topicRestricted` attribute represents mode `+t`:
 
-- `false`: cualquier miembro del canal puede modificar el tema.
-- `true`: solamente los operadores del canal pueden modificarlo.
+- `false`: any channel member can change the topic.
+- `true`: only channel operators can change it.
 
-Una cadena vacía puede representar que el canal no tiene ningún tema establecido.
+An empty string can represent that the channel has no topic set.
 
 ---
 
-## Consultar el tema
+## Querying the topic
 
-Cuando un cliente envía:
+When a client sends:
 
 ```irc
 TOPIC #general
 ```
 
-El servidor debe comprobar:
+The server must check:
 
-1. Que el cliente está registrado.
-2. Que se ha indicado el nombre del canal.
-3. Que el canal existe.
-4. Que el cliente pertenece al canal.
+1. That the client is registered.
+2. That the channel name has been indicated.
+3. That the channel exists.
+4. That the client belongs to the channel.
 
-Si el canal tiene un tema establecido, debe responder con:
+If the channel has a topic set, it must reply with:
 
 ```irc
-:server.name 332 roxana #general :Tema actual del canal
+:server.name 332 roxana #general :Current channel topic
 ```
 
-El código `332` corresponde a:
+Code `332` corresponds to:
 
 ```text
 RPL_TOPIC
 ```
 
-Si el canal no tiene ningún tema establecido, debe responder con:
+If the channel has no topic set, it must reply with:
 
 ```irc
 :server.name 331 roxana #general :No topic is set
 ```
 
-El código `331` corresponde a:
+Code `331` corresponds to:
 
 ```text
 RPL_NOTOPIC
 ```
 
-Consultar el tema no requiere que el usuario sea operador del canal.
+Querying the topic does not require the user to be a channel operator.
 
 ---
 
-## Modificar el tema
+## Changing the topic
 
-Cuando un cliente envía:
+When a client sends:
 
 ```irc
-TOPIC #general :Nuevo tema
+TOPIC #general :New topic
 ```
 
-El servidor debe comprobar:
+The server must check:
 
-1. Que el cliente está registrado.
-2. Que se ha indicado el nombre del canal.
-3. Que el canal existe.
-4. Que el cliente pertenece al canal.
-5. Si está activo el modo `+t`, que el cliente sea operador.
+1. That the client is registered.
+2. That the channel name has been indicated.
+3. That the channel exists.
+4. That the client belongs to the channel.
+5. If mode `+t` is enabled, that the client is an operator.
 
-Si todas las comprobaciones son correctas:
+If every check is correct:
 
-1. Se actualiza el tema almacenado en `Channel`.
-2. Se construye el mensaje con el prefijo completo del usuario.
-3. Se envía el cambio a todos los miembros del canal, incluido el emisor.
+1. The topic stored in `Channel` is updated.
+2. The message is built with the user’s full prefix.
+3. The change is sent to every channel member, including the sender.
 
-Ejemplo:
+Example:
 
 ```irc
-:roxana!roxana@localhost TOPIC #general :Nuevo tema
+:roxana!roxana@localhost TOPIC #general :New topic
 ```
 
 ---
 
-## Restricción del modo `+t`
+## Mode `+t` restriction
 
-El modo `+t` controla quién puede modificar el tema:
+Mode `+t` controls who can change the topic:
 
 ```text
-+t activado
++t enabled
     ↓
-solo los operadores pueden modificar el tema
+only operators can change the topic
 ```
 
 ```text
-+t desactivado
++t disabled
     ↓
-cualquier miembro del canal puede modificar el tema
+any channel member can change the topic
 ```
 
-El modo `+t` solamente afecta a la modificación del tema. Un miembro normal puede seguir consultándolo.
+Mode `+t` only affects changing the topic. A regular member can still query it.
 
 ---
 
-## Eliminación del tema
+## Removing the topic
 
-Cuando se recibe:
+When this is received:
 
 ```irc
 TOPIC #general :
 ```
 
-El servidor debe:
+The server must:
 
-1. Realizar las mismas comprobaciones que para modificar el tema.
-2. Guardar una cadena vacía como tema.
-3. Notificar el cambio a todos los miembros.
+1. Perform the same checks as for changing the topic.
+2. Store an empty string as the topic.
+3. Notify the change to every member.
 
-Ejemplo de notificación:
+Notification example:
 
 ```irc
 :roxana!roxana@localhost TOPIC #general :
 ```
 
-Después de eliminarlo, una nueva consulta debe producir:
+After removing it, a new query must produce:
 
 ```irc
 :server.name 331 roxana #general :No topic is set
@@ -184,17 +184,17 @@ Después de eliminarlo, una nueva consulta debe producir:
 
 ---
 
-## Errores relevantes
+## Relevant errors
 
 ### `461 ERR_NEEDMOREPARAMS`
 
-Se utiliza cuando no se proporciona el nombre del canal:
+Used when the channel name is not provided:
 
 ```irc
 TOPIC
 ```
 
-Respuesta:
+Reply:
 
 ```irc
 :server.name 461 roxana TOPIC :Not enough parameters
@@ -202,21 +202,21 @@ Respuesta:
 
 ### `403 ERR_NOSUCHCHANNEL`
 
-Se utiliza cuando el canal no existe:
+Used when the channel does not exist:
 
 ```irc
-TOPIC #inexistente
+TOPIC #nonexistent
 ```
 
-Respuesta:
+Reply:
 
 ```irc
-:server.name 403 roxana #inexistente :No such channel
+:server.name 403 roxana #nonexistent :No such channel
 ```
 
 ### `442 ERR_NOTONCHANNEL`
 
-Se utiliza cuando el usuario no pertenece al canal:
+Used when the user does not belong to the channel:
 
 ```irc
 :server.name 442 roxana #general :You're not on that channel
@@ -224,13 +224,13 @@ Se utiliza cuando el usuario no pertenece al canal:
 
 ### `482 ERR_CHANOPRIVSNEEDED`
 
-Se utiliza cuando:
+Used when:
 
-- El modo `+t` está activo.
-- El usuario intenta modificar el tema.
-- El usuario no es operador.
+- Mode `+t` is enabled.
+- The user tries to change the topic.
+- The user is not an operator.
 
-Respuesta:
+Reply:
 
 ```irc
 :server.name 482 roxana #general :You're not channel operator
@@ -238,7 +238,7 @@ Respuesta:
 
 ### `451 ERR_NOTREGISTERED`
 
-Se utiliza cuando un cliente no registrado intenta ejecutar el comando:
+Used when an unregistered client tries to run the command:
 
 ```irc
 :server.name 451 * :You have not registered
@@ -246,53 +246,53 @@ Se utiliza cuando un cliente no registrado intenta ejecutar el comando:
 
 ---
 
-## Flujo general
+## General flow
 
 ```text
-TOPIC recibido
+TOPIC received
     ↓
-¿Cliente registrado?
+Is the client registered?
     ├── no → 451 ERR_NOTREGISTERED
-    └── sí
+    └── yes
          ↓
-¿Se indicó un canal?
+Was a channel indicated?
     ├── no → 461 ERR_NEEDMOREPARAMS
-    └── sí
+    └── yes
          ↓
-¿Existe el canal?
+Does the channel exist?
     ├── no → 403 ERR_NOSUCHCHANNEL
-    └── sí
+    └── yes
          ↓
-¿El usuario pertenece al canal?
+Does the user belong to the channel?
     ├── no → 442 ERR_NOTONCHANNEL
-    └── sí
+    └── yes
          ↓
-¿Se proporcionó un nuevo tema?
-    ├── no → responder con 331 o 332
-    └── sí
+Was a new topic provided?
+    ├── no → reply with 331 or 332
+    └── yes
          ↓
-¿Está activo el modo +t?
-    ├── no → actualizar el tema
-    └── sí
+Is mode +t enabled?
+    ├── no → update the topic
+    └── yes
          ↓
-¿El usuario es operador?
+Is the user an operator?
     ├── no → 482 ERR_CHANOPRIVSNEEDED
-    └── sí → actualizar el tema
+    └── yes → update the topic
          ↓
-Notificar a todos los miembros
+Notify every member
 ```
 
 ---
 
-## Resultado esperado
+## Expected result
 
-Al terminar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-- Consultar el tema de un canal.
-- Informar cuando un canal no tiene tema.
-- Establecer y modificar el tema.
-- Eliminar el tema mediante un parámetro final vacío.
-- Aplicar correctamente la restricción del modo `+t`.
-- Rechazar cambios realizados por usuarios sin permisos.
-- Notificar los cambios a todos los miembros del canal.
-- Devolver respuestas numéricas coherentes ante cualquier error.
+- Query a channel’s topic.
+- Report when a channel has no topic.
+- Set and change the topic.
+- Remove the topic through an empty final parameter.
+- Apply the `+t` restriction correctly.
+- Reject changes made by users without permissions.
+- Notify changes to every channel member.
+- Return consistent numeric replies for any error.

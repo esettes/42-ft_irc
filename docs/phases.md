@@ -1,32 +1,32 @@
 ```text
 socket + poll
     ↓
-recepción de bytes
+byte reception
     ↓
-buffer por cliente
+per-client buffer
     ↓
-extracción de líneas completas
+extraction of complete lines
     ↓
-parser IRC
+IRC parser
     ↓
-validación y ejecución del comando
+command validation and execution
     ↓
-generación de respuestas
+reply generation
     ↓
-buffer de salida
+output buffer
     ↓
-send cuando poll indique POLLOUT
+send when poll reports POLLOUT
 ```
 
-## Fase 0 — Estudiar el protocolo y elegir cliente de referencia
+## Phase 0 — Study the protocol and choose a reference client
 
-- Elegir un cliente real para las pruebas: HexChat, irssi, WeeChat, etc.
-- Observar qué comandos envía nada más conectarse.
-- Definir exactamente qué comandos se van a soportar.
-- Definir el formato interno de mensajes.
-- Definir los códigos numéricos que se necesitarán.
+- Choose a real client for tests: HexChat, irssi, WeeChat, etc.
+- Observe which commands it sends as soon as it connects.
+- Define exactly which commands will be supported.
+- Define the internal message format.
+- Define the numeric codes that will be needed.
 
-El cliente probablemente enviará algo parecido a:
+The client will probably send something similar to:
 
 ```text
 CAP LS 302
@@ -34,27 +34,27 @@ PASS password
 NICK roxana
 USER roxana 0 * :Roxana
 ```
-Aunque `CAP` no sea una funcionalidad principal del subject, es habitual que los clientes reales lo envíen. El servidor debería reconocerlo o ignorarlo correctamente, no desconectarse.
+Even if `CAP` is not a main feature of the subject, real clients commonly send it. The server should recognize it or ignore it correctly, not disconnect.
 
-## Fase 1 — Esqueleto del proyecto
-- Comprobar que existen exactamente dos argumentos.
-- Validar el puerto.
-- Guardar la contraseña.
-- Construir el objeto Server.
-- Gestionar la finalización mediante señales.
-- Cerrar correctamente todos los file descriptors.
+## Phase 1 — Project skeleton
+- Check that there are exactly two arguments.
+- Validate the port.
+- Store the password.
+- Build the Server object.
+- Handle termination through signals.
+- Close every file descriptor correctly.
 
-Ejecución:
+Execution:
 
 ```bash
 ./ircserv port password
 ```
 
-## Fase 2 — Socket de escucha
+## Phase 2 — Listening socket
 
 - `socket()`.
-- `setsockopt()` con `SO_REUSEADDR`.
-- `fcntl()` para hacerlo no bloqueante.
+- `setsockopt()` with `SO_REUSEADDR`.
+- `fcntl()` to make it non-blocking.
 - `bind()`.
 - `listen()`.
 
@@ -62,17 +62,17 @@ Ejecución:
 nc 127.0.0.1 6667
 ``` 
 
-Debe poder establecer una conexión TCP.
+A TCP connection must be able to be established.
 
-## Fase 3 — Bucle principal con un único poll()
+## Phase 3 — Main loop with a single poll()
 
-El servidor debería mantener una colección similar a:
+The server should keep a collection similar to:
 
 ```cpp
 std::vector<pollfd> pollDescriptors;
 ```
 
-El primer descriptor será normalmente el socket de escucha:
+The first descriptor will normally be the listening socket:
 
 ```text
 pollDescriptors[0] → listening socket
@@ -81,28 +81,28 @@ pollDescriptors[2] → client B
 pollDescriptors[3] → client C
 ```
 
-El bucle principal será conceptualmente:
+The main loop will conceptually be:
 
 ```text
 poll()
- ├── listener tiene POLLIN → accept()
- ├── cliente tiene POLLIN → recv()
- ├── cliente tiene POLLOUT → send()
- └── error/desconexión → eliminar cliente
+ ├── listener has POLLIN → accept()
+ ├── client has POLLIN → recv()
+ ├── client has POLLOUT → send()
+ └── error/disconnection → remove client
  ```
 
- No se debe tener un poll() para aceptar, otro para leer y otro para escribir. Debe existir un único punto central que gestione todos los descriptores. El subject prohíbe hacer recv() o send() sin haber comprobado previamente la disponibilidad mediante poll() o equivalente.
+ There must not be one poll() for accepting, another for reading and another for writing. There must be a single central point that manages every descriptor. The subject forbids calling recv() or send() without first checking availability through poll() or an equivalent.
 
- Objetivo:
+ Goal:
 
-- Aceptar varios clientes.
-- No bloquearse.
-- Detectar desconexiones.
-- Eliminar correctamente sus descriptores.
+- Accept several clients.
+- Do not block.
+- Detect disconnections.
+- Remove their descriptors correctly.
 
-## Fase 4 — Modelo básico de cliente
+## Phase 4 — Basic client model
 
-Cuando se acepte una conexión, se crea un objeto ``Client``.
+When a connection is accepted, a ``Client`` object is created.
 ```text
 Client
  ├── socket file descriptor
@@ -116,7 +116,7 @@ Client
  └── channels joined
 ```
 
-Estados recomendados:
+Recommended states:
 ```cpp
 bool passwordAccepted;
 bool nicknameReceived;
@@ -124,66 +124,66 @@ bool usernameReceived;
 bool registered;
 ```
 
-Un cliente estará registrado cuando se cumpla:
+A client will be registered when this is satisfied:
 
 ```text
-PASS correcto
+correct PASS
     +
-NICK válido y disponible
+valid and available NICK
     +
-USER recibido
+USER received
 ```
 
-## Fase 5 — Reconstrucción del flujo TCP
+## Phase 5 — Reconstructing the TCP stream
 
-Cada cliente necesita un buffer persistente: ``std::string inputBuffer;``
+Each client needs a persistent buffer: ``std::string inputBuffer;``
 
-Cuando recv() devuelve datos:
-1. datos recibidos
-2. se añaden a inputBuffer
-3. se buscan terminadores de línea
-4. se extraen únicamente comandos completos
-5. los restos permanecen en inputBuffer
+When recv() returns data:
+1. received data
+2. they are appended to inputBuffer
+3. line terminators are searched
+4. only complete commands are extracted
+5. leftovers remain in inputBuffer
 
-Ejemplo de recepción fragmentada:
+Example of fragmented reception:
 ```text
-Primer recv:   "PRIV"
-Segundo recv:  "MSG #general :Hola"
-Tercer recv:   "\r\n"
+First recv:    "PRIV"
+Second recv:   "MSG #general :Hello"
+Third recv:    "\r\n"
 ```
-El parser no debe recibir esas tres partes. Debe recibir finalmente:
+The parser must not receive those three parts. It must finally receive:
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
-También puede pasar lo contrario:
+The opposite can also happen:
 ```text
 PASS secret\r\nNICK roxana\r\nUSER roxana 0 * :Roxana\r\n
 ```
-Todo eso puede llegar en un único `recv()`, por lo que se debe extraer tres comandos.
+All of that may arrive in a single `recv()`, so three commands must be extracted.
 
-- recv() no llama directamente al parser con lo que acaba de recibir.
-- recv() añade bytes al buffer.
-- El sistema de framing extrae líneas.
-- El parser recibe líneas completas.
+- recv() does not call the parser directly with what it just received.
+- recv() appends bytes to the buffer.
+- The framing system extracts lines.
+- The parser receives complete lines.
 
-## Fase 6 — Parser IRC
+## Phase 6 — IRC parser
 
-El parser debería transformar:
+The parser should transform:
 
-`PRIVMSG #general :Hola a todo el mundo`
+`PRIVMSG #general :Hello everyone`
 
-en algo asi:
+into something like:
 
 ```text
 Command
  ├── name: "PRIVMSG"
  ├── parameters:
  │    └── "#general"
- └── trailing: "Hola a todo el mundo"
+ └── trailing: "Hello everyone"
  ```
 
-Estructura sencilla:
+Simple structure:
 ```cpp
 class Command
 {
@@ -193,22 +193,22 @@ private:
 };
 ```
 
-#### Reglas fundamentales del parser
+#### Fundamental parser rules
 
-La línea:
-`COMMAND param1 param2 :texto con espacios`
+The line:
+`COMMAND param1 param2 :text with spaces`
 
-contiene:
-- Un nombre de comando.
-- Parámetros separados por espacios.
-- Un parámetro final opcional que empieza por `:`.
-- El parámetro final puede contener espacios.
+contains:
+- A command name.
+- Parameters separated by spaces.
+- An optional final parameter that starts with `:`.
+- The final parameter may contain spaces.
 
-Ejemplo:
+Example:
 
 `USER roxana 0 * :Roxana Example`
 
-Debe producir:
+Must produce:
 
 ```text
 command = USER
@@ -218,57 +218,57 @@ parameters[2] = *
 parameters[3] = Roxana Example
 ```
 
-## Fase 7 — Buffer de salida y escritura no bloqueante
+## Phase 7 — Output buffer and non-blocking writes
 
-No dar por hecho que una llamada a send() enviará todo el mensaje.
+Do not assume that a call to send() will send the whole message.
 
-Cada cliente debe tener:
+Each client must have:
 
 ```cpp
 std::string outputBuffer;
 ```
 
-Cuando se quiera responder:
+When you want to reply:
 
 ```text
-respuesta IRC
+IRC reply
     ↓
-se añade a outputBuffer
+it is appended to outputBuffer
     ↓
-se activa POLLOUT para ese cliente
+POLLOUT is enabled for that client
     ↓
-poll informa de que puede escribirse
+poll reports that writing is possible
     ↓
-send intenta enviar
+send tries to send
     ↓
-se eliminan solo los bytes realmente enviados
+only the bytes actually sent are removed
 ```
 
-Ejemplo:
+Example:
 
 ```text
-outputBuffer tiene 200 bytes
-send devuelve 80
-quedan 120 bytes pendientes
+outputBuffer has 200 bytes
+send returns 80
+120 bytes remain pending
 ```
 
-No se deben borrar los 200 bytes.
+The 200 bytes must not be deleted.
 
-Cuando el buffer quede vacío, se deja de solicitar POLLOUT, porque de lo contrario poll() puede despertarse constantemente y consumir CPU.
+When the buffer becomes empty, stop requesting POLLOUT, otherwise poll() may wake up constantly and consume CPU.
 
-## Fase 8 — Sistema de respuestas IRC
+## Phase 8 — IRC reply system
 
-Centralizar la construcción de mensajes.
+Centralize message construction.
 
-Formato habitual:
+Usual format:
 
 `:server.name 001 roxana :Welcome to the IRC Network`
 
-Mensaje emitido por un usuario:
+Message emitted by a user:
 
-`:roxana!username@hostname PRIVMSG #general :Hola`
+`:roxana!username@hostname PRIVMSG #general :Hello`
 
-Conviene crear funciones separadas:
+It is useful to create separate functions:
 
 ```text
 buildNumericReply()
@@ -277,7 +277,7 @@ sendReply()
 queueMessage()
 ```
 
-Implementar respuestas de error básicas:
+Implement basic error replies:
 
 ```text
 431 ERR_NONICKNAMEGIVEN
@@ -290,7 +290,7 @@ Implementar respuestas de error básicas:
 421 ERR_UNKNOWNCOMMAND
 ```
 
-## Fase 9 — Registro del cliente
+## Phase 9 — Client registration
 
 `PASS`
 
@@ -298,11 +298,11 @@ Implementar respuestas de error básicas:
 PASS secret
 ```
 
-Debe comprobar:
+Must check:
 
-- Que tiene parámetro.
-- Que el usuario todavía no está registrado.
-- Que la contraseña coincide.
+- That it has a parameter.
+- That the user is not registered yet.
+- That the password matches.
 
 `NICK`
 
@@ -310,14 +310,14 @@ Debe comprobar:
 NICK roxana
 ```
 
-Debe comprobar:
+Must check:
 
-- Que existe el parámetro.
-- Que el nickname tiene un formato válido.
-- Que no está siendo usado.
-- Que el cambio se propaga si el cliente ya estaba registrado.
+- That the parameter exists.
+- That the nickname has a valid format.
+- That it is not already in use.
+- That the change is propagated if the client was already registered.
 
-Se necesita búsqueda global eficiente:
+An efficient global lookup is needed:
 
 `nickname -> Client`
 
@@ -327,25 +327,25 @@ Se necesita búsqueda global eficiente:
 USER roxana 0 * :Roxana
 ```
 
-Debe guardar:
+Must store:
 
 - Username.
 - Real name.
-- Otros campos que decidáis conservar.
+- Other fields you decide to keep.
 
-Después de `PASS`, `NICK` o `USER`, llamar a una función similar a:
+After `PASS`, `NICK` or `USER`, call a function similar to:
 
 `void Server::tryRegisterClient(Client &client);`
 
-Cuando se completen los requisitos, se envía el mensaje de bienvenida una sola vez.
+When the requirements are complete, the welcome message is sent exactly once.
 
-## Fase 10 — Comandos auxiliares de conexión
+## Phase 10 — Auxiliary connection commands
 
-Un cliente real puede enviar:
+A real client may send:
 
 `PING :token`
 
-El servidor debe responder:
+The server must reply:
 
 `PONG :token`
 
@@ -353,21 +353,21 @@ El servidor debe responder:
 
 `QUIT`
 
-Debe:
+Must:
 
-- Notificar la salida a los clientes afectados.
-- Eliminar al usuario de todos sus canales.
-- Eliminarlo de listas de operadores e invitados.
-- Cerrar su descriptor.
-- Eliminar su nickname de los índices globales.
+- Notify the leave to the affected clients.
+- Remove the user from all of their channels.
+- Remove them from operator and invite lists.
+- Close their descriptor.
+- Remove their nickname from the global indexes.
 
 `CAP`
 
-Se puede implementar una respuesta mínima o finalizar correctamente la negociación. Como mínimo, no debe romper el registro.
+A minimal reply can be implemented, or the negotiation can be finished correctly. At a minimum, it must not break registration.
 
-## Fase 11 — Modelo de canal
+## Phase 11 — Channel model
 
-Crear clase `Channel`.
+Create the `Channel` class.
 
 ```text
 Channel
@@ -382,7 +382,7 @@ Channel
  └── user limit
  ```
 
-Estados correspondientes a los modos obligatorios:
+States corresponding to the mandatory modes:
 
 ```cpp
 bool inviteOnly;
@@ -393,43 +393,43 @@ std::string channelKey;
 std::size_t userLimit;
 ```
 
-El primer usuario que crea o entra en un canal vacío debería convertirse en operador.
+The first user who creates or enters an empty channel should become an operator.
 
-El servidor debería ser propietario de los canales:
+The server should own the channels:
 
 `channel name → Channel`
 
-No conviene que cada cliente posea copias independientes del mismo canal.
+It is not a good idea for each client to own independent copies of the same channel.
 
-## Fase 12 — `JOIN`
+## Phase 12 — `JOIN`
 
 `JOIN #general`
 
-El flujo debería ser:
+The flow should be:
 
 
 ```text
-¿Cliente registrado?
+Is the client registered?
     ↓
-¿Nombre de canal válido?
+Is the channel name valid?
     ↓
-¿Existe?
- ├── no → crearlo y hacer operador al primer usuario
- └── sí → comprobar restricciones
-              ├── modo +i
-              ├── clave +k
-              └── límite +l
+Does it exist?
+ ├── no → create it and make the first user an operator
+ └── yes → check restrictions
+              ├── mode +i
+              ├── key +k
+              └── limit +l
     ↓
-añadir cliente
+add the client
     ↓
-notificar JOIN
+notify JOIN
     ↓
-enviar topic
+send topic
     ↓
-enviar lista de miembros
+send member list
 ```
 
-Respuestas habituales:
+Usual replies:
 
 ```text
 331 RPL_NOTOPIC
@@ -438,7 +438,7 @@ Respuestas habituales:
 366 RPL_ENDOFNAMES
 ```
 
-Errores relevantes:
+Relevant errors:
 
 ```text
 403 ERR_NOSUCHCHANNEL
@@ -447,32 +447,32 @@ Errores relevantes:
 475 ERR_BADCHANNELKEY
 ```
 
-Aunque `PART` no aparezca como una de las funciones centrales del subject, implementarlo en este punto simplifica las pruebas y ofrece un comportamiento más natural con clientes reales.
+Even though `PART` does not appear as one of the subject’s central features, implementing it at this point simplifies tests and gives more natural behaviour with real clients.
 
-## Fase 13 — `PRIVMSG`
+## Phase 13 — `PRIVMSG`
 
-Primero implementar mensajes privados entre users:
+First implement private messages between users:
 
-`PRIVMSG roxana :Hola`
+`PRIVMSG roxana :Hello`
 
-Después mensajes a canales:
+Then messages to channels:
 
-`PRIVMSG #general :Hola a todos`
+`PRIVMSG #general :Hello everyone`
 
-Para un canal:
+For a channel:
 
-- El emisor debe pertenecer al canal.
-- El mensaje se reenvía a todos los demás miembros.
-- Normalmente no se reenvía al propio emisor.
-- Debe conservarse el prefijo del emisor.
+- The sender must belong to the channel.
+- The message is forwarded to every other member.
+- It is normally not forwarded back to the sender.
+- The sender’s prefix must be preserved.
 
-Ejemplo enviado a los receptores:
+Example sent to the receivers:
 
-`:roxana!roxana@localhost PRIVMSG #general :Hola a todos`
+`:roxana!roxana@localhost PRIVMSG #general :Hello everyone`
 
-El subject exige mensajes privados y que los mensajes dirigidos a un canal se distribuyan a los demás miembros.
+The subject requires private messages and that messages directed at a channel are distributed to the other members.
 
-Errores relevantes:
+Relevant errors:
 
 ```text
 401 ERR_NOSUCHNICK
@@ -482,67 +482,67 @@ Errores relevantes:
 412 ERR_NOTEXTTOSEND
 ```
 
-## Fase 14 — `TOPIC`
+## Phase 14 — `TOPIC`
 
-Implementar primero la consulta:
+First implement the query:
 
 `TOPIC #general`
 
-Y luego la modificación:
+And then the change:
 
-`TOPIC #general :Nuevo tema`
+`TOPIC #general :New topic`
 
-Reglas:
+Rules:
 
-- El canal debe existir.
-- El usuario debe pertenecer al canal.
-- Si está activo el modo +t, solo un operador puede cambiarlo.
-- Consultarlo no debería requerir ser operador.
-- El cambio debe notificarse al canal.
+- The channel must exist.
+- The user must belong to the channel.
+- If mode +t is active, only an operator can change it.
+- Querying it should not require being an operator.
+- The change must be notified to the channel.
 
-## Fase 15 — `INVITE`
+## Phase 15 — `INVITE`
 
-Formato:
+Format:
 
-`INVITE roxana #privado`
+`INVITE roxana #private`
 
-Comprobaciones:
+Checks:
 
-- El canal existe.
-- El usuario objetivo existe.
-- El emisor pertenece al canal.
-- El objetivo no pertenece ya al canal.
-- Cuando corresponda, el emisor debe ser operador.
-- El usuario invitado se añade a la colección de invitados.
+- The channel exists.
+- The target user exists.
+- The sender belongs to the channel.
+- The target does not already belong to the channel.
+- When required, the sender must be an operator.
+- The invited user is added to the invited collection.
 
-Después, un usuario invitado puede superar la restricción `+i` al hacer `JOIN`.
+Afterwards, an invited user can bypass the `+i` restriction when they `JOIN`.
 
-Una vez consumida la invitación, conviene eliminarla.
+Once the invitation has been consumed, it should be removed.
 
-## Fase 16 — `KICK`
+## Phase 16 — `KICK`
 
-Formato:
+Format:
 
-`KICK #general roxana :Motivo`
+`KICK #general roxana :Reason`
 
-Debe comprobar:
+Must check:
 
-- Canal existente.
-- Usuario objetivo existente.
-- Emisor perteneciente al canal.
-- Emisor operador.
-- Objetivo perteneciente al canal.
+- Existing channel.
+- Existing target user.
+- Sender belonging to the channel.
+- Sender is an operator.
+- Target belonging to the channel.
 
-Después:
+Then:
 
-- Notificar el KICK a todos los miembros.
-- Eliminar el objetivo del canal.
-- Eliminar sus privilegios de operador si los tenía.
-- Eliminar el canal si queda vacío.
+- Notify the KICK to every member.
+- Remove the target from the channel.
+- Remove their operator privileges if they had them.
+- Delete the channel if it becomes empty.
 
-## Fase 17 — `MODE`
+## Phase 17 — `MODE`
 
-El subject exige:
+The subject requires:
 
 ```text
 +i / -i    invite only
@@ -552,17 +552,17 @@ El subject exige:
 +l / -l    user limit
 ```
 
-El subject exige expresamente `KICK`, `INVITE`, `TOPIC` y estos cinco modos de canal.
+The subject expressly requires `KICK`, `INVITE`, `TOPIC` and these five channel modes.
 
-##### Orden recomendado
+##### Recommended order
 
-Primero:
+First:
 
 `MODE #channel`
 
-Para consultar los modos actuales.
+To query the current modes.
 
-Después:
+Then:
 
 ```text
 MODE #channel +i
@@ -571,7 +571,7 @@ MODE #channel +t
 MODE #channel -t
 ```
 
-Luego modos con argumentos:
+Then modes with arguments:
 
 ```text
 MODE #channel +k secret
@@ -582,7 +582,7 @@ MODE #channel +o roxana
 MODE #channel -o roxana
 ```
 
-Finalmente, combinaciones:
+Finally, combinations:
 
 ```text
 MODE #channel +it
@@ -591,78 +591,78 @@ MODE #channel -it
 MODE #channel +o-l roxana
 ```
 
-Es necesario recorrer la cadena de modos y consumir parámetros solo cuando el modo lo requiera.
+The mode string must be walked and parameters consumed only when the mode requires it.
 
-Ejemplo:
+Example:
 
 `MODE #general +kol password roxana 10`
 
-Cada letra tiene una semántica y un parámetro asociado distinto. Conviene implementar un parser específico de modos, separado del parser general de mensajes IRC.
+Each letter has a different meaning and associated parameter. It is useful to implement a dedicated mode parser, separate from the general IRC message parser.
 
-## Fase 18 — Limpieza de estado y desconexiones
+## Phase 18 — State cleanup and disconnections
 
-Al desconectarse un cliente hay que:
+When a client disconnects you must:
 
 ```text
-eliminarlo del poll
-eliminarlo del mapa de clientes
-eliminar su nickname
-eliminarlo de todos los canales
-eliminarlo de operators
-eliminarlo de invited
-notificar QUIT
-cerrar el fd
-borrar canales vacíos
+remove it from poll
+remove it from the client map
+remove its nickname
+remove it from every channel
+remove it from operators
+remove it from invited
+notify QUIT
+close the fd
+delete empty channels
 ```
 
-Hay que evitar:
+You must avoid:
 
-- Iteradores invalidados.
-- Punteros colgantes.
-- Clientes presentes en un canal después de ser destruidos.
-- Operadores que ya no son miembros.
-- Invitaciones a clientes inexistentes.
-- Canales vacíos que siguen almacenados.
+- Invalidated iterators.
+- Dangling pointers.
+- Clients present in a channel after being destroyed.
+- Operators who are no longer members.
+- Invitations to nonexistent clients.
+- Empty channels that remain stored.
 
-Es recomendable que toda desconexión pase por una única función:
+It is recommended that every disconnection go through a single function:
 
 ```cpp
 void Server::disconnectClient(int clientFileDescriptor, const std::string &reason);
 ```
 
-Nunca repartir parcialmente esta lógica entre `recv()`, `QUIT`, `KICK` y el destructor.
+Never split this logic partially across `recv()`, `QUIT`, `KICK` and the destructor.
 
-## Fase 19 — Robustez y tests adversos
+## Phase 19 — Robustness and adversarial tests
 
-#### Framing TCP
+#### TCP framing
 
 ```text
 "PRIV"
-"MSG #general :ho"
-"la\r"
+"MSG #general :he"
+"llo\r"
 "\n"
 ```
 
-#### Varios comandos juntos
+#### Several commands together
 
 `"NICK one\r\nUSER one 0 * :One\r\nJOIN #a\r\n"`
 
-#### Terminadores
+#### Terminators
 
 ```text
 \r\n
 \n
 ```
 
-Internamente se puede ser tolerante con `\n`, pero al enviar respuestas IRC se debe usar `\r\n`.
+Internally you can be tolerant with `\n`, but when sending IRC replies you must use `\r\n`.
 
-#### Escrituras parciales
+#### Partial writes
 
-Simular un buffer de salida grande y verificar que no se pierden bytes cuando `send()` devuelve menos bytes de los solicitados.
+Simulate a large output buffer and verify that bytes are not lost when `send()` returns fewer bytes than requested.
 
-#### Errores de protocolo
+#### Protocol errors
 
-Probar:
+Try:
 
 ```text
 NICK
@@ -675,39 +675,39 @@ MODE #channel +k
 KICK #channel nobody
 ```
 
-#### Desconexiones
+#### Disconnections
 
-- Desconectar un usuario que está en varios canales.
-- Desconectar al único operador.
-- Desconectar al último miembro.
-- Cerrar el cliente mientras tiene mensajes pendientes.
-- Recibir `POLLHUP`, `POLLERR` o `recv() == 0`.
+- Disconnect a user who is in several channels.
+- Disconnect the only operator.
+- Disconnect the last member.
+- Close the client while it has pending messages.
+- Receive `POLLHUP`, `POLLERR` or `recv() == 0`.
 
-#### Memoria
+#### Memory
 
 ```bash
 valgrind --leak-check=full --track-fds=yes ./ircserv 6667 secret
 ```
 
-## Clientes
+## Clients
 
-Irssi como cliente principal.
+Irssi as the main client.
 
-Es ligero, funciona en terminal y obliga a entender los comandos IRC reales, sin que una interfaz gráfica esconda fallos de el servidor. Además es muy cómodo para abrir varias conexiones y probar canales, operadores, kicks, invites, etc.
+It is lightweight, works in a terminal and forces you to understand the real IRC commands, without a graphical interface hiding server bugs. It is also very convenient for opening several connections and testing channels, operators, kicks, invites, and so on.
 
 ```bash
 sudo apt install irssi
 irssi
 ```
 
-Después levantar escucha:
+Then start a listener:
 
 ```bash
 nc -lv 127.0.0.1 6667
 ```
 
-Recomendaciones:
+Recommendations:
 
-- Irssi: cliente principal para desarrollar y evaluar comportamiento IRC.
-- netcat (`nc`): pruebas de bajo nivel del parser, comandos incompletos, CRLF, errores y casos límite.
-- HexChat: opcional, al final, para comprobar que también funciona con un cliente gráfico real.
+- Irssi: main client for developing and evaluating IRC behaviour.
+- netcat (`nc`): low-level tests of the parser, incomplete commands, CRLF, errors and edge cases.
+- HexChat: optional, at the end, to check that it also works with a real graphical client.

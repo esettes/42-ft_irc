@@ -1,36 +1,36 @@
-# Fase 7 — Buffer de salida y escritura no bloqueante
+# Phase 7 — Output buffer and non-blocking writes
 
-## Objetivo
+## Goal
 
-Implementar el envío de respuestas IRC de forma no bloqueante.
+Implement sending IRC replies in a non-blocking way.
 
-Una llamada a `send()` no garantiza que se envíen todos los datos solicitados. El sistema operativo puede aceptar solamente una parte, por lo que cada cliente debe mantener un buffer con los bytes que todavía están pendientes de envío.
+A call to `send()` does not guarantee that every requested byte is sent. The operating system may accept only part of it, so each client must keep a buffer with the bytes that are still pending to send.
 
-El flujo general será:
+The general flow will be:
 
 ```text
-Se genera una respuesta IRC
+An IRC reply is generated
         ↓
-Se añade al buffer de salida del cliente
+It is appended to the client’s output buffer
         ↓
-Se activa POLLOUT
+POLLOUT is enabled
         ↓
-poll() indica que el socket permite escribir
+poll() reports that the socket allows writing
         ↓
-send() intenta enviar los datos
+send() tries to send the data
         ↓
-Se eliminan únicamente los bytes enviados
+Only the sent bytes are removed
         ↓
-Si quedan datos, POLLOUT continúa activo
+If data remains, POLLOUT stays enabled
         ↓
-Si el buffer queda vacío, POLLOUT se desactiva
+If the buffer becomes empty, POLLOUT is disabled
 ```
 
 ---
 
-## 1. Añadir un buffer de salida a cada cliente
+## 1. Add an output buffer to each client
 
-Cada objeto `Client` debe almacenar su propio buffer de salida:
+Each `Client` object must store its own output buffer:
 
 ```cpp
 class Client
@@ -41,17 +41,17 @@ private:
 };
 ```
 
-El buffer debe pertenecer al cliente porque cada conexión puede enviar datos a una velocidad diferente.
+The buffer must belong to the client because each connection may send data at a different speed.
 
-Un cliente puede recibir inmediatamente todas las respuestas, mientras que otro puede tardar más y acumular temporalmente datos pendientes.
+One client may receive every reply immediately, while another may take longer and temporarily accumulate pending data.
 
 ---
 
-## 2. Añadir las respuestas al buffer
+## 2. Append replies to the buffer
 
-Cuando el servidor quiera enviar una respuesta, no debe asumir que puede llamar directamente a `send()` y enviar todo el mensaje.
+When the server wants to send a reply, it must not assume it can call `send()` directly and send the whole message.
 
-En su lugar, debe añadir la respuesta al buffer:
+Instead, it must append the reply to the buffer:
 
 ```cpp
 void Client::appendToOutputBuffer(const std::string &message)
@@ -60,7 +60,7 @@ void Client::appendToOutputBuffer(const std::string &message)
 }
 ```
 
-Ejemplo:
+Example:
 
 ```cpp
 client.appendToOutputBuffer(
@@ -68,15 +68,15 @@ client.appendToOutputBuffer(
 );
 ```
 
-Las respuestas IRC deben terminar con `\r\n`.
+IRC replies must end with `\r\n`.
 
-Si el cliente ya tiene información pendiente, la nueva respuesta se añade al final del buffer para conservar el orden de los mensajes.
+If the client already has pending information, the new reply is appended to the end of the buffer to preserve message order.
 
 ---
 
-## 3. Consultar el buffer de salida
+## 3. Query the output buffer
 
-La clase `Client` debe permitir consultar los datos pendientes:
+The `Client` class must allow querying the pending data:
 
 ```cpp
 const std::string &Client::getOutputBuffer() const
@@ -85,7 +85,7 @@ const std::string &Client::getOutputBuffer() const
 }
 ```
 
-También resulta útil disponer de una función que indique si existen datos pendientes:
+It is also useful to have a function that indicates whether pending data exists:
 
 ```cpp
 bool Client::hasPendingOutput() const
@@ -96,11 +96,11 @@ bool Client::hasPendingOutput() const
 
 ---
 
-## 4. Activar `POLLOUT` cuando existan datos pendientes
+## 4. Enable `POLLOUT` when there is pending data
 
-`POLLOUT` indica que el socket está preparado para aceptar datos mediante `send()`.
+`POLLOUT` indicates that the socket is ready to accept data through `send()`.
 
-Solo debe activarse cuando el cliente tenga información pendiente:
+It must only be enabled when the client has pending information:
 
 ```cpp
 pollFileDescriptor.events = POLLIN;
@@ -109,25 +109,25 @@ if (client.hasPendingOutput())
     pollFileDescriptor.events |= POLLOUT;
 ```
 
-Los eventos de un cliente tendrán estas funciones:
+A client’s events will have these functions:
 
-- `POLLIN`: indica que existen datos disponibles para leer.
-- `POLLOUT`: indica que se puede intentar enviar información pendiente.
+- `POLLIN`: indicates that there is data available to read.
+- `POLLOUT`: indicates that sending pending information can be attempted.
 
-Activar `POLLOUT` no garantiza que todo el buffer pueda enviarse. Únicamente indica que tiene sentido intentar llamar a `send()`.
+Enabling `POLLOUT` does not guarantee that the whole buffer can be sent. It only indicates that it makes sense to try calling `send()`.
 
 ---
 
-## 5. Comprobar `POLLOUT` después de `poll()`
+## 5. Check `POLLOUT` after `poll()`
 
-Después de ejecutar `poll()`, debe comprobarse el campo `revents`:
+After running `poll()`, the `revents` field must be checked:
 
 ```cpp
 if (pollFileDescriptor.revents & POLLOUT)
     handleClientWrite(pollFileDescriptor.fd);
 ```
 
-La función encargada de la escritura debe intentar enviar el contenido actual del buffer:
+The function in charge of writing must try to send the current buffer content:
 
 ```cpp
 ssize_t sentByteCount = send(
@@ -138,23 +138,23 @@ ssize_t sentByteCount = send(
 );
 ```
 
-El valor devuelto por `send()` indica cuántos bytes se han enviado realmente.
+The value returned by `send()` indicates how many bytes were actually sent.
 
 ---
 
-## 6. Gestionar envíos parciales
+## 6. Handle partial sends
 
-`send()` puede enviar menos bytes de los solicitados.
+`send()` may send fewer bytes than requested.
 
-Ejemplo:
+Example:
 
 ```text
-Tamaño inicial del outputBuffer: 200 bytes
-Bytes enviados por send():       80 bytes
-Bytes que quedan pendientes:     120 bytes
+Initial outputBuffer size: 200 bytes
+Bytes sent by send():      80 bytes
+Bytes still pending:       120 bytes
 ```
 
-En este caso deben eliminarse únicamente los primeros 80 bytes:
+In this case only the first 80 bytes must be removed:
 
 ```cpp
 void Client::removeSentOutput(std::size_t sentByteCount)
@@ -169,7 +169,7 @@ void Client::removeSentOutput(std::size_t sentByteCount)
 }
 ```
 
-Uso:
+Use:
 
 ```cpp
 if (sentByteCount > 0)
@@ -180,15 +180,15 @@ if (sentByteCount > 0)
 }
 ```
 
-Nunca debe vaciarse todo el buffer sin comprobar cuántos bytes ha enviado realmente `send()`.
+The whole buffer must never be emptied without checking how many bytes `send()` actually sent.
 
 ---
 
-## 7. Gestionar los resultados de `send()`
+## 7. Handle the results of `send()`
 
-### Envío correcto
+### Successful send
 
-Si `send()` devuelve un valor mayor que cero, esa cantidad de bytes se ha enviado correctamente:
+If `send()` returns a value greater than zero, that number of bytes has been sent correctly:
 
 ```cpp
 if (sentByteCount > 0)
@@ -201,9 +201,9 @@ if (sentByteCount > 0)
 }
 ```
 
-### Socket temporalmente no disponible
+### Socket temporarily unavailable
 
-Si `send()` devuelve `-1` y `errno` contiene `EAGAIN` o `EWOULDBLOCK`, el socket no puede aceptar más datos en ese momento:
+If `send()` returns `-1` and `errno` contains `EAGAIN` or `EWOULDBLOCK`, the socket cannot accept more data at that moment:
 
 ```cpp
 if (
@@ -215,24 +215,24 @@ if (
 }
 ```
 
-No debe cerrarse la conexión ni modificarse el buffer.
+The connection must not be closed and the buffer must not be modified.
 
-Los datos permanecerán almacenados y el servidor volverá a intentarlo cuando `poll()` indique de nuevo `POLLOUT`.
+The data will stay stored and the server will try again when `poll()` reports `POLLOUT` again.
 
-### Llamada interrumpida por una señal
+### Call interrupted by a signal
 
-Si `errno` contiene `EINTR`, la llamada fue interrumpida por una señal:
+If `errno` contains `EINTR`, the call was interrupted by a signal:
 
 ```cpp
 if (sentByteCount == -1 && errno == EINTR)
     return;
 ```
 
-Tampoco deben eliminarse datos del buffer.
+Data must not be removed from the buffer either.
 
-### Error definitivo
+### Fatal error
 
-Cualquier otro error normalmente indica un problema real con la conexión:
+Any other error normally indicates a real problem with the connection:
 
 ```cpp
 if (sentByteCount == -1)
@@ -243,19 +243,19 @@ if (sentByteCount == -1)
 }
 ```
 
-La eliminación del cliente debe realizarse de forma segura, evitando invalidar iteradores que todavía estén en uso.
+Removing the client must be done safely, avoiding invalidating iterators that are still in use.
 
 ---
 
-## 8. Desactivar `POLLOUT` cuando el buffer quede vacío
+## 8. Disable `POLLOUT` when the buffer becomes empty
 
-Cuando se hayan enviado todos los datos, debe dejar de vigilarse `POLLOUT`:
+When all data has been sent, `POLLOUT` must stop being watched:
 
 ```cpp
 pollFileDescriptor.events &= ~POLLOUT;
 ```
 
-Otra opción es reconstruir los eventos del cliente en cada iteración:
+Another option is to rebuild the client’s events on each iteration:
 
 ```cpp
 pollFileDescriptor.events = POLLIN;
@@ -264,23 +264,23 @@ if (client.hasPendingOutput())
     pollFileDescriptor.events |= POLLOUT;
 ```
 
-Esto evita mantener `POLLOUT` activo cuando no hay nada que enviar.
+This avoids keeping `POLLOUT` enabled when there is nothing to send.
 
-Un socket suele estar disponible para escribir durante la mayor parte del tiempo. Si `POLLOUT` permanece siempre activo, `poll()` puede despertarse constantemente aunque no exista trabajo pendiente.
+A socket is usually available for writing most of the time. If `POLLOUT` stays always enabled, `poll()` may wake up constantly even if there is no pending work.
 
-Esto puede provocar:
+This can cause:
 
-- Consumo innecesario de CPU.
-- Iteraciones inútiles del bucle principal.
-- Un bucle de espera activa.
+- Unnecessary CPU use.
+- Useless iterations of the main loop.
+- A busy-wait loop.
 
 ---
 
-## 9. Evitar `SIGPIPE`
+## 9. Avoid `SIGPIPE`
 
-Si se llama a `send()` sobre un socket cuya conexión ha sido cerrada, el proceso puede recibir la señal `SIGPIPE`.
+If `send()` is called on a socket whose connection has been closed, the process may receive the `SIGPIPE` signal.
 
-En Linux puede evitarse utilizando `MSG_NOSIGNAL`:
+On Linux this can be avoided by using `MSG_NOSIGNAL`:
 
 ```cpp
 ssize_t sentByteCount = send(
@@ -291,19 +291,19 @@ ssize_t sentByteCount = send(
 );
 ```
 
-De esta forma, `send()` devolverá un error que podrá gestionarse sin que el servidor termine inesperadamente.
+This way `send()` will return an error that can be handled without the server terminating unexpectedly.
 
 ---
 
-## 10. Limitar el tamaño del buffer de salida
+## 10. Limit the output buffer size
 
-Es recomendable establecer un tamaño máximo para impedir que un cliente lento acumule mensajes indefinidamente:
+It is recommended to set a maximum size to prevent a slow client from accumulating messages indefinitely:
 
 ```cpp
 const std::size_t MAXIMUM_OUTPUT_BUFFER_SIZE = 65536;
 ```
 
-Antes de añadir una respuesta:
+Before appending a reply:
 
 ```cpp
 if (
@@ -321,11 +321,11 @@ if (
 client.appendToOutputBuffer(message);
 ```
 
-Esto protege al servidor frente a clientes que no leen las respuestas y provocan un crecimiento continuo del consumo de memoria.
+This protects the server against clients that do not read replies and cause continuous memory growth.
 
 ---
 
-## Estructura mínima recomendada para `Client`
+## Recommended minimum structure for `Client`
 
 ```cpp
 class Client
@@ -351,37 +351,37 @@ public:
 
 ---
 
-## Responsabilidades del servidor
+## Server responsibilities
 
-El servidor debe encargarse de:
+The server must take care of:
 
-1. Generar la respuesta IRC.
-2. Añadirla al buffer de salida del cliente.
-3. Activar `POLLOUT`.
-4. Esperar a que `poll()` indique que el socket permite escribir.
-5. Llamar a `send()`.
-6. Eliminar únicamente los bytes realmente enviados.
-7. Mantener `POLLOUT` activo si todavía quedan datos.
-8. Desactivar `POLLOUT` cuando el buffer quede vacío.
-9. Gestionar `EAGAIN`, `EWOULDBLOCK` y `EINTR`.
-10. Desconectar al cliente ante errores definitivos.
-11. Limitar el tamaño máximo del buffer.
+1. Generating the IRC reply.
+2. Appending it to the client’s output buffer.
+3. Enabling `POLLOUT`.
+4. Waiting for `poll()` to report that the socket allows writing.
+5. Calling `send()`.
+6. Removing only the bytes that were actually sent.
+7. Keeping `POLLOUT` enabled if data still remains.
+8. Disabling `POLLOUT` when the buffer becomes empty.
+9. Handling `EAGAIN`, `EWOULDBLOCK` and `EINTR`.
+10. Disconnecting the client on fatal errors.
+11. Limiting the maximum buffer size.
 
 ---
 
-## Resultado esperado de la fase
+## Expected result of the phase
 
-Al terminar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-- Mantener un buffer de salida independiente para cada cliente.
-- Añadir respuestas al buffer sin bloquear el servidor.
-- Enviar información únicamente cuando `poll()` indique `POLLOUT`.
-- Gestionar correctamente envíos parciales.
-- Conservar los bytes que todavía no se hayan enviado.
-- Reintentar los envíos pendientes.
-- Desactivar `POLLOUT` cuando el buffer quede vacío.
-- Evitar consumo innecesario de CPU.
-- Gestionar correctamente los errores de `send()`.
-- Evitar que `SIGPIPE` cierre inesperadamente el servidor.
-- Limitar la memoria consumida por clientes lentos.
-- Mantener el orden correcto de las respuestas IRC.
+- Keep an independent output buffer for each client.
+- Append replies to the buffer without blocking the server.
+- Send information only when `poll()` reports `POLLOUT`.
+- Handle partial sends correctly.
+- Keep the bytes that have not been sent yet.
+- Retry pending sends.
+- Disable `POLLOUT` when the buffer becomes empty.
+- Avoid unnecessary CPU use.
+- Handle `send()` errors correctly.
+- Prevent `SIGPIPE` from closing the server unexpectedly.
+- Limit the memory consumed by slow clients.
+- Keep the correct order of IRC replies.

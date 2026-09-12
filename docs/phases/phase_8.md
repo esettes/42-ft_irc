@@ -1,104 +1,104 @@
-# Fase 8 — Sistema centralizado de respuestas IRC
+# Phase 8 — Centralized IRC reply system
 
-## Objetivo
+## Goal
 
-Implementar un sistema común para construir y enviar respuestas IRC de forma coherente.
+Implement a common system to build and send IRC replies consistently.
 
-Los distintos handlers de comandos no deben construir manualmente mensajes completos ni llamar directamente a `send()`. Su responsabilidad será decidir qué respuesta corresponde y añadirla al buffer de salida del cliente.
+The different command handlers must not manually build complete messages or call `send()` directly. Their responsibility will be to decide which reply is appropriate and append it to the client’s output buffer.
 
-El flujo recomendado es:
+The recommended flow is:
 
 ```text
-handler del comando
+command handler
         ↓
-construcción de la respuesta IRC
+construction of the IRC reply
         ↓
-añadir "\r\n"
+append "\r\n"
         ↓
-guardar en outputBuffer
+store in outputBuffer
         ↓
-activar POLLOUT
+enable POLLOUT
         ↓
-enviar desde el bucle de poll()
+send from the poll() loop
 ```
 
-Esta fase se apoya en el buffer de salida implementado en la fase 7.
+This phase builds on the output buffer implemented in phase 7.
 
 ---
 
-## 1. Formato general de un mensaje IRC
+## 1. General format of an IRC message
 
-Un mensaje IRC puede tener la siguiente estructura:
+An IRC message can have the following structure:
 
 ```text
-[:prefijo] COMANDO [parámetros] [:trailing]\r\n
+[:prefix] COMMAND [parameters] [:trailing]\r\n
 ```
 
-Ejemplo de respuesta numérica enviada por el servidor:
+Example of a numeric reply sent by the server:
 
 ```text
 :server.name 001 roxana :Welcome to the IRC Network\r\n
 ```
 
-Sus partes son:
+Its parts are:
 
 ```text
 :server.name
 ```
 
-Prefijo del servidor que origina el mensaje.
+Prefix of the server that originates the message.
 
 ```text
 001
 ```
 
-Código numérico de la respuesta.
+Numeric code of the reply.
 
 ```text
 roxana
 ```
 
-Nickname del cliente al que se dirige la respuesta.
+Nickname of the client the reply is directed to.
 
 ```text
 :Welcome to the IRC Network
 ```
 
-Último parámetro o `trailing`. Puede contener espacios porque comienza con `:`.
+Last parameter or `trailing`. It may contain spaces because it starts with `:`.
 
 ---
 
-## 2. Mensajes originados por clientes
+## 2. Messages originated by clients
 
-Cuando un comando realizado por un cliente debe enviarse a otros usuarios, el mensaje debe incluir el prefijo completo del cliente.
+When a command performed by a client must be sent to other users, the message must include the client’s full prefix.
 
-Formato habitual:
-
-```text
-:nickname!username@hostname COMMAND parámetros :trailing\r\n
-```
-
-Ejemplo:
+Usual format:
 
 ```text
-:roxana!username@hostname PRIVMSG #general :Hola\r\n
+:nickname!username@hostname COMMAND parameters :trailing\r\n
 ```
 
-El prefijo permite identificar quién originó el mensaje.
+Example:
 
-Sus componentes son:
+```text
+:roxana!username@hostname PRIVMSG #general :Hello\r\n
+```
 
-- `nickname`: nickname actual del cliente.
-- `username`: username recibido mediante `USER`.
-- `hostname`: dirección o nombre asociado a la conexión.
+The prefix lets you identify who originated the message.
+
+Its components are:
+
+- `nickname`: the client’s current nickname.
+- `username`: username received through `USER`.
+- `hostname`: address or name associated with the connection.
 
 ---
 
-## 3. Centralizar la construcción de mensajes
+## 3. Centralize message construction
 
-No se debe repetir la construcción de prefijos y respuestas en todos los handlers.
+Prefix and reply construction must not be repeated in every handler.
 
-En lugar de hacer esto:
+Instead of doing this:
 
 ```cpp
 client.queueOutput(
@@ -107,7 +107,7 @@ client.queueOutput(
 );
 ```
 
-en cada comando, conviene disponer de funciones reutilizables como:
+in each command, reusable functions such as these should be available:
 
 ```cpp
 std::string buildNumericReply(
@@ -138,15 +138,15 @@ void queueMessage(
 );
 ```
 
-Los nombres y responsabilidades exactas pueden adaptarse a la arquitectura del proyecto.
+The exact names and responsibilities can be adapted to the project architecture.
 
 ---
 
-## 4. Construcción de respuestas numéricas
+## 4. Building numeric replies
 
-La función `buildNumericReply()` debe crear respuestas con un formato uniforme.
+The `buildNumericReply()` function must create replies with a uniform format.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 std::string Server::buildNumericReply(
@@ -157,28 +157,28 @@ std::string Server::buildNumericReply(
 ) const;
 ```
 
-Debe encargarse de:
+It must take care of:
 
-1. Añadir el prefijo del servidor.
-2. Convertir el código numérico a tres cifras.
-3. Añadir el destinatario.
-4. Añadir los parámetros específicos de la respuesta.
-5. Añadir el mensaje final precedido por `:`.
-6. Finalizar la respuesta con `\r\n`.
+1. Adding the server prefix.
+2. Converting the numeric code to three digits.
+3. Adding the target.
+4. Adding the reply-specific parameters.
+5. Adding the final message preceded by `:`.
+6. Ending the reply with `\r\n`.
 
-Formato resultante:
+Resulting format:
 
 ```text
 :<server-name> <numeric-code> <target> [parameters] :<message>\r\n
 ```
 
-Por ejemplo:
+For example:
 
 ```text
 :irc.example.net 433 roxana roxy :Nickname is already in use\r\n
 ```
 
-El código numérico debe conservar siempre tres cifras:
+The numeric code must always keep three digits:
 
 ```text
 001
@@ -187,7 +187,7 @@ El código numérico debe conservar siempre tres cifras:
 464
 ```
 
-No debe enviarse como:
+It must not be sent as:
 
 ```text
 1
@@ -198,48 +198,48 @@ No debe enviarse como:
 
 ---
 
-## 5. Destinatario de una respuesta numérica
+## 5. Target of a numeric reply
 
-Normalmente, una respuesta numérica utiliza como destinatario el nickname del cliente:
+Normally a numeric reply uses the client’s nickname as the target:
 
 ```text
 :server.name 421 roxana TEST :Unknown command\r\n
 ```
 
-Sin embargo, el cliente puede no tener todavía un nickname válido. En ese caso se puede utilizar `*` como destinatario:
+However, the client may not have a valid nickname yet. In that case `*` can be used as the target:
 
 ```text
 :server.name 431 * :No nickname given\r\n
 ```
 
-Conviene centralizar esta decisión:
+It is useful to centralize this decision:
 
 ```text
-si el cliente tiene nickname
-    usar su nickname
-si todavía no tiene nickname
-    usar "*"
+if the client has a nickname
+    use its nickname
+if it does not have a nickname yet
+    use "*"
 ```
 
-Esto evita que cada handler tenga que comprobarlo por separado.
+This avoids each handler having to check it separately.
 
 ---
 
-## 6. Construcción del prefijo de cliente
+## 6. Building the client prefix
 
-La función `buildClientPrefix()` debe generar el prefijo de un usuario:
+The `buildClientPrefix()` function must generate a user’s prefix:
 
 ```text
 :nickname!username@hostname
 ```
 
-Ejemplo:
+Example:
 
 ```text
 :roxana!username@127.0.0.1
 ```
 
-Este prefijo se utilizará en mensajes como:
+This prefix will be used in messages such as:
 
 - `PRIVMSG`
 - `JOIN`
@@ -250,21 +250,21 @@ Este prefijo se utilizará en mensajes como:
 - `INVITE`
 - `TOPIC`
 
-Ejemplo:
+Example:
 
 ```text
 :roxana!username@127.0.0.1 JOIN #general\r\n
 ```
 
-Centralizar este prefijo es importante porque cualquier cambio futuro en su formato solo tendrá que hacerse en un único lugar.
+Centralizing this prefix is important because any future change in its format will only have to be made in one place.
 
 ---
 
-## 7. Añadir mensajes al buffer de salida
+## 7. Append messages to the output buffer
 
-La función `queueMessage()` debe añadir el mensaje al `outputBuffer` del cliente.
+The `queueMessage()` function must append the message to the client’s `outputBuffer`.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 void Server::queueMessage(
@@ -273,14 +273,14 @@ void Server::queueMessage(
 );
 ```
 
-Sus responsabilidades deberían ser:
+Its responsibilities should be:
 
-1. Recibir el mensaje IRC ya construido.
-2. Comprobar o garantizar que termina en `\r\n`.
-3. Añadirlo al buffer de salida del cliente.
-4. Activar `POLLOUT` para su socket.
+1. Receive the already built IRC message.
+2. Check or guarantee that it ends with `\r\n`.
+3. Append it to the client’s output buffer.
+4. Enable `POLLOUT` for its socket.
 
-No debe asumir que el mensaje será enviado inmediatamente.
+It must not assume that the message will be sent immediately.
 
 ```text
 queueMessage()
@@ -292,27 +292,27 @@ POLLOUT
 send()
 ```
 
-La escritura real debe seguir realizándose desde el bucle de eventos cuando `poll()` indique que el socket permite escribir.
+The actual write must still be performed from the event loop when `poll()` reports that the socket allows writing.
 
 ---
 
-## 8. Diferencia entre `sendReply()` y `queueMessage()`
+## 8. Difference between `sendReply()` and `queueMessage()`
 
-Una posible separación de responsabilidades es:
+A possible separation of responsibilities is:
 
 ### `buildNumericReply()`
 
-Construye el texto de una respuesta numérica, pero no modifica el cliente.
+Builds the text of a numeric reply, but does not modify the client.
 
 ```text
-datos de respuesta
+reply data
         ↓
-std::string con formato IRC
+std::string with IRC format
 ```
 
 ### `buildClientPrefix()`
 
-Construye el prefijo correspondiente a un cliente.
+Builds the prefix corresponding to a client.
 
 ```text
 Client
@@ -322,19 +322,19 @@ Client
 
 ### `sendReply()`
 
-Solicita la creación y el encolado de una respuesta numérica.
+Requests the creation and queueing of a numeric reply.
 
 ```text
-código + parámetros + mensaje
+code + parameters + message
               ↓
       buildNumericReply()
               ↓
         queueMessage()
 ```
 
-Aunque se llame `sendReply()`, no debería llamar directamente a `send()` si el servidor utiliza escritura no bloqueante.
+Even if it is called `sendReply()`, it should not call `send()` directly if the server uses non-blocking writes.
 
-Un nombre más explícito también podría ser:
+A more explicit name could also be:
 
 ```cpp
 queueNumericReply();
@@ -342,9 +342,9 @@ queueNumericReply();
 
 ### `queueMessage()`
 
-Añade cualquier mensaje IRC al buffer de salida del cliente.
+Appends any IRC message to the client’s output buffer.
 
-Puede utilizarse tanto para respuestas numéricas como para mensajes normales:
+It can be used both for numeric replies and for normal messages:
 
 ```text
 001
@@ -357,94 +357,94 @@ PING
 
 ---
 
-## 9. Terminación correcta de mensajes
+## 9. Correct message termination
 
-Todos los mensajes IRC enviados por el servidor deben terminar en:
+Every IRC message sent by the server must end with:
 
 ```text
 \r\n
 ```
 
-No se debe utilizar solamente:
+Only this must not be used:
 
 ```text
 \n
 ```
 
-Ejemplo correcto:
+Correct example:
 
 ```cpp
 ":server.name 001 roxana :Welcome to the IRC Network\r\n"
 ```
 
-Conviene decidir una única responsabilidad:
+A single responsibility should be decided:
 
-- Las funciones de construcción añaden `\r\n`.
-- O `queueMessage()` añade `\r\n`.
+- The construction functions append `\r\n`.
+- Or `queueMessage()` appends `\r\n`.
 
-No se deben mezclar ambas estrategias, porque podrían producirse mensajes con terminadores duplicados:
+The two strategies must not be mixed, because messages with duplicated terminators could be produced:
 
 ```text
 \r\n\r\n
 ```
 
-Una opción sencilla es que todas las funciones `build...()` devuelvan mensajes completos, incluyendo `\r\n`.
+A simple option is that every `build...()` function returns complete messages, including `\r\n`.
 
 ---
 
-# Respuestas de error básicas
+# Basic error replies
 
 ## 10. `431 ERR_NONICKNAMEGIVEN`
 
-Se utiliza cuando el comando `NICK` no incluye un nickname.
+Used when the `NICK` command does not include a nickname.
 
-Comando recibido:
+Received command:
 
 ```text
 NICK
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 431 * :No nickname given\r\n
 ```
 
-Condición:
+Condition:
 
 ```text
-el comando es NICK
+the command is NICK
     +
-no contiene el parámetro del nickname
+it does not contain the nickname parameter
 ```
 
 ---
 
 ## 11. `432 ERR_ERRONEUSNICKNAME`
 
-Se utiliza cuando el nickname solicitado tiene un formato inválido.
+Used when the requested nickname has an invalid format.
 
-Ejemplo:
+Example:
 
 ```text
 NICK invalid@name
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 432 * invalid@name :Erroneous nickname\r\n
 ```
 
-Se debe validar, como mínimo:
+At a minimum, it must be validated that:
 
-- Que no esté vacío.
-- Que no empiece por un número.
-- Que no contenga espacios.
-- Que no contenga caracteres incompatibles con las reglas de nickname elegidas.
-- Que no supere el límite definido por el servidor.
+- It is not empty.
+- It does not start with a number.
+- It does not contain spaces.
+- It does not contain characters incompatible with the chosen nickname rules.
+- It does not exceed the limit defined by the server.
 
-La validación del nickname debería estar centralizada en una función como:
+Nickname validation should be centralized in a function such as:
 
 ```cpp
 bool isValidNickname(const std::string &nickname) const;
@@ -454,77 +454,77 @@ bool isValidNickname(const std::string &nickname) const;
 
 ## 12. `433 ERR_NICKNAMEINUSE`
 
-Se utiliza cuando otro cliente ya está utilizando el nickname solicitado.
+Used when another client is already using the requested nickname.
 
-Comando recibido:
+Received command:
 
 ```text
 NICK roxana
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 433 * roxana :Nickname is already in use\r\n
 ```
 
-Si el cliente ya tenía un nickname anterior, puede utilizarse como destinatario:
+If the client already had a previous nickname, it can be used as the target:
 
 ```text
 :server.name 433 previousNick roxana :Nickname is already in use\r\n
 ```
 
-La búsqueda debe ser coherente con la comparación de nicknames utilizada por el servidor.
+The lookup must be consistent with the nickname comparison used by the server.
 
 ---
 
 ## 13. `451 ERR_NOTREGISTERED`
 
-Se utiliza cuando un cliente intenta ejecutar un comando que requiere registro antes de completar el proceso de conexión.
+Used when a client tries to run a command that requires registration before completing the connection process.
 
-Ejemplo:
+Example:
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 451 * :You have not registered\r\n
 ```
 
-El servidor debe comprobar si el cliente ha completado:
+The server must check whether the client has completed:
 
 ```text
-PASS válido
+valid PASS
     +
-NICK válido
+valid NICK
     +
-USER recibido
+USER received
 ```
 
-Esta comprobación debería hacerse antes de ejecutar comandos que requieren un cliente registrado.
+This check should be done before executing commands that require a registered client.
 
 ---
 
 ## 14. `461 ERR_NEEDMOREPARAMS`
 
-Se utiliza cuando un comando no contiene todos los parámetros obligatorios.
+Used when a command does not contain every mandatory parameter.
 
-Ejemplo:
+Example:
 
 ```text
 PRIVMSG
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 461 roxana PRIVMSG :Not enough parameters\r\n
 ```
 
-Otros ejemplos que pueden producir este error:
+Other examples that may produce this error:
 
 ```text
 PASS
@@ -533,9 +533,9 @@ JOIN
 KICK #general
 ```
 
-Cada handler debe comprobar su cantidad mínima de parámetros antes de acceder al vector de parámetros.
+Each handler must check its minimum number of parameters before accessing the parameter vector.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 if (command.getParameters().size() < requiredParameterCount)
@@ -550,123 +550,123 @@ if (command.getParameters().size() < requiredParameterCount)
 }
 ```
 
-Esto también evita accesos fuera de rango.
+This also avoids out-of-range accesses.
 
 ---
 
 ## 15. `462 ERR_ALREADYREGISTERED`
 
-Se utiliza cuando un cliente registrado intenta repetir una operación que solo pertenece al proceso de registro.
+Used when a registered client tries to repeat an operation that only belongs to the registration process.
 
-Ejemplo:
+Example:
 
 ```text
 USER anotherUser 0 * :Another Name
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 462 roxana :You may not reregister\r\n
 ```
 
-Debe utilizarse especialmente cuando un cliente ya registrado intenta volver a enviar:
+It must be used especially when an already registered client tries to send again:
 
 ```text
 USER
 ```
 
-También puede aplicarse a otros comandos de registro según las decisiones del servidor.
+It can also be applied to other registration commands according to the server’s decisions.
 
-No debe impedirse necesariamente que un cliente cambie su nickname mediante `NICK`, porque IRC permite cambiarlo después del registro.
+A client must not necessarily be prevented from changing its nickname through `NICK`, because IRC allows changing it after registration.
 
 ---
 
 ## 16. `464 ERR_PASSWDMISMATCH`
 
-Se utiliza cuando la contraseña recibida mediante `PASS` no coincide con la contraseña del servidor.
+Used when the password received through `PASS` does not match the server password.
 
-Comando recibido:
+Received command:
 
 ```text
 PASS wrong-password
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 464 * :Password incorrect\r\n
 ```
 
-Después de esta respuesta, el servidor debe mantener al cliente como no autenticado.
+After this reply, the server must keep the client as unauthenticated.
 
-Debe definirse claramente si:
+It must be clearly defined whether:
 
-- Se permite volver a intentar `PASS`.
-- Se desconecta inmediatamente al cliente.
-- Se desconecta después de varios intentos.
+- Another `PASS` attempt is allowed.
+- The client is disconnected immediately.
+- The client is disconnected after several attempts.
 
-Para una primera implementación, se puede responder con `464` y mantener la conexión abierta para permitir otro intento.
+For a first implementation, you can reply with `464` and keep the connection open to allow another attempt.
 
 ---
 
 ## 17. `421 ERR_UNKNOWNCOMMAND`
 
-Se utiliza cuando el servidor recibe un comando que no reconoce o no soporta.
+Used when the server receives a command it does not recognize or does not support.
 
-Comando recibido:
+Received command:
 
 ```text
 TEST something
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 421 roxana TEST :Unknown command\r\n
 ```
 
-Debe generarse desde el sistema encargado de despachar comandos cuando el nombre del comando no está registrado.
+It must be generated from the system in charge of dispatching commands when the command name is not registered.
 
-Flujo recomendado:
+Recommended flow:
 
 ```text
-comando recibido
+command received
        ↓
-buscar handler
+look up handler
        ↓
-handler encontrado → ejecutarlo
-handler no encontrado → enviar 421
+handler found → execute it
+handler not found → send 421
 ```
 
-El parámetro `TEST` permite informar al cliente de qué comando fue rechazado.
+The `TEST` parameter lets the client know which command was rejected.
 
 ---
 
-# Tabla de errores mínimos
+# Minimum error table
 
-| Código | Nombre | Cuándo se utiliza |
+| Code | Name | When it is used |
 |---:|---|---|
-| `421` | `ERR_UNKNOWNCOMMAND` | El comando no existe o no está soportado |
-| `431` | `ERR_NONICKNAMEGIVEN` | `NICK` no contiene nickname |
-| `432` | `ERR_ERRONEUSNICKNAME` | El nickname tiene un formato inválido |
-| `433` | `ERR_NICKNAMEINUSE` | El nickname ya está siendo utilizado |
-| `451` | `ERR_NOTREGISTERED` | El comando requiere que el cliente esté registrado |
-| `461` | `ERR_NEEDMOREPARAMS` | Faltan parámetros obligatorios |
-| `462` | `ERR_ALREADYREGISTERED` | Un cliente registrado intenta registrarse otra vez |
-| `464` | `ERR_PASSWDMISMATCH` | La contraseña recibida es incorrecta |
+| `421` | `ERR_UNKNOWNCOMMAND` | The command does not exist or is not supported |
+| `431` | `ERR_NONICKNAMEGIVEN` | `NICK` does not contain a nickname |
+| `432` | `ERR_ERRONEUSNICKNAME` | The nickname has an invalid format |
+| `433` | `ERR_NICKNAMEINUSE` | The nickname is already being used |
+| `451` | `ERR_NOTREGISTERED` | The command requires the client to be registered |
+| `461` | `ERR_NEEDMOREPARAMS` | Mandatory parameters are missing |
+| `462` | `ERR_ALREADYREGISTERED` | A registered client tries to register again |
+| `464` | `ERR_PASSWDMISMATCH` | The received password is incorrect |
 
 ---
 
-# Respuesta de bienvenida
+# Welcome reply
 
-Cuando el cliente complete correctamente el registro, el servidor debe enviar al menos la respuesta de bienvenida:
+When the client completes registration correctly, the server must send at least the welcome reply:
 
 ```text
 :server.name 001 roxana :Welcome to the IRC Network roxana\r\n
 ```
 
-El registro debe completarse una sola vez cuando se cumplan todas las condiciones:
+Registration must be completed only once when all conditions are met:
 
 ```text
 passwordAccepted == true
@@ -675,19 +675,19 @@ usernameReceived == true
 registered == false
 ```
 
-Después de enviar la bienvenida:
+After sending the welcome:
 
 ```text
 registered = true
 ```
 
-Esto evita enviar `001` varias veces si el cliente vuelve a ejecutar alguno de los comandos relacionados.
+This avoids sending `001` several times if the client runs one of the related commands again.
 
 ---
 
-# Organización recomendada
+# Recommended organization
 
-Una separación posible es:
+A possible separation is:
 
 ```text
 Server
@@ -699,24 +699,24 @@ Server
 └── tryRegisterClient()
 ```
 
-Responsabilidades:
+Responsibilities:
 
-| Función | Responsabilidad |
+| Function | Responsibility |
 |---|---|
-| `buildNumericReply()` | Construir una respuesta numérica IRC |
-| `buildClientPrefix()` | Construir `nickname!username@hostname` |
-| `queueNumericReply()` | Construir y encolar una respuesta numérica |
-| `queueMessage()` | Añadir un mensaje al buffer de salida |
-| `updateClientPollEvents()` | Activar o desactivar `POLLOUT` |
-| `tryRegisterClient()` | Comprobar el estado de registro y enviar `001` |
+| `buildNumericReply()` | Build an IRC numeric reply |
+| `buildClientPrefix()` | Build `nickname!username@hostname` |
+| `queueNumericReply()` | Build and queue a numeric reply |
+| `queueMessage()` | Append a message to the output buffer |
+| `updateClientPollEvents()` | Enable or disable `POLLOUT` |
+| `tryRegisterClient()` | Check registration state and send `001` |
 
-También se pueden guardar los códigos numéricos en un archivo separado:
+Numeric codes can also be stored in a separate file:
 
 ```text
 NumericReplies.hpp
 ```
 
-Ejemplo:
+Example:
 
 ```cpp
 #ifndef NUMERIC_REPLIES_HPP
@@ -738,7 +738,7 @@ namespace NumericReply
 #endif
 ```
 
-Al convertir los códigos a texto, deben rellenarse con ceros por la izquierda:
+When converting the codes to text, they must be padded with leading zeros:
 
 ```text
 1 → 001
@@ -746,11 +746,11 @@ Al convertir los códigos a texto, deben rellenarse con ceros por la izquierda:
 
 ---
 
-# Reglas arquitectónicas importantes
+# Important architectural rules
 
-## Los handlers no deben llamar directamente a `send()`
+## Handlers must not call `send()` directly
 
-Los handlers deben limitarse a preparar o solicitar la respuesta:
+Handlers must limit themselves to preparing or requesting the reply:
 
 ```text
 handleNick()
@@ -760,89 +760,89 @@ queueNumericReply()
 outputBuffer
 ```
 
-La escritura real pertenece al sistema de salida no bloqueante:
+The actual write belongs to the non-blocking output system:
 
 ```text
-poll() detecta POLLOUT
+poll() detects POLLOUT
         ↓
 send()
         ↓
-eliminar únicamente los bytes enviados
+remove only the sent bytes
 ```
 
 ---
 
-## No duplicar formatos
+## Do not duplicate formats
 
-No se debe construir repetidamente:
+This must not be built repeatedly:
 
 ```text
 ":" + serverName + " " + code + " " + nickname
 ```
 
-Tampoco se debe repetir:
+Nor this:
 
 ```text
 ":" + nickname + "!" + username + "@" + hostname
 ```
 
-Toda esa lógica debe estar centralizada.
+All of that logic must be centralized.
 
 ---
 
-## Separar construcción y transporte
+## Separate construction and transport
 
-Construir un mensaje y enviarlo son responsabilidades diferentes:
+Building a message and sending it are different responsibilities:
 
 ```text
-construcción
+construction
     ↓
-mensaje IRC completo
+complete IRC message
     ↓
-encolado
+queueing
     ↓
-envío no bloqueante
+non-blocking send
 ```
 
-Esta separación facilita:
+This separation makes it easier to:
 
-- Reutilizar formatos.
-- Probar las respuestas.
-- Evitar mensajes inconsistentes.
-- Gestionar envíos parciales.
-- Añadir nuevos códigos numéricos.
-- Enviar el mismo mensaje a varios clientes.
-
----
-
-## No cerrar automáticamente por cualquier error
-
-Errores como los siguientes normalmente deben producir una respuesta, no provocar que el servidor termine:
-
-- Comando desconocido.
-- Parámetros insuficientes.
-- Nickname inválido.
-- Nickname ocupado.
-- Cliente todavía no registrado.
-- Contraseña incorrecta.
-
-El servidor debe continuar funcionando y mantener conectados al resto de clientes.
-
-La desconexión de un cliente debe decidirse de forma explícita según el tipo de error.
+- Reuse formats.
+- Test the replies.
+- Avoid inconsistent messages.
+- Handle partial sends.
+- Add new numeric codes.
+- Send the same message to several clients.
 
 ---
 
-# Pruebas recomendadas
+## Do not automatically close on every error
 
-## Nickname no proporcionado
+Errors such as the following must normally produce a reply, not cause the server to terminate:
 
-Entrada:
+- Unknown command.
+- Insufficient parameters.
+- Invalid nickname.
+- Nickname already in use.
+- Client still not registered.
+- Incorrect password.
+
+The server must keep running and keep the rest of the clients connected.
+
+Disconnecting a client must be decided explicitly according to the type of error.
+
+---
+
+# Recommended tests
+
+## Nickname not provided
+
+Input:
 
 ```text
 NICK
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 431 * :No nickname given
@@ -850,15 +850,15 @@ Salida esperada:
 
 ---
 
-## Nickname inválido
+## Invalid nickname
 
-Entrada:
+Input:
 
 ```text
 NICK 123roxana
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 432 * 123roxana :Erroneous nickname
@@ -866,21 +866,21 @@ Salida esperada:
 
 ---
 
-## Nickname ocupado
+## Nickname already in use
 
-Primer cliente:
-
-```text
-NICK roxana
-```
-
-Segundo cliente:
+First client:
 
 ```text
 NICK roxana
 ```
 
-Salida esperada para el segundo cliente:
+Second client:
+
+```text
+NICK roxana
+```
+
+Expected output for the second client:
 
 ```text
 :server.name 433 * roxana :Nickname is already in use
@@ -888,15 +888,15 @@ Salida esperada para el segundo cliente:
 
 ---
 
-## Comando sin parámetros suficientes
+## Command without enough parameters
 
-Entrada:
+Input:
 
 ```text
 PRIVMSG
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 461 roxana PRIVMSG :Not enough parameters
@@ -904,15 +904,15 @@ Salida esperada:
 
 ---
 
-## Cliente no registrado
+## Unregistered client
 
-Entrada antes de completar `PASS`, `NICK` y `USER`:
+Input before completing `PASS`, `NICK` and `USER`:
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 451 * :You have not registered
@@ -920,15 +920,15 @@ Salida esperada:
 
 ---
 
-## Contraseña incorrecta
+## Incorrect password
 
-Entrada:
+Input:
 
 ```text
 PASS incorrect
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 464 * :Password incorrect
@@ -936,15 +936,15 @@ Salida esperada:
 
 ---
 
-## Comando desconocido
+## Unknown command
 
-Entrada:
+Input:
 
 ```text
 TEST something
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 421 roxana TEST :Unknown command
@@ -952,9 +952,9 @@ Salida esperada:
 
 ---
 
-## Registro correcto
+## Correct registration
 
-Entrada:
+Input:
 
 ```text
 PASS secret
@@ -962,29 +962,29 @@ NICK roxana
 USER roxana 0 * :Roxana Example
 ```
 
-Salida esperada:
+Expected output:
 
 ```text
 :server.name 001 roxana :Welcome to the IRC Network roxana
 ```
 
-La respuesta `001` debe enviarse una sola vez.
+The `001` reply must be sent only once.
 
 ---
 
-# Resultado esperado de la fase
+# Expected result of the phase
 
-Al finalizar esta fase, el servidor debe:
+At the end of this phase, the server must:
 
-- Construir todas las respuestas IRC desde funciones centralizadas.
-- Generar correctamente prefijos de servidor y de cliente.
-- Terminar todos los mensajes con `\r\n`.
-- Formatear los códigos numéricos con tres cifras.
-- Utilizar el nickname del cliente o `*` cuando todavía no exista.
-- Añadir las respuestas al `outputBuffer`.
-- Activar `POLLOUT` cuando existan datos pendientes.
-- Evitar llamadas directas a `send()` desde los handlers.
-- Enviar la respuesta `001` al completar el registro.
-- Responder con errores coherentes ante comandos incorrectos.
-- Mantener separadas la construcción, el encolado y la escritura de mensajes.
-- Evitar duplicar prefijos y formatos en distintos handlers.
+- Build every IRC reply from centralized functions.
+- Generate server and client prefixes correctly.
+- End every message with `\r\n`.
+- Format numeric codes with three digits.
+- Use the client’s nickname or `*` when it does not exist yet.
+- Append replies to the `outputBuffer`.
+- Enable `POLLOUT` when there is pending data.
+- Avoid direct `send()` calls from handlers.
+- Send the `001` reply when registration is complete.
+- Reply with consistent errors to incorrect commands.
+- Keep construction, queueing and writing of messages separate.
+- Avoid duplicating prefixes and formats in different handlers.

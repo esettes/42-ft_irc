@@ -1,8 +1,8 @@
-# Fase 1 — Esqueleto y ciclo de vida del servidor
+# Phase 1 — Server skeleton and lifecycle
 
-El objetivo de esta fase es preparar cómo se inicia, permanece ejecutándose y termina el servidor. Todavía no se crean conexiones ni se procesan comandos IRC.
+The goal of this phase is to prepare how the server starts, stays running and terminates. Connections are not created yet and IRC commands are not processed.
 
-## 1. Estructura mínima
+## 1. Minimum structure
 
 ```text
 ft_irc/
@@ -16,22 +16,22 @@ ft_irc/
 └── Makefile
 ```
 
-Cada archivo debe tener una responsabilidad clara:
+Each file must have a clear responsibility:
 
-- `main.cpp`: valida los argumentos y ejecuta el servidor.
-- `Server`: administra el ciclo de vida y los recursos.
-- `SignalHandler`: detecta solicitudes de cierre.
-- `Makefile`: compila el proyecto.
+- `main.cpp`: validates the arguments and runs the server.
+- `Server`: manages the lifecycle and the resources.
+- `SignalHandler`: detects shutdown requests.
+- `Makefile`: compiles the project.
 
-## 2. Validar la cantidad de argumentos
+## 2. Validate the number of arguments
 
-El programa se ejecuta así:
+The program is run like this:
 
 ```bash
 ./ircserv <port> <password>
 ```
 
-Por tanto, `main()` debe recibir exactamente tres elementos:
+Therefore `main()` must receive exactly three elements:
 
 ```cpp
 if (argumentCount != 3)
@@ -41,28 +41,28 @@ if (argumentCount != 3)
 }
 ```
 
-`argumentValues[0]` es el nombre del programa.
+`argumentValues[0]` is the program name.
 
-## 3. Validar el puerto
+## 3. Validate the port
 
-El puerto debe:
+The port must:
 
-- No estar vacío.
-- Contener únicamente dígitos.
-- Poder convertirse sin desbordamiento.
-- Estar entre `1` y `65535`.
+- Not be empty.
+- Contain only digits.
+- Convert without overflow.
+- Be between `1` and `65535`.
 
-No conviene usar únicamente `atoi()`, porque acepta parcialmente textos inválidos:
+It is not a good idea to use only `atoi()`, because it partially accepts invalid text:
 
 ```text
 atoi("12abc") → 12
 ```
 
-Es preferible comprobar los caracteres y utilizar `strtol()`.
+It is better to check the characters and use `strtol()`.
 
-## 4. Validar la contraseña
+## 4. Validate the password
 
-La contraseña no puede estar vacía:
+The password cannot be empty:
 
 ```cpp
 if (passwordArgument.empty())
@@ -73,30 +73,30 @@ if (passwordArgument.empty())
 }
 ```
 
-No necesitas imponer todavía una longitud mínima ni caracteres especiales.
+You do not need to impose a minimum length or special characters yet.
 
-## 5. Responsabilidad de `main()`
+## 5. Responsibility of `main()`
 
-`main()` debe limitarse a:
+`main()` should be limited to:
 
 ```text
-Validar argumentos
-    → instalar señales
-    → construir Server
-    → ejecutar Server
-    → capturar excepciones
+Validate arguments
+    → install signals
+    → construct Server
+    → run Server
+    → catch exceptions
 ```
 
-No debe encargarse de:
+It must not take care of:
 
-- Procesar comandos IRC.
-- Crear clientes.
-- Ejecutar directamente la lógica de `poll()`.
-- Cerrar manualmente los recursos internos de `Server`.
+- Processing IRC commands.
+- Creating clients.
+- Directly running the `poll()` logic.
+- Manually closing `Server`’s internal resources.
 
-## 6. Estado inicial de `Server`
+## 6. Initial `Server` state
 
-Como mínimo, `Server` debe guardar:
+At a minimum, `Server` must store:
 
 ```cpp
 int _port;
@@ -104,7 +104,7 @@ std::string _password;
 int _listeningSocketFileDescriptor;
 ```
 
-El constructor debe usar una lista de inicialización:
+The constructor must use an initialization list:
 
 ```cpp
 Server::Server(
@@ -118,62 +118,62 @@ Server::Server(
 }
 ```
 
-El servidor guarda su propia copia de la contraseña.
+The server stores its own copy of the password.
 
-## 7. Descriptores inicializados a `-1`
+## 7. Descriptors initialized to `-1`
 
-Un descriptor válido puede ser `0`, por lo que no debes utilizarlo para representar “sin socket”.
+A valid descriptor can be `0`, so you must not use it to represent “no socket”.
 
 ```cpp
 const int INVALID_FILE_DESCRIPTOR = -1;
 ```
 
-La evolución habitual será:
+The usual evolution will be:
 
 ```text
-Antes de socket():   -1
-Después de socket():  3
-Después de close():  -1
+Before socket():    -1
+After socket():      3
+After close():      -1
 ```
 
-Esto ayuda a impedir cierres duplicados.
+This helps prevent duplicate closes.
 
-## 8. Impedir la copia de `Server`
+## 8. Prevent copying `Server`
 
-Copiar un `Server` podría provocar que dos objetos creyeran ser propietarios del mismo socket.
+Copying a `Server` could make two objects believe they own the same socket.
 
-En C++98 se impide declarando como privados:
+In C++98 this is prevented by declaring as private:
 
 ```cpp
 Server(const Server &other);
 Server &operator=(const Server &other);
 ```
 
-No deben implementarse ni utilizarse.
+They must not be implemented or used.
 
-## 9. Gestionar señales
+## 9. Handle signals
 
-Debes controlar:
+You must control:
 
-- `SIGINT`: se recibe normalmente con `Ctrl+C`.
-- `SIGTERM`: solicita la terminación del proceso.
-- `SIGPIPE`: debe ignorarse para que un envío a un cliente desconectado no termine todo el servidor.
+- `SIGINT`: normally received with `Ctrl+C`.
+- `SIGTERM`: requests process termination.
+- `SIGPIPE`: must be ignored so a send to a disconnected client does not terminate the whole server.
 
-La instalación puede hacerse desde:
+Installation can be done from:
 
 ```cpp
 SignalHandler::install();
 ```
 
-## 10. Usar una bandera de finalización
+## 10. Use a shutdown flag
 
-El manejador de señales solamente debe modificar una bandera:
+The signal handler must only modify a flag:
 
 ```cpp
 static volatile sig_atomic_t _shutdownRequested;
 ```
 
-El manejador debe ser mínimo:
+The handler must be minimal:
 
 ```cpp
 void SignalHandler::handleTerminationSignal(
@@ -185,16 +185,16 @@ void SignalHandler::handleTerminationSignal(
 }
 ```
 
-No debe:
+It must not:
 
-- Cerrar sockets.
-- Lanzar excepciones.
-- Utilizar `std::cout`.
-- Ejecutar lógica compleja.
+- Close sockets.
+- Throw exceptions.
+- Use `std::cout`.
+- Run complex logic.
 
-## 11. Ciclo temporal de ejecución
+## 11. Temporary execution cycle
 
-Como todavía no existe un socket de escucha, puedes utilizar temporalmente:
+Since there is still no listening socket, you can temporarily use:
 
 ```cpp
 void Server::run()
@@ -218,27 +218,27 @@ void Server::run()
 }
 ```
 
-`poll(NULL, 0, 1000)` espera un segundo sin consumir continuamente la CPU.
+`poll(NULL, 0, 1000)` waits one second without continuously consuming CPU.
 
-## 12. Tratar correctamente `EINTR`
+## 12. Handle `EINTR` correctly
 
-Cuando una señal interrumpe `poll()`, puede devolver:
+When a signal interrupts `poll()`, it may return:
 
 ```text
 -1
 ```
 
-con:
+with:
 
 ```cpp
 errno == EINTR
 ```
 
-Esto no es un fallo real. Después de la interrupción, el bucle vuelve a comprobar la bandera y termina.
+This is not a real failure. After the interruption, the loop checks the flag again and terminates.
 
-## 13. Limpieza mediante el destructor
+## 13. Cleanup through the destructor
 
-El destructor de `Server` debe iniciar la limpieza:
+The `Server` destructor must start cleanup:
 
 ```cpp
 Server::~Server()
@@ -247,21 +247,21 @@ Server::~Server()
 }
 ```
 
-Se ejecutará automáticamente:
+It will run automatically:
 
-- Cuando `run()` termine normalmente.
-- Cuando se lance una excepción después de construir `Server`.
-- Cuando se abandone el ámbito donde se creó el objeto.
+- When `run()` finishes normally.
+- When an exception is thrown after constructing `Server`.
+- When the scope where the object was created is left.
 
-No debes llamar manualmente a:
+You must not call manually:
 
 ```cpp
 server.~Server();
 ```
 
-## 14. Cerrar cada descriptor una sola vez
+## 14. Close each descriptor only once
 
-Antes de cerrar un descriptor, comprueba que no sea `-1`:
+Before closing a descriptor, check that it is not `-1`:
 
 ```cpp
 void Server::closeFileDescriptor(int &fileDescriptor)
@@ -280,59 +280,59 @@ void Server::closeFileDescriptor(int &fileDescriptor)
 }
 ```
 
-El parámetro es una referencia porque también se modifica el atributo original.
+The parameter is a reference because the original attribute is also modified.
 
-La secuencia es:
+The sequence is:
 
 ```text
-Guardar el descriptor
-    → marcar el atributo como inválido
-    → llamar a close()
-    → no volver a cerrarlo
+Save the descriptor
+    → mark the attribute as invalid
+    → call close()
+    → do not close it again
 ```
 
-## 15. No lanzar excepciones desde el destructor
+## 15. Do not throw exceptions from the destructor
 
-Si `close()` falla durante la destrucción, muestra una advertencia, pero no lances otra excepción.
+If `close()` fails during destruction, show a warning, but do not throw another exception.
 
-Una excepción lanzada mientras ya se está procesando otra podría terminar el programa mediante:
+An exception thrown while another is already being processed could terminate the program through:
 
 ```cpp
 std::terminate();
 ```
 
-## 16. Propiedad de los descriptores
+## 16. Ownership of descriptors
 
-Define desde ahora quién es responsable de cerrarlos:
+Define from now on who is responsible for closing them:
 
-| Recurso | Propietario | Quién lo cierra |
+| Resource | Owner | Who closes it |
 |---|---|---|
-| Socket de escucha | `Server` | `Server` |
-| Socket de cliente | `Server` | `Server` |
-| Objeto `Client` | `Server` | `Server` |
-| Entrada `pollfd` | No es propietaria | Nadie |
-| Descriptor guardado en `Client` | Solo identifica la conexión | `Server` |
+| Listening socket | `Server` | `Server` |
+| Client socket | `Server` | `Server` |
+| `Client` object | `Server` | `Server` |
+| `pollfd` entry | Not an owner | Nobody |
+| Descriptor stored in `Client` | Only identifies the connection | `Server` |
 
-Eliminar un `pollfd` de un vector no cierra el socket.
+Removing a `pollfd` from a vector does not close the socket.
 
-La futura secuencia de desconexión será:
+The future disconnection sequence will be:
 
 ```text
-Detectar desconexión
-    → quitar descriptor de poll
-    → cerrar descriptor
-    → eliminar Client
+Detect disconnection
+    → remove descriptor from poll
+    → close descriptor
+    → delete Client
 ```
 
-## 17. Compilación
+## 17. Compilation
 
-El proyecto debe compilar con:
+The project must compile with:
 
 ```makefile
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 ```
 
-Archivos mínimos:
+Minimum files:
 
 ```makefile
 SOURCES = src/main.cpp \
@@ -340,9 +340,9 @@ SOURCES = src/main.cpp \
           src/SignalHandler.cpp
 ```
 
-## 18. Pruebas necesarias
+## 18. Required tests
 
-### Argumentos incorrectos
+### Incorrect arguments
 
 ```bash
 ./ircserv
@@ -350,7 +350,7 @@ SOURCES = src/main.cpp \
 ./ircserv 6667 password extra
 ```
 
-### Puertos inválidos
+### Invalid ports
 
 ```bash
 ./ircserv abc password
@@ -360,40 +360,40 @@ SOURCES = src/main.cpp \
 ./ircserv 65536 password
 ```
 
-### Contraseña vacía
+### Empty password
 
 ```bash
 ./ircserv 6667 ""
 ```
 
-### Finalización limpia
+### Clean termination
 
 ```bash
 ./ircserv 6667 password
 ```
 
-Después pulsa:
+Then press:
 
 ```text
 Ctrl+C
 ```
 
-### Probar `SIGTERM`
+### Test `SIGTERM`
 
-En una terminal:
+In one terminal:
 
 ```bash
 ./ircserv 6667 password
 ```
 
-En otra:
+In another:
 
 ```bash
 pgrep ircserv
 kill -TERM <process_id>
 ```
 
-### Memoria y descriptores
+### Memory and descriptors
 
 ```bash
 valgrind \
@@ -403,32 +403,32 @@ valgrind \
     ./ircserv 6667 password
 ```
 
-## Fase 1 terminada
+## Phase 1 finished
 
-Puedes considerar completada esta fase cuando:
+You can consider this phase complete when:
 
-- Se reciben exactamente el puerto y la contraseña.
-- El puerto está correctamente validado.
-- La contraseña no está vacía.
-- `Server` mantiene un estado válido.
-- Los descriptores comienzan en `-1`.
-- `Server` no puede copiarse.
-- `SIGINT` y `SIGTERM` solicitan el cierre.
-- `SIGPIPE` está ignorada.
-- El manejador solamente modifica una bandera.
-- `run()` no consume innecesariamente la CPU.
-- El destructor limpia los recursos.
-- Ningún descriptor se cierra dos veces.
-- No existen fugas propias del programa.
-- Compila correctamente en C++98.
+- Exactly the port and the password are received.
+- The port is correctly validated.
+- The password is not empty.
+- `Server` keeps a valid state.
+- Descriptors start at `-1`.
+- `Server` cannot be copied.
+- `SIGINT` and `SIGTERM` request shutdown.
+- `SIGPIPE` is ignored.
+- The handler only modifies a flag.
+- `run()` does not consume CPU unnecessarily.
+- The destructor cleans up the resources.
+- No descriptor is closed twice.
+- There are no leaks belonging to the program.
+- It compiles correctly in C++98.
 
-La fase siguiente será crear el socket de escucha:
+The next phase will be to create the listening socket:
 
 ```text
 socket()
     → setsockopt()
-    → modo no bloqueante
+    → non-blocking mode
     → bind()
     → listen()
-    → añadirlo a poll()
+    → add it to poll()
 ```

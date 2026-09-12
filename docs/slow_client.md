@@ -1,13 +1,13 @@
-#### Qué representa un cliente lento
+#### What a slow client represents
 
-Un cliente lento es aquel cuyo socket no consume datos tan rápido como el servidor los genera:
+A slow client is one whose socket does not consume data as fast as the server produces it:
 
 ```text
-Mensajes encolados → outputBuffer crece → send() no consigue vaciarlo
+Queued messages → outputBuffer grows → send() cannot empty it
 ```
 
-Sin límite, un único cliente podría hacer crecer indefinidamente la memoria del servidor. Al alcanzar el límite se guarda:
+Without a limit, a single client could grow the server’s memory indefinitely. When the limit is reached the server stores:
 
 `Output buffer limit exceeded`
 
-y el bucle de eventos lo elimina mediante `disconnectClient()`.
+and the event loop removes it through `disconnectClient()`.

@@ -1,159 +1,159 @@
-# Fase 16 — KICK
+# Phase 16 — KICK
 
-## Objetivo
+## Goal
 
-Implementar el comando `KICK`, que permite a un operador expulsar a un usuario de un canal.
+Implement the `KICK` command, which lets an operator remove a user from a channel.
 
-## Formato del comando
-
-```text
-KICK #general roxana :Motivo de la expulsión
-```
-
-El comando recibe:
-
-1. El nombre del canal.
-2. El nickname del usuario objetivo.
-3. Un motivo opcional.
-
-Si no se proporciona un motivo, puede utilizarse el nickname del operador como motivo predeterminado.
-
-## Flujo de ejecución
+## Command format
 
 ```text
-KICK #general roxana :Motivo
-        ↓
-¿Están presentes el canal y el usuario objetivo?
-        ↓
-¿Existe el canal?
-        ↓
-¿Existe el usuario objetivo?
-        ↓
-¿El emisor pertenece al canal?
-        ↓
-¿El emisor es operador del canal?
-        ↓
-¿El objetivo pertenece al canal?
-        ↓
-Notificar el KICK a todos los miembros
-        ↓
-Eliminar al objetivo del canal
-        ↓
-Eliminar sus privilegios de operador
-        ↓
-¿El canal ha quedado vacío?
-    ├── sí → eliminar el canal
-    └── no → conservar el canal
+KICK #general roxana :Reason for the kick
 ```
 
-## Comprobaciones necesarias
+The command receives:
 
-El servidor debe comprobar:
+1. The channel name.
+2. The target user’s nickname.
+3. An optional reason.
 
-1. Que se han recibido los parámetros obligatorios.
-2. Que el canal existe.
-3. Que el usuario objetivo existe.
-4. Que el usuario que ejecuta `KICK` pertenece al canal.
-5. Que el emisor es operador del canal.
-6. Que el usuario objetivo pertenece al canal.
+If no reason is provided, the operator’s nickname can be used as the default reason.
 
-Las comprobaciones deben realizarse antes de modificar el estado del canal.
-
-## Notificación del KICK
-
-Si todas las comprobaciones son correctas, el servidor debe construir un mensaje con el prefijo completo del operador:
+## Execution flow
 
 ```text
-:operador!username@hostname KICK #general roxana :Motivo
+KICK #general roxana :Reason
+        ↓
+Are the channel and the target user present?
+        ↓
+Does the channel exist?
+        ↓
+Does the target user exist?
+        ↓
+Does the sender belong to the channel?
+        ↓
+Is the sender a channel operator?
+        ↓
+Does the target belong to the channel?
+        ↓
+Notify the KICK to every member
+        ↓
+Remove the target from the channel
+        ↓
+Remove their operator privileges
+        ↓
+Has the channel become empty?
+    ├── yes → delete the channel
+    └── no → keep the channel
 ```
 
-Este mensaje debe enviarse a todos los miembros actuales del canal, incluido el usuario expulsado.
+## Required checks
 
-La notificación debe realizarse antes de eliminar al objetivo para garantizar que también reciba el mensaje.
+The server must check:
 
-## Actualización del canal
+1. That the mandatory parameters have been received.
+2. That the channel exists.
+3. That the target user exists.
+4. That the user who runs `KICK` belongs to the channel.
+5. That the sender is a channel operator.
+6. That the target user belongs to the channel.
 
-Después de enviar la notificación:
+The checks must be performed before modifying the channel state.
 
-1. Eliminar al usuario objetivo de la colección de miembros.
-2. Eliminarlo de la colección de operadores, si tenía ese privilegio.
-3. Eliminar cualquier otra información del usuario asociada al canal.
-4. Comprobar si el canal ha quedado vacío.
-5. Eliminar el canal del servidor si ya no tiene miembros.
+## KICK notification
 
-Expulsar a un usuario de un canal no debe cerrar su conexión con el servidor ni eliminarlo de otros canales.
+If every check is correct, the server must build a message with the operator’s full prefix:
 
-## Errores relevantes
+```text
+:operator!username@hostname KICK #general roxana :Reason
+```
+
+This message must be sent to every current channel member, including the kicked user.
+
+The notification must be performed before removing the target to guarantee that they also receive the message.
+
+## Updating the channel
+
+After sending the notification:
+
+1. Remove the target user from the member collection.
+2. Remove them from the operator collection, if they had that privilege.
+3. Remove any other user information associated with the channel.
+4. Check whether the channel has become empty.
+5. Delete the channel from the server if it no longer has members.
+
+Kicking a user from a channel must not close their connection to the server or remove them from other channels.
+
+## Relevant errors
 
 ```text
 401 ERR_NOSUCHNICK
 ```
 
-El usuario objetivo no existe en el servidor.
+The target user does not exist on the server.
 
 ```text
 403 ERR_NOSUCHCHANNEL
 ```
 
-El canal indicado no existe.
+The indicated channel does not exist.
 
 ```text
 441 ERR_USERNOTINCHANNEL
 ```
 
-El usuario objetivo no pertenece al canal.
+The target user does not belong to the channel.
 
 ```text
 442 ERR_NOTONCHANNEL
 ```
 
-El emisor no pertenece al canal.
+The sender does not belong to the channel.
 
 ```text
 461 ERR_NEEDMOREPARAMS
 ```
 
-Falta el canal o el nickname del usuario objetivo.
+The channel or the target user’s nickname is missing.
 
 ```text
 482 ERR_CHANOPRIVSNEEDED
 ```
 
-El emisor pertenece al canal, pero no es operador.
+The sender belongs to the channel, but is not an operator.
 
-## Ejemplo completo
+## Complete example
 
-Comando recibido:
-
-```text
-KICK #general roxana :Comportamiento inapropiado
-```
-
-Mensaje enviado a los miembros del canal:
+Received command:
 
 ```text
-:admin!admin@localhost KICK #general roxana :Comportamiento inapropiado
+KICK #general roxana :Inappropriate behaviour
 ```
 
-Después de enviar el mensaje:
+Message sent to the channel members:
 
 ```text
-Miembros antes:     admin, roxana, usuario2
-Operadores antes:   admin, roxana
-
-Miembros después:   admin, usuario2
-Operadores después: admin
+:admin!admin@localhost KICK #general roxana :Inappropriate behaviour
 ```
 
-## Resultado esperado
+After sending the message:
 
-Al finalizar esta fase, el servidor debe ser capaz de:
+```text
+Members before:     admin, roxana, user2
+Operators before:   admin, roxana
 
-- Interpretar correctamente el comando `KICK`.
-- Validar los permisos del usuario que solicita la expulsión.
-- Comprobar que el canal y el usuario objetivo son válidos.
-- Notificar la expulsión a todos los miembros actuales.
-- Eliminar al usuario de los miembros y operadores del canal.
-- Mantener abierta la conexión del usuario expulsado.
-- Eliminar el canal cuando quede completamente vacío.
-- Responder con códigos numéricos coherentes cuando el comando no pueda ejecutarse.
+Members after:      admin, user2
+Operators after:    admin
+```
+
+## Expected result
+
+At the end of this phase, the server must be able to:
+
+- Interpret the `KICK` command correctly.
+- Validate the permissions of the user requesting the kick.
+- Check that the channel and the target user are valid.
+- Notify the kick to every current member.
+- Remove the user from the channel’s members and operators.
+- Keep the kicked user’s connection open.
+- Delete the channel when it becomes completely empty.
+- Reply with consistent numeric codes when the command cannot be executed.

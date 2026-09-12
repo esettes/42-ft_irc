@@ -1,72 +1,72 @@
-# Fase 2 — Socket de escucha
+# Phase 2 — Listening socket
 
-## Objetivo
+## Goal
 
-En esta fase se debe crear y configurar únicamente el **socket de escucha del servidor IRC**.
+In this phase only the **IRC server listening socket** must be created and configured.
 
-Al ejecutar:
+When running:
 
 ```bash
 ./ircserv 6667 password
 ```
 
-el servidor debe quedar escuchando conexiones TCP en el puerto `6667`.
+the server must be listening for TCP connections on port `6667`.
 
-Desde otra terminal:
+From another terminal:
 
 ```bash
 nc 127.0.0.1 6667
 ```
 
-la conexión TCP debe poder establecerse, aunque el servidor todavía no interprete comandos ni procese mensajes.
+the TCP connection must be able to be established, even if the server still does not interpret commands or process messages.
 
 ---
 
-## Alcance de esta fase
+## Scope of this phase
 
-Se debe implementar:
+The following must be implemented:
 
-1. Creación del socket con `socket()`.
-2. Configuración de `SO_REUSEADDR` con `setsockopt()`.
-3. Configuración del socket como no bloqueante con `fcntl()`.
-4. Preparación de la dirección del servidor.
-5. Asociación del socket al puerto con `bind()`.
-6. Activación del modo escucha con `listen()`.
-7. Control de errores y cierre correcto del descriptor.
+1. Creating the socket with `socket()`.
+2. Configuring `SO_REUSEADDR` with `setsockopt()`.
+3. Configuring the socket as non-blocking with `fcntl()`.
+4. Preparing the server address.
+5. Associating the socket with the port with `bind()`.
+6. Enabling listening mode with `listen()`.
+7. Error handling and correct closing of the descriptor.
 
-Todavía **no** se debe implementar:
+The following must **not** be implemented yet:
 
 * `accept()`.
-* Gestión de clientes.
+* Client management.
 * `poll()`.
-* Recepción de datos con `recv()`.
-* Envío de datos con `send()`.
-* Parser de mensajes IRC.
-* Interpretación de comandos.
-* Registro de usuarios.
-* Canales.
+* Receiving data with `recv()`.
+* Sending data with `send()`.
+* IRC message parser.
+* Command interpretation.
+* User registration.
+* Channels.
 
 ---
 
-## 1. Crear el socket del servidor
+## 1. Create the server socket
 
-Se debe crear un socket TCP sobre IPv4:
+A TCP socket over IPv4 must be created:
 
 ```cpp
 socket(AF_INET, SOCK_STREAM, 0);
 ```
 
-Significado de los argumentos:
+Meaning of the arguments:
 
-* `AF_INET`: utiliza direcciones IPv4.
-* `SOCK_STREAM`: crea un socket orientado a conexión, utilizado por TCP.
-* `0`: permite que el sistema seleccione automáticamente el protocolo correspondiente, en este caso TCP.
+* `AF_INET`: uses IPv4 addresses.
+* `SOCK_STREAM`: creates a connection-oriented socket, used by TCP.
+* `0`: lets the system automatically select the corresponding protocol, in this case TCP.
 
-El valor devuelto es un **file descriptor** que identifica el socket.
+The returned value is a **file descriptor** that identifies the socket.
 
-Si `socket()` devuelve `-1`, significa que se ha producido un error y el servidor no puede continuar.
+If `socket()` returns `-1`, an error has occurred and the server cannot continue.
 
-El descriptor debe guardarse como atributo de la clase `Server`, por ejemplo:
+The descriptor must be stored as an attribute of the `Server` class, for example:
 
 ```cpp
 int _serverSocketFileDescriptor;
@@ -74,9 +74,9 @@ int _serverSocketFileDescriptor;
 
 ---
 
-## 2. Configurar `SO_REUSEADDR`
+## 2. Configure `SO_REUSEADDR`
 
-Después de crear el socket, se debe activar la opción `SO_REUSEADDR` mediante `setsockopt()`:
+After creating the socket, the `SO_REUSEADDR` option must be enabled through `setsockopt()`:
 
 ```cpp
 int optionValue = 1;
@@ -90,27 +90,27 @@ setsockopt(
 );
 ```
 
-Esta opción permite reutilizar la dirección y el puerto poco después de haber detenido el servidor.
+This option allows the address and port to be reused shortly after the server has been stopped.
 
-Sin esta configuración, al reiniciar rápidamente el programa podría aparecer un error como:
+Without this configuration, quickly restarting the program could produce an error such as:
 
 ```text
 Address already in use
 ```
 
-Si `setsockopt()` devuelve `-1`, se debe:
+If `setsockopt()` returns `-1`, you must:
 
-1. Guardar o consultar el error mediante `errno`.
-2. Cerrar el socket creado.
-3. Detener la inicialización del servidor.
+1. Store or inspect the error through `errno`.
+2. Close the created socket.
+3. Stop server initialization.
 
 ---
 
-## 3. Hacer el socket no bloqueante
+## 3. Make the socket non-blocking
 
-El socket de escucha debe configurarse como no bloqueante mediante `fcntl()`.
+The listening socket must be configured as non-blocking through `fcntl()`.
 
-Primero se obtienen sus flags actuales:
+First obtain its current flags:
 
 ```cpp
 int currentFlags = fcntl(
@@ -120,7 +120,7 @@ int currentFlags = fcntl(
 );
 ```
 
-Después se añaden los flags de modo no bloqueante:
+Then add the non-blocking flags:
 
 ```cpp
 fcntl(
@@ -130,29 +130,29 @@ fcntl(
 );
 ```
 
-Es importante conservar los flags anteriores utilizando:
+It is important to keep the previous flags using:
 
 ```cpp
 currentFlags | O_NONBLOCK
 ```
 
-No se debe reemplazar directamente toda la configuración del descriptor.
+The whole descriptor configuration must not be replaced directly.
 
-Aunque en esta fase todavía no se utilice `accept()`, configurar el socket como no bloqueante prepara el servidor para la futura gestión de múltiples clientes mediante `poll()`.
+Even though `accept()` is not used yet in this phase, configuring the socket as non-blocking prepares the server for the future management of multiple clients through `poll()`.
 
-Se deben comprobar por separado los valores devueltos por ambas llamadas a `fcntl()`. Un resultado de `-1` indica un error.
+The values returned by both `fcntl()` calls must be checked separately. A result of `-1` indicates an error.
 
 ---
 
-## 4. Preparar la dirección del servidor
+## 4. Prepare the server address
 
-Para indicar en qué dirección y puerto debe escuchar el socket, se utiliza una estructura `sockaddr_in`:
+To indicate which address and port the socket must listen on, a `sockaddr_in` structure is used:
 
 ```cpp
 struct sockaddr_in serverAddress;
 ```
 
-Antes de rellenarla, se debe inicializar toda su memoria a cero:
+Before filling it, all of its memory must be initialized to zero:
 
 ```cpp
 std::memset(
@@ -162,7 +162,7 @@ std::memset(
 );
 ```
 
-Después se configuran sus campos:
+Then its fields are configured:
 
 ```cpp
 serverAddress.sin_family = AF_INET;
@@ -170,20 +170,20 @@ serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 serverAddress.sin_port = htons(port);
 ```
 
-Significado:
+Meaning:
 
-* `sin_family = AF_INET`: la dirección utiliza IPv4.
-* `INADDR_ANY`: el servidor acepta conexiones dirigidas a cualquiera de las interfaces de red de la máquina, incluida `127.0.0.1`.
-* `htons(port)`: convierte el puerto al orden de bytes utilizado por la red.
-* `htonl(INADDR_ANY)`: convierte la dirección al orden de bytes de red.
+* `sin_family = AF_INET`: the address uses IPv4.
+* `INADDR_ANY`: the server accepts connections directed at any of the machine’s network interfaces, including `127.0.0.1`.
+* `htons(port)`: converts the port to the byte order used by the network.
+* `htonl(INADDR_ANY)`: converts the address to network byte order.
 
-El puerto ya debe haber sido validado durante la fase 1.
+The port must already have been validated during phase 1.
 
 ---
 
-## 5. Asociar el socket con `bind()`
+## 5. Associate the socket with `bind()`
 
-`bind()` asocia el socket con la dirección y el puerto configurados:
+`bind()` associates the socket with the configured address and port:
 
 ```cpp
 bind(
@@ -193,30 +193,30 @@ bind(
 );
 ```
 
-Después de esta llamada, el socket queda asociado al puerto indicado al ejecutar el servidor.
+After this call, the socket is associated with the port given when the server was started.
 
-Por ejemplo:
+For example:
 
 ```bash
 ./ircserv 6667 password
 ```
 
-asociará el socket al puerto `6667`.
+will associate the socket with port `6667`.
 
-Si `bind()` devuelve `-1`, las causas más habituales son:
+If `bind()` returns `-1`, the most common causes are:
 
-* El puerto ya está siendo utilizado.
-* El puerto no es válido.
-* El proceso no tiene permisos para utilizar ese puerto.
-* La dirección está mal configurada.
+* The port is already being used.
+* The port is not valid.
+* The process does not have permission to use that port.
+* The address is misconfigured.
 
-En caso de error, se debe cerrar el socket antes de terminar la inicialización.
+On error, the socket must be closed before finishing initialization.
 
 ---
 
-## 6. Activar el modo escucha con `listen()`
+## 6. Enable listening mode with `listen()`
 
-Después de ejecutar correctamente `bind()`, se debe poner el socket en modo escucha:
+After `bind()` has completed successfully, the socket must be put into listening mode:
 
 ```cpp
 listen(
@@ -225,29 +225,29 @@ listen(
 );
 ```
 
-`SOMAXCONN` indica que se utilizará el límite máximo permitido por el sistema para la cola de conexiones pendientes.
+`SOMAXCONN` indicates that the maximum pending-connection queue allowed by the system will be used.
 
-A partir de este momento, el sistema operativo puede recibir solicitudes de conexión TCP dirigidas al puerto.
+From this moment, the operating system can receive TCP connection requests directed at the port.
 
-Si `listen()` devuelve `-1`, se debe cerrar el socket y detener la inicialización.
-
----
-
-## 7. Mantener el servidor en ejecución
-
-Después de ejecutar `listen()`, el proceso debe permanecer activo.
-
-Si `main()` termina inmediatamente, el destructor de `Server` cerrará el socket y `nc` no podrá conectarse.
-
-En esta fase todavía no hace falta aceptar ni procesar clientes, pero el servidor debe permanecer ejecutándose hasta recibir la señal de finalización gestionada en la fase 1.
+If `listen()` returns `-1`, the socket must be closed and initialization stopped.
 
 ---
 
-## 8. Gestionar correctamente los errores
+## 7. Keep the server running
 
-Todas las llamadas al sistema deben comprobar su valor de retorno:
+After running `listen()`, the process must stay active.
 
-| Función        | Error |
+If `main()` finishes immediately, the `Server` destructor will close the socket and `nc` will not be able to connect.
+
+In this phase it is still not necessary to accept or process clients, but the server must stay running until it receives the termination signal handled in phase 1.
+
+---
+
+## 8. Handle errors correctly
+
+Every system call must check its return value:
+
+| Function       | Error |
 | -------------- | ----: |
 | `socket()`     |  `-1` |
 | `setsockopt()` |  `-1` |
@@ -255,31 +255,31 @@ Todas las llamadas al sistema deben comprobar su valor de retorno:
 | `bind()`       |  `-1` |
 | `listen()`     |  `-1` |
 
-Si se produce un error después de haber creado el socket, se debe cerrar su descriptor:
+If an error occurs after the socket has been created, its descriptor must be closed:
 
 ```cpp
 close(_serverSocketFileDescriptor);
 ```
 
-También conviene establecerlo a un valor inválido para evitar cerrarlo dos veces:
+It is also useful to set it to an invalid value to avoid closing it twice:
 
 ```cpp
 _serverSocketFileDescriptor = -1;
 ```
 
-El mensaje de error puede construirse utilizando:
+The error message can be built using:
 
 ```cpp
 std::strerror(errno)
 ```
 
-La inicialización no debe continuar después de que falle una de estas operaciones.
+Initialization must not continue after one of these operations fails.
 
 ---
 
-## Orden de implementación
+## Implementation order
 
-El orden correcto de las operaciones es:
+The correct order of operations is:
 
 ```text
 socket()
@@ -290,66 +290,66 @@ fcntl(F_GETFL)
     ↓
 fcntl(F_SETFL, O_NONBLOCK)
     ↓
-preparar sockaddr_in
+prepare sockaddr_in
     ↓
 bind()
     ↓
 listen()
 ```
 
-No se debe llamar a `bind()` antes de crear y configurar el socket, ni a `listen()` antes de que `bind()` haya terminado correctamente.
+`bind()` must not be called before creating and configuring the socket, nor `listen()` before `bind()` has completed successfully.
 
 ---
 
-## Comprobación manual
+## Manual check
 
-### 1. Compilar el servidor
+### 1. Compile the server
 
 ```bash
 make
 ```
 
-### 2. Ejecutarlo
+### 2. Run it
 
 ```bash
 ./ircserv 6667 password
 ```
 
-El programa debe permanecer activo y no debe devolver inmediatamente el prompt de la terminal.
+The program must stay active and must not immediately return the terminal prompt.
 
-### 3. Comprobar el puerto
+### 3. Check the port
 
-En otra terminal:
+In another terminal:
 
 ```bash
 ss -ltnp | grep ':6667'
 ```
 
-Debe aparecer el puerto en estado:
+The port must appear in state:
 
 ```text
 LISTEN
 ```
 
-### 4. Probar la conexión TCP
+### 4. Test the TCP connection
 
 ```bash
 nc 127.0.0.1 6667
 ```
 
-`nc` debe poder establecer la conexión y quedarse esperando.
+`nc` must be able to establish the connection and stay waiting.
 
-En esta fase, escribir texto en `nc` no tiene que producir ninguna respuesta, porque todavía no se reciben datos ni se interpretan comandos.
+In this phase, typing text in `nc` does not have to produce any reply, because data is not received yet and commands are not interpreted.
 
-### 5. Comprobar un puerto ocupado
+### 5. Check an occupied port
 
-Con una instancia del servidor ya ejecutándose, se puede intentar iniciar otra:
+With a server instance already running, you can try to start another:
 
 ```bash
 ./ircserv 6667 password
 ```
 
-La segunda instancia debe detectar el error de `bind()` y terminar de forma controlada, mostrando un mensaje similar a:
+The second instance must detect the `bind()` error and terminate in a controlled way, showing a message similar to:
 
 ```text
 bind: Address already in use
@@ -357,17 +357,17 @@ bind: Address already in use
 
 ---
 
-## Criterios para considerar terminada la fase
+## Criteria to consider the phase finished
 
-La fase 2 estará completa cuando:
+Phase 2 is complete when:
 
-* El socket TCP se cree correctamente.
-* `SO_REUSEADDR` esté activado.
-* El socket esté configurado como no bloqueante.
-* La estructura `sockaddr_in` esté correctamente inicializada.
-* El socket se asocie al puerto recibido por argumentos.
-* El socket entre en estado `LISTEN`.
-* `nc 127.0.0.1 6667` pueda establecer una conexión TCP.
-* Todos los errores de las llamadas al sistema sean comprobados.
-* El socket se cierre correctamente al detener el servidor.
-* No se haya implementado todavía la gestión de clientes ni de comandos IRC.
+* The TCP socket is created correctly.
+* `SO_REUSEADDR` is enabled.
+* The socket is configured as non-blocking.
+* The `sockaddr_in` structure is correctly initialized.
+* The socket is associated with the port received as an argument.
+* The socket enters the `LISTEN` state.
+* `nc 127.0.0.1 6667` can establish a TCP connection.
+* Every system-call error is checked.
+* The socket is closed correctly when the server is stopped.
+* Client management and IRC commands have not been implemented yet.

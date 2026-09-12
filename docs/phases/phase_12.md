@@ -1,99 +1,99 @@
-# Fase 12 — Implementación de `JOIN`
+# Phase 12 — Implementing `JOIN`
 
-## Objetivo
+## Goal
 
-Implementar el comando `JOIN`, encargado de permitir que un cliente registrado entre en un canal.
+Implement the `JOIN` command, which lets a registered client enter a channel.
 
-Esta fase conecta el modelo de cliente con el modelo de canal desarrollado anteriormente. El servidor deberá:
+This phase connects the client model with the channel model developed earlier. The server must:
 
-- Crear canales cuando todavía no existan.
-- Comprobar las restricciones de acceso.
-- Añadir clientes a los canales.
-- Asignar operadores.
-- Notificar la entrada a los miembros.
-- Enviar el topic y la lista de usuarios del canal.
+- Create channels when they do not exist yet.
+- Check access restrictions.
+- Add clients to channels.
+- Assign operators.
+- Notify the entry to the members.
+- Send the topic and the channel user list.
 
 ---
 
-## Sintaxis del comando
+## Command syntax
 
-La forma básica es:
+The basic form is:
 
 ```text
 JOIN #general
 ```
 
-Si el canal requiere contraseña mediante el modo `+k`:
+If the channel requires a password through mode `+k`:
 
 ```text
-JOIN #general contraseña
+JOIN #general password
 ```
 
-También se puede admitir la entrada en varios canales:
+Entering several channels can also be accepted:
 
 ```text
-JOIN #general,#programacion claveGeneral,claveProgramacion
+JOIN #general,#programming generalKey,programmingKey
 ```
 
-Para comenzar, se puede implementar primero la entrada en un único canal y ampliar posteriormente el handler para aceptar listas separadas por comas.
+To start, entry into a single channel can be implemented first and the handler later expanded to accept comma-separated lists.
 
 ---
 
-## Validaciones iniciales
+## Initial validations
 
-Antes de intentar añadir al cliente, el servidor debe comprobar:
+Before trying to add the client, the server must check:
 
-1. Que el cliente está registrado.
-2. Que el comando contiene el nombre de un canal.
-3. Que el nombre del canal tiene un formato válido.
-4. Que el cliente todavía no pertenece al canal.
-5. Que se cumplen las restricciones de acceso del canal.
+1. That the client is registered.
+2. That the command contains a channel name.
+3. That the channel name has a valid format.
+4. That the client does not already belong to the channel.
+5. That the channel’s access restrictions are met.
 
-Ejemplo de validación inicial:
+Example of initial validation:
 
 ```text
-¿Cliente registrado?
+Is the client registered?
     ↓
-¿Se recibió un nombre de canal?
+Was a channel name received?
     ↓
-¿El nombre del canal es válido?
+Is the channel name valid?
     ↓
-¿El cliente ya pertenece al canal?
+Does the client already belong to the channel?
 ```
 
-Si el cliente ya pertenece al canal, el servidor puede ignorar silenciosamente el comando para evitar añadirlo dos veces.
+If the client already belongs to the channel, the server can silently ignore the command to avoid adding them twice.
 
 ---
 
-## Validación del nombre del canal
+## Channel name validation
 
-Como mínimo, el nombre debería:
+At a minimum, the name should:
 
-- Comenzar por `#`.
-- Contener al menos un carácter después del prefijo.
-- No contener espacios.
-- No contener comas.
-- No contener caracteres de control.
-- No superar el límite de longitud decidido por el servidor.
+- Start with `#`.
+- Contain at least one character after the prefix.
+- Not contain spaces.
+- Not contain commas.
+- Not contain control characters.
+- Not exceed the length limit decided by the server.
 
-Ejemplos válidos:
+Valid examples:
 
 ```text
 #general
-#programacion
+#programming
 #cpp
 ```
 
-Ejemplos inválidos:
+Invalid examples:
 
 ```text
 general
 #
-#canal con espacios
-#canal,otro
+#channel with spaces
+#channel,other
 ```
 
-Conviene centralizar esta comprobación en una función:
+It is useful to centralize this check in a function:
 
 ```cpp
 bool isValidChannelName(const std::string &channelName);
@@ -101,71 +101,71 @@ bool isValidChannelName(const std::string &channelName);
 
 ---
 
-## Flujo principal de `JOIN`
+## Main `JOIN` flow
 
 ```text
-¿Cliente registrado?
+Is the client registered?
     ↓
-¿Nombre de canal válido?
+Is the channel name valid?
     ↓
-¿El canal existe?
+Does the channel exist?
  ├── No
  │    ↓
- │   Crear el canal
+ │   Create the channel
  │    ↓
- │   Añadir al cliente
+ │   Add the client
  │    ↓
- │   Convertirlo en operador
+ │   Make them an operator
  │
- └── Sí
+ └── Yes
       ↓
-     Comprobar restricciones
-      ├── modo +i
-      ├── modo +k
-      └── modo +l
+     Check restrictions
+      ├── mode +i
+      ├── mode +k
+      └── mode +l
            ↓
-         Añadir al cliente
+         Add the client
            ↓
-         Notificar JOIN
+         Notify JOIN
            ↓
-         Enviar topic
+         Send topic
            ↓
-         Enviar lista de miembros
+         Send member list
 ```
 
 ---
 
-## Creación de un canal
+## Creating a channel
 
-Si el canal solicitado no existe, el servidor debe:
+If the requested channel does not exist, the server must:
 
-1. Crear un nuevo objeto `Channel`.
-2. Guardarlo en la colección global de canales.
-3. Añadir al cliente como miembro.
-4. Convertir al cliente en operador del canal.
+1. Create a new `Channel` object.
+2. Store it in the global channel collection.
+3. Add the client as a member.
+4. Make the client a channel operator.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 std::map<std::string, Channel> channels;
 ```
 
-El servidor debe ser el propietario de los canales. Los clientes únicamente deben guardar una referencia, identificador o nombre de los canales a los que pertenecen.
+The server must own the channels. Clients should only store a reference, identifier or name of the channels they belong to.
 
-El primer usuario de un canal nuevo debe convertirse automáticamente en operador:
+The first user of a new channel must automatically become an operator:
 
 ```text
 JOIN #general
 ```
 
-Resultado:
+Result:
 
 ```text
-Miembros: roxana
-Operadores: roxana
+Members: roxana
+Operators: roxana
 ```
 
-En la respuesta de `NAMES`, un operador normalmente se representa mediante `@`:
+In the `NAMES` reply, an operator is normally represented with `@`:
 
 ```text
 @roxana
@@ -173,65 +173,65 @@ En la respuesta de `NAMES`, un operador normalmente se representa mediante `@`:
 
 ---
 
-## Comprobación de restricciones
+## Checking restrictions
 
-Si el canal ya existe, deben comprobarse sus modos antes de añadir al cliente.
+If the channel already exists, its modes must be checked before adding the client.
 
-El orden recomendado es:
+The recommended order is:
 
-1. Comprobar si el cliente ya está dentro.
-2. Comprobar el límite de usuarios `+l`.
-3. Comprobar el modo de invitación `+i`.
-4. Comprobar la contraseña `+k`.
+1. Check whether the client is already inside.
+2. Check the user limit `+l`.
+3. Check the invite mode `+i`.
+4. Check the password `+k`.
 
-No se debe modificar ningún estado del canal hasta que todas las validaciones hayan terminado correctamente.
+No channel state must be modified until every validation has finished correctly.
 
 ---
 
-## Modo `+i` — Canal solo para invitados
+## Mode `+i` — Invite-only channel
 
-Cuando el canal tenga activo el modo `+i`, solamente podrán entrar los clientes incluidos en su lista de invitados.
+When the channel has mode `+i` enabled, only clients included in its invite list can enter.
 
 ```text
 MODE #general +i
 ```
 
-Si el cliente no está invitado:
+If the client is not invited:
 
 ```text
 473 ERR_INVITEONLYCHAN
 ```
 
-Formato aproximado:
+Approximate format:
 
 ```text
 :server.name 473 roxana #general :Cannot join channel (+i)
 ```
 
-Si la entrada tiene éxito, el cliente debería eliminarse de la lista de invitados, porque la invitación ya ha sido consumida.
+If entry succeeds, the client should be removed from the invite list, because the invitation has already been consumed.
 
 ---
 
-## Modo `+k` — Canal protegido por contraseña
+## Mode `+k` — Password-protected channel
 
-Cuando el canal tenga activo el modo `+k`, el cliente debe proporcionar la contraseña correcta:
+When the channel has mode `+k` enabled, the client must provide the correct password:
 
 ```text
-JOIN #general contraseña
+JOIN #general password
 ```
 
-El servidor debe comprobar:
+The server must check:
 
-- Que se proporcionó una contraseña.
-- Que coincide exactamente con la contraseña del canal.
+- That a password was provided.
+- That it matches the channel password exactly.
 
-Si no existe o es incorrecta:
+If it is missing or incorrect:
 
 ```text
 475 ERR_BADCHANNELKEY
 ```
 
-Formato aproximado:
+Approximate format:
 
 ```text
 :server.name 475 roxana #general :Cannot join channel (+k)
@@ -239,29 +239,29 @@ Formato aproximado:
 
 ---
 
-## Modo `+l` — Límite de usuarios
+## Mode `+l` — User limit
 
-Cuando el canal tenga activo el modo `+l`, el servidor debe comprobar que todavía existe espacio disponible.
+When the channel has mode `+l` enabled, the server must check that there is still available space.
 
-Ejemplo:
+Example:
 
 ```text
 MODE #general +l 10
 ```
 
-La comprobación debe realizarse antes de añadir al cliente:
+The check must be performed before adding the client:
 
 ```text
-número de miembros >= límite
+number of members >= limit
 ```
 
-Si el canal está lleno:
+If the channel is full:
 
 ```text
 471 ERR_CHANNELISFULL
 ```
 
-Formato aproximado:
+Approximate format:
 
 ```text
 :server.name 471 roxana #general :Cannot join channel (+l)
@@ -269,25 +269,25 @@ Formato aproximado:
 
 ---
 
-## Añadir al cliente
+## Adding the client
 
-Cuando todas las validaciones hayan tenido éxito:
+When every validation has succeeded:
 
-1. Añadir el cliente a la colección de miembros del canal.
-2. Registrar el canal entre los canales del cliente.
-3. Eliminar al cliente de la lista de invitados, si estaba incluido.
-4. Asignarle el estado de operador si es el primer miembro.
+1. Add the client to the channel’s member collection.
+2. Register the channel among the client’s channels.
+3. Remove the client from the invite list, if they were included.
+4. Assign them operator status if they are the first member.
 
-Es importante mantener sincronizados ambos lados de la relación:
+It is important to keep both sides of the relationship synchronized:
 
 ```text
-Channel → contiene al Client
-Client  → conoce el Channel
+Channel → contains the Client
+Client  → knows the Channel
 ```
 
-No debe ocurrir que el canal contenga al cliente pero el cliente no tenga registrado el canal, o viceversa.
+It must not happen that the channel contains the client but the client does not have the channel registered, or vice versa.
 
-Conviene centralizar esta operación:
+It is useful to centralize this operation:
 
 ```cpp
 void Server::addClientToChannel(
@@ -298,29 +298,29 @@ void Server::addClientToChannel(
 
 ---
 
-## Notificación de entrada
+## Entry notification
 
-Después de añadir al cliente, debe enviarse el mensaje `JOIN` a todos los miembros del canal, incluido el propio cliente.
+After adding the client, the `JOIN` message must be sent to every channel member, including the client itself.
 
-Formato:
+Format:
 
 ```text
 :nickname!username@hostname JOIN :#general
 ```
 
-Ejemplo:
+Example:
 
 ```text
 :roxana!roxana@127.0.0.1 JOIN :#general
 ```
 
-La notificación debe usar el prefijo completo del cliente:
+The notification must use the client’s full prefix:
 
 ```cpp
 std::string buildClientPrefix(const Client &client);
 ```
 
-Y debería enviarse mediante una función de difusión:
+And it should be sent through a broadcast function:
 
 ```cpp
 void Server::broadcastToChannel(
@@ -329,86 +329,86 @@ void Server::broadcastToChannel(
 );
 ```
 
-El cliente debe añadirse al canal antes de realizar el broadcast para que también reciba la confirmación de su propio `JOIN`.
+The client must be added to the channel before performing the broadcast so they also receive confirmation of their own `JOIN`.
 
 ---
 
-## Envío del topic
+## Sending the topic
 
-Después de confirmar la entrada, el servidor debe informar del topic actual.
+After confirming entry, the server must report the current topic.
 
-### Canal sin topic
+### Channel without a topic
 
-Si el canal no tiene topic:
+If the channel has no topic:
 
 ```text
 331 RPL_NOTOPIC
 ```
 
-Ejemplo:
+Example:
 
 ```text
 :server.name 331 roxana #general :No topic is set
 ```
 
-### Canal con topic
+### Channel with a topic
 
-Si el canal tiene topic:
+If the channel has a topic:
 
 ```text
 332 RPL_TOPIC
 ```
 
-Ejemplo:
+Example:
 
 ```text
-:server.name 332 roxana #general :Canal general del servidor
+:server.name 332 roxana #general :Server general channel
 ```
 
 ---
 
-## Envío de la lista de miembros
+## Sending the member list
 
-Después del topic, el servidor debe enviar la lista de miembros mediante dos respuestas.
+After the topic, the server must send the member list through two replies.
 
 ### `353 RPL_NAMREPLY`
 
-Contiene los usuarios presentes en el canal:
+Contains the users present on the channel:
 
 ```text
-:server.name 353 roxana = #general :@roxana usuario2 usuario3
+:server.name 353 roxana = #general :@roxana user2 user3
 ```
 
-Los operadores deben aparecer con el prefijo `@`:
+Operators must appear with the `@` prefix:
 
 ```text
 @roxana
 ```
 
-Los usuarios normales aparecen sin prefijo:
+Regular users appear without a prefix:
 
 ```text
-usuario2
+user2
 ```
 
 ### `366 RPL_ENDOFNAMES`
 
-Indica que la lista ha terminado:
+Indicates that the list has ended:
 
 ```text
 :server.name 366 roxana #general :End of /NAMES list
 ```
 
-El orden completo debe ser:
+The complete order must be:
 
 ```text
 JOIN
-331 o 332
+331 or 332
 353
 366
 ```
 
-Ejemplo completo:
+Complete example:
 
 ```text
 :roxana!roxana@127.0.0.1 JOIN :#general
@@ -419,26 +419,26 @@ Ejemplo completo:
 
 ---
 
-## Respuestas numéricas necesarias
+## Required numeric replies
 
-| Código | Nombre | Situación |
+| Code | Name | Situation |
 |---:|---|---|
-| `331` | `RPL_NOTOPIC` | El canal no tiene topic |
-| `332` | `RPL_TOPIC` | El canal tiene un topic |
-| `353` | `RPL_NAMREPLY` | Lista de miembros del canal |
-| `366` | `RPL_ENDOFNAMES` | Fin de la lista de miembros |
-| `403` | `ERR_NOSUCHCHANNEL` | El nombre del canal no puede utilizarse |
-| `451` | `ERR_NOTREGISTERED` | El cliente todavía no está registrado |
-| `461` | `ERR_NEEDMOREPARAMS` | No se proporcionó un canal |
-| `471` | `ERR_CHANNELISFULL` | El canal ha alcanzado su límite |
-| `473` | `ERR_INVITEONLYCHAN` | El canal requiere invitación |
-| `475` | `ERR_BADCHANNELKEY` | La contraseña es incorrecta |
+| `331` | `RPL_NOTOPIC` | The channel has no topic |
+| `332` | `RPL_TOPIC` | The channel has a topic |
+| `353` | `RPL_NAMREPLY` | Channel member list |
+| `366` | `RPL_ENDOFNAMES` | End of the member list |
+| `403` | `ERR_NOSUCHCHANNEL` | The channel name cannot be used |
+| `451` | `ERR_NOTREGISTERED` | The client is not registered yet |
+| `461` | `ERR_NEEDMOREPARAMS` | No channel was provided |
+| `471` | `ERR_CHANNELISFULL` | The channel has reached its limit |
+| `473` | `ERR_INVITEONLYCHAN` | The channel requires an invitation |
+| `475` | `ERR_BADCHANNELKEY` | The password is incorrect |
 
 ---
 
-## Estructura recomendada del handler
+## Recommended handler structure
 
-El handler puede dividirse en operaciones pequeñas:
+The handler can be split into small operations:
 
 ```cpp
 void CommandDispatcher::handleJoin(
@@ -468,181 +468,181 @@ void Server::sendChannelNames(
 );
 ```
 
-Responsabilidades del handler:
+Handler responsibilities:
 
 ```text
 handleJoin()
-    ├── validar registro y parámetros
-    ├── validar nombre
-    ├── localizar o crear canal
-    ├── comprobar restricciones
-    ├── añadir cliente
-    ├── emitir JOIN
-    ├── enviar topic
-    └── enviar NAMES
+    ├── validate registration and parameters
+    ├── validate name
+    ├── locate or create channel
+    ├── check restrictions
+    ├── add client
+    ├── emit JOIN
+    ├── send topic
+    └── send NAMES
 ```
 
 ---
 
-## Implementación recomendada de `PART`
+## Recommended implementation of `PART`
 
-Aunque `PART` no sea uno de los comandos centrales del subject, implementarlo en esta fase facilita considerablemente las pruebas.
+Even though `PART` is not one of the subject’s central commands, implementing it in this phase makes tests considerably easier.
 
-Sintaxis:
+Syntax:
 
 ```text
 PART #general
 ```
 
-Con mensaje opcional:
+With an optional message:
 
 ```text
-PART #general :Hasta luego
+PART #general :See you later
 ```
 
-El servidor debe:
+The server must:
 
-1. Comprobar que el cliente está registrado.
-2. Comprobar que el canal existe.
-3. Comprobar que el cliente pertenece al canal.
-4. Notificar la salida a los miembros.
-5. Eliminar al cliente de la lista de miembros.
-6. Eliminarlo de la lista de operadores.
-7. Eliminar el canal de la colección del cliente.
-8. Eliminar el canal del servidor si queda vacío.
+1. Check that the client is registered.
+2. Check that the channel exists.
+3. Check that the client belongs to the channel.
+4. Notify the leave to the members.
+5. Remove the client from the member list.
+6. Remove them from the operator list.
+7. Remove the channel from the client’s collection.
+8. Delete the channel from the server if it becomes empty.
 
-Mensaje de salida:
+Leave message:
 
 ```text
-:roxana!roxana@127.0.0.1 PART #general :Hasta luego
+:roxana!roxana@127.0.0.1 PART #general :See you later
 ```
 
-La notificación debe enviarse antes de eliminar al cliente, para que este también pueda recibir su propio mensaje `PART`.
+The notification must be sent before removing the client, so they can also receive their own `PART` message.
 
-Errores útiles para `PART`:
+Useful errors for `PART`:
 
-| Código | Nombre | Situación |
+| Code | Name | Situation |
 |---:|---|---|
-| `403` | `ERR_NOSUCHCHANNEL` | El canal no existe |
-| `442` | `ERR_NOTONCHANNEL` | El cliente no pertenece al canal |
-| `461` | `ERR_NEEDMOREPARAMS` | No se proporcionó un canal |
+| `403` | `ERR_NOSUCHCHANNEL` | The channel does not exist |
+| `442` | `ERR_NOTONCHANNEL` | The client does not belong to the channel |
+| `461` | `ERR_NEEDMOREPARAMS` | No channel was provided |
 
 ---
 
-## Casos de prueba mínimos
+## Minimum test cases
 
-### Crear un canal nuevo
-
-```text
-JOIN #general
-```
-
-Debe:
-
-- Crear `#general`.
-- Añadir al cliente.
-- Convertirlo en operador.
-- Emitir el mensaje `JOIN`.
-- Enviar `331` o `332`.
-- Enviar `353`.
-- Enviar `366`.
-
-### Entrar en un canal existente
+### Create a new channel
 
 ```text
 JOIN #general
 ```
 
-Debe:
+Must:
 
-- Mantener a los miembros anteriores.
-- Añadir al nuevo cliente.
-- Notificar el `JOIN` a todos los miembros.
-- Enviar al nuevo cliente el topic y la lista de nombres.
+- Create `#general`.
+- Add the client.
+- Make them an operator.
+- Emit the `JOIN` message.
+- Send `331` or `332`.
+- Send `353`.
+- Send `366`.
 
-### Entrar dos veces en el mismo canal
+### Enter an existing channel
+
+```text
+JOIN #general
+```
+
+Must:
+
+- Keep the previous members.
+- Add the new client.
+- Notify the `JOIN` to every member.
+- Send the new client the topic and the name list.
+
+### Enter the same channel twice
 
 ```text
 JOIN #general
 JOIN #general
 ```
 
-El cliente no debe aparecer duplicado.
+The client must not appear duplicated.
 
-### Canal lleno
+### Full channel
 
 ```text
 MODE #general +l 1
 JOIN #general
 ```
 
-El segundo cliente debe recibir:
+The second client must receive:
 
 ```text
 471 ERR_CHANNELISFULL
 ```
 
-### Canal solo para invitados
+### Invite-only channel
 
 ```text
 MODE #general +i
 JOIN #general
 ```
 
-Un cliente no invitado debe recibir:
+A client who is not invited must receive:
 
 ```text
 473 ERR_INVITEONLYCHAN
 ```
 
-### Contraseña incorrecta
+### Incorrect password
 
 ```text
-MODE #general +k secreto
-JOIN #general incorrecta
+MODE #general +k secret
+JOIN #general incorrect
 ```
 
-Debe responder:
+Must reply:
 
 ```text
 475 ERR_BADCHANNELKEY
 ```
 
-### Contraseña correcta
+### Correct password
 
 ```text
-JOIN #general secreto
+JOIN #general secret
 ```
 
-El cliente debe entrar normalmente.
+The client must enter normally.
 
-### Abandonar el canal
+### Leave the channel
 
 ```text
-PART #general :Hasta luego
+PART #general :See you later
 ```
 
-Debe:
+Must:
 
-- Notificar el `PART`.
-- Eliminar al cliente del canal.
-- Eliminar su estado de operador.
-- Eliminar el canal si queda vacío.
+- Notify the `PART`.
+- Remove the client from the channel.
+- Remove their operator status.
+- Delete the channel if it becomes empty.
 
 ---
 
-## Resultado esperado de la fase
+## Expected result of the phase
 
-Al terminar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-- Crear canales dinámicamente.
-- Añadir clientes a canales existentes.
-- Convertir al primer miembro en operador.
-- Aplicar correctamente los modos `+i`, `+k` y `+l`.
-- Mantener sincronizada la relación entre clientes y canales.
-- Notificar las entradas a todos los miembros.
-- Enviar el topic del canal.
-- Enviar la lista de miembros con sus prefijos.
-- Evitar miembros duplicados.
-- Gestionar la salida mediante `PART`.
-- Eliminar los canales que queden vacíos.
+- Create channels dynamically.
+- Add clients to existing channels.
+- Make the first member an operator.
+- Apply modes `+i`, `+k` and `+l` correctly.
+- Keep the relationship between clients and channels synchronized.
+- Notify entries to every member.
+- Send the channel topic.
+- Send the member list with their prefixes.
+- Avoid duplicate members.
+- Handle leaving through `PART`.
+- Delete channels that become empty.

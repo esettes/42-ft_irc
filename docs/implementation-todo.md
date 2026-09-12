@@ -1,151 +1,151 @@
 # ft_irc implementation to-do
 
-Estado actual: parte obligatoria incompleta. Ya existen CLI, socket no bloqueante,
-`poll()`, gestión básica de varios clientes, framing TCP, parser, buffer de salida y
-envíos parciales. Quedan los siguientes trabajos.
+Current status: the mandatory part is incomplete. CLI, non-blocking socket,
+`poll()`, basic multi-client handling, TCP framing, parser, output buffer and
+partial sends already exist. The following work remains.
 
-## 1. Protocolo y respuestas
+## 1. Protocol and replies
 
-- [x] Completar la serialización única de `IrcMessage`: prefijo, comando, parámetros, trailing y `\r\n`.
-- [x] Rechazar CR, LF y NUL internos en mensajes generados.
-- [x] Definir un nombre estable para el servidor y guardar hostname o IP de cada cliente.
-- [x] Centralizar los prefijos `:server` y `:nick!user@host`.
-- [x] Centralizar las respuestas numéricas, su formato de tres cifras y el destinatario `*` cuando falte el nick.
-- [x] Hacer que todos los handlers encolen respuestas y activen `POLLOUT`; nunca escribir directamente ni modificar el buffer sin actualizar `poll()`.
-- [x] Devolver errores desde el dispatcher en vez de ignorar comandos desconocidos, parámetros ausentes o clientes no registrados.
-- [x] Implementar los numerics documentados: `001–005`, `324`, `331`, `332`, `341`, `353`, `366`, `401`, `403`, `404`, `409`, `411`, `412`, `421`, `431`, `432`, `433`, `441`, `442`, `443`, `451`, `461`, `462`, `464`, `471`, `472`, `473`, `475` y `482`.
-- [x] Limitar cada línea IRC a 512 bytes, incluyendo `\r\n`.
-- [x] Limitar los buffers de entrada y salida; desconectar limpiamente clientes abusivos o demasiado lentos.
-- [x] Implementar casemapping IRC para nicknames y canales: conservar el nombre original, pero buscar mediante una clave normalizada.
+- [x] Complete the single serialization of `IrcMessage`: prefix, command, parameters, trailing and `\r\n`.
+- [x] Reject internal CR, LF and NUL in generated messages.
+- [x] Define a stable server name and store each client’s hostname or IP.
+- [x] Centralize the `:server` and `:nick!user@host` prefixes.
+- [x] Centralize numeric replies, their three-digit format and the `*` target when the nick is missing.
+- [x] Make every handler queue replies and enable `POLLOUT`; never write directly or modify the buffer without updating `poll()`.
+- [x] Return errors from the dispatcher instead of ignoring unknown commands, missing parameters or unregistered clients.
+- [x] Implement the documented numerics: `001–005`, `324`, `331`, `332`, `341`, `353`, `366`, `401`, `403`, `404`, `409`, `411`, `412`, `421`, `431`, `432`, `433`, `441`, `442`, `443`, `451`, `461`, `462`, `464`, `471`, `472`, `473`, `475` and `482`.
+- [x] Limit every IRC line to 512 bytes, including `\r\n`.
+- [x] Limit the input and output buffers; disconnect abusive or too-slow clients cleanly.
+- [x] Implement IRC casemapping for nicknames and channels: keep the original name, but look it up through a normalized key.
 
-Referencias: [fase 0](phases/phase_0.md) y [fase 8](phases/phase_8.md).
+References: [phase 0](phases/phase_0.md) and [phase 8](phases/phase_8.md).
 
-## 2. Registro
+## 2. Registration
 
-- [ ] Implementar `PASS`: comprobar la contraseña real y gestionar `461`, `462` y `464`.
-- [ ] Garantizar que una contraseña incorrecta nunca active `passwordAccepted`.
-- [ ] Implementar `NICK`: validar formato, evitar duplicados y responder `431`, `432` o `433`.
-- [ ] Crear un índice global normalizado `nickname -> Client`.
-- [ ] Permitir cambios de nickname tras el registro; actualizar el índice y notificar una sola vez a usuarios relacionados.
-- [ ] Liberar el nickname al desconectar al cliente.
-- [ ] Implementar `USER`: exigir los parámetros necesarios, guardar username y realname y rechazar repeticiones mediante `462`.
-- [ ] Completar el registro solo con `PASS + NICK + USER`; mantener la operación idempotente.
-- [ ] Enviar la bienvenida una sola vez. Mínimo: `001`; contrato completo de la documentación: `001–005`.
-- [ ] Permitir antes del registro únicamente `CAP`, `PASS`, `NICK`, `USER`, `PING`, `PONG` y `QUIT`.
-- [ ] Responder `451` a comandos de mensajería o canales ejecutados antes del registro.
+- [ ] Implement `PASS`: check the real password and handle `461`, `462` and `464`.
+- [ ] Guarantee that an incorrect password never sets `passwordAccepted`.
+- [ ] Implement `NICK`: validate the format, prevent duplicates and reply with `431`, `432` or `433`.
+- [ ] Create a normalized global index `nickname -> Client`.
+- [ ] Allow nickname changes after registration; update the index and notify related users once.
+- [ ] Release the nickname when the client disconnects.
+- [ ] Implement `USER`: require the necessary parameters, store username and realname and reject repeats with `462`.
+- [ ] Complete registration only with `PASS + NICK + USER`; keep the operation idempotent.
+- [ ] Send the welcome exactly once. Minimum: `001`; full documented contract: `001–005`.
+- [ ] Before registration, allow only `CAP`, `PASS`, `NICK`, `USER`, `PING`, `PONG` and `QUIT`.
+- [ ] Reply `451` to messaging or channel commands executed before registration.
 
-Referencia: [fase 9](phases/phase_9.md).
+Reference: [phase 9](phases/phase_9.md).
 
-## 3. Conexión con un cliente real
+## 3. Connecting with a real client
 
-- [ ] Implementar `PING`: responder `PONG` con el token exacto, también antes del registro; responder `409` si falta.
-- [ ] Aceptar `PONG` sin producir `421`.
-- [ ] Implementar `CAP LS` con una respuesta de capacidades vacía.
-- [ ] Implementar `CAP LIST`.
-- [ ] Implementar `CAP REQ` con respuesta `NAK`.
-- [ ] Implementar `CAP END` sin bloquear el registro.
-- [ ] Implementar `QUIT`: conservar el motivo, notificar una sola vez a usuarios relacionados y desconectar.
-- [ ] Verificar una conexión completa con Irssi, cliente elegido en la documentación.
+- [ ] Implement `PING`: reply `PONG` with the exact token, also before registration; reply `409` if it is missing.
+- [ ] Accept `PONG` without producing `421`.
+- [ ] Implement `CAP LS` with an empty capability reply.
+- [ ] Implement `CAP LIST`.
+- [ ] Implement `CAP REQ` with a `NAK` reply.
+- [ ] Implement `CAP END` without blocking registration.
+- [ ] Implement `QUIT`: keep the reason, notify related users once and disconnect.
+- [ ] Verify a complete connection with Irssi, the client chosen in the documentation.
 
-Referencia: [fase 10](phases/phase_10.md).
+Reference: [phase 10](phases/phase_10.md).
 
-## 4. Modelo de canales
+## 4. Channel model
 
-- [ ] Implementar el constructor y la API completa de `Channel`.
-- [ ] Gestionar nombre, topic, miembros, operadores e invitados.
-- [ ] Implementar el estado de los modos `+i`, `+t`, `+k` y `+l`.
-- [ ] Mantener operadores por canal; el estado global `Client::isOperator` no representa correctamente el modelo IRC.
-- [ ] Garantizar que todo operador sea miembro, que no haya miembros duplicados y que las invitaciones apunten a clientes válidos.
-- [ ] Mantener clave y límite en estados coherentes al desactivar sus modos.
-- [ ] Crear, buscar y destruir una única instancia de cada canal desde `Server`.
-- [ ] Mantener sincronizados `Client::joinedChannels` y los miembros reales de cada canal.
-- [ ] Eliminar los canales vacíos.
+- [ ] Implement the constructor and the full `Channel` API.
+- [ ] Manage name, topic, members, operators and invited clients.
+- [ ] Implement the state of modes `+i`, `+t`, `+k` and `+l`.
+- [ ] Keep operators per channel; the global `Client::isOperator` state does not represent the IRC model correctly.
+- [ ] Guarantee that every operator is a member, that there are no duplicate members and that invitations point to valid clients.
+- [ ] Keep key and limit in a consistent state when their modes are disabled.
+- [ ] Create, look up and destroy a single instance of each channel from `Server`.
+- [ ] Keep `Client::joinedChannels` synchronized with the real members of each channel.
+- [ ] Remove empty channels.
 
-Referencia: [fase 11](phases/phase_11.md).
+Reference: [phase 11](phases/phase_11.md).
 
-## 5. Comandos de canales y mensajería
+## 5. Channel and messaging commands
 
-- [ ] Implementar `JOIN`: validar el canal, crearlo, añadir al miembro y convertir al primer usuario en operador.
-- [ ] Aplicar en `JOIN` los modos `+i`, `+k` y `+l`; consumir la invitación solo después de una entrada correcta.
-- [ ] Difundir `JOIN` y enviar `331` o `332`, seguido de `353` y `366`.
-- [ ] Evitar entradas duplicadas en un canal.
-- [ ] Implementar `PART`: validar pertenencia, difundir la salida, limpiar estado y borrar el canal vacío.
-- [ ] Implementar `NAMES`: devolver los miembros y marcar operadores con `@`.
-- [ ] Implementar `PRIVMSG` a nickname: localizar el destinatario y entregarle el mensaje real.
-- [ ] Implementar `PRIVMSG` a canal: exigir pertenencia y reenviar a todos los miembros salvo el emisor.
-- [ ] Conservar exactamente el trailing, incluidos mensajes CTCP/DCC.
-- [ ] Gestionar los errores `401`, `403`, `404`, `411` y `412`.
-- [ ] Implementar `NOTICE` con el mismo routing que `PRIVMSG`, pero sin respuestas de error automáticas.
-- [ ] Eliminar la respuesta ficticia `Message sent to...` existente.
+- [ ] Implement `JOIN`: validate the channel, create it, add the member and make the first user an operator.
+- [ ] Apply modes `+i`, `+k` and `+l` on `JOIN`; consume the invitation only after a successful join.
+- [ ] Broadcast `JOIN` and send `331` or `332`, followed by `353` and `366`.
+- [ ] Prevent duplicate entries in a channel.
+- [ ] Implement `PART`: validate membership, broadcast the leave, clean up state and delete the empty channel.
+- [ ] Implement `NAMES`: return the members and mark operators with `@`.
+- [ ] Implement `PRIVMSG` to a nickname: locate the target and deliver the actual message.
+- [ ] Implement `PRIVMSG` to a channel: require membership and forward to every member except the sender.
+- [ ] Keep the trailing exactly, including CTCP/DCC messages.
+- [ ] Handle errors `401`, `403`, `404`, `411` and `412`.
+- [ ] Implement `NOTICE` with the same routing as `PRIVMSG`, but without automatic error replies.
+- [ ] Remove the existing dummy reply `Message sent to...`.
 
-Referencias: [fase 12](phases/phase_12.md) y [fase 13](phases/phase_13.md).
+References: [phase 12](phases/phase_12.md) and [phase 13](phases/phase_13.md).
 
-## 6. Comandos de operador
+## 6. Operator commands
 
-- [ ] Implementar `TOPIC`: consultar, establecer y eliminar el topic; aplicar `+t` y difundir los cambios.
-- [ ] Implementar `INVITE`: comprobar usuario, canal, pertenencia y privilegios; almacenar la invitación; enviar `341` y notificar al invitado.
-- [ ] Consumir una invitación únicamente después de un `JOIN` correcto y limpiarla si el cliente se desconecta.
-- [ ] Implementar `KICK`: validar operador, objetivo y membresía; notificar antes de retirar al usuario.
-- [ ] Mantener abierta la conexión del usuario expulsado, quitar su membresía y privilegios y borrar el canal si queda vacío.
-- [ ] Implementar la consulta `MODE #canal` mediante `324`.
-- [ ] Implementar `+i/-i`, `+t/-t`, `+k/-k`, `+l/-l` y `+o/-o`.
-- [ ] Validar que el límite de usuarios sea positivo y no produzca overflow.
-- [ ] Procesar combinaciones y cambios de signo, como `+it`, `+kl` y `+o-l`.
-- [ ] Consumir correctamente los parámetros requeridos por cada modo.
-- [ ] Validar todo el comando antes de modificar el estado para evitar cambios parciales.
-- [ ] Difundir los cambios de modo a los miembros del canal.
-- [ ] Integrar los modos con `JOIN`, `TOPIC`, `INVITE` y `KICK`.
+- [ ] Implement `TOPIC`: query, set and clear the topic; apply `+t` and broadcast changes.
+- [ ] Implement `INVITE`: check user, channel, membership and privileges; store the invitation; send `341` and notify the invitee.
+- [ ] Consume an invitation only after a successful `JOIN` and clear it if the client disconnects.
+- [ ] Implement `KICK`: validate operator, target and membership; notify before removing the user.
+- [ ] Keep the kicked user’s connection open, remove their membership and privileges and delete the channel if it becomes empty.
+- [ ] Implement the `MODE #channel` query through `324`.
+- [ ] Implement `+i/-i`, `+t/-t`, `+k/-k`, `+l/-l` and `+o/-o`.
+- [ ] Validate that the user limit is positive and does not overflow.
+- [ ] Process combinations and sign changes, such as `+it`, `+kl` and `+o-l`.
+- [ ] Consume the parameters required by each mode correctly.
+- [ ] Validate the whole command before changing state to avoid partial updates.
+- [ ] Broadcast mode changes to channel members.
+- [ ] Integrate the modes with `JOIN`, `TOPIC`, `INVITE` and `KICK`.
 
-Referencias: [fase 14](phases/phase_14.md), [fase 15](phases/phase_15.md), [fase 16](phases/phase_16.md) y [fase 17](phases/phase_17.md).
+References: [phase 14](phases/phase_14.md), [phase 15](phases/phase_15.md), [phase 16](phases/phase_16.md) and [phase 17](phases/phase_17.md).
 
-## 7. Desconexión y robustez
+## 7. Disconnection and robustness
 
-- [ ] Unificar toda desconexión en una función idempotente.
-- [ ] Usarla para `QUIT`, `recv() == 0`, errores definitivos, `POLLHUP`, `POLLERR`, `POLLNVAL` y errores de escritura.
-- [ ] Recopilar los destinatarios antes de destruir el cliente y evitar mensajes `QUIT` duplicados.
-- [ ] Retirar al cliente de `poll`, mapa principal, índice de nicknames, canales, operadores e invitaciones.
-- [ ] Cerrar cada descriptor una sola vez y no usar un cliente después de eliminarlo.
-- [ ] Evitar iteradores invalidados al borrar clientes o canales.
-- [ ] Recuperarse de errores de clientes individuales sin detener el servidor completo.
-- [ ] Gestionar el agotamiento de descriptores y los fallos de `accept()` sin corromper el estado.
-- [ ] Evitar registrar líneas completas que incluyan `PASS`.
-- [ ] Completar o retirar declaraciones incompletas como `stop()`, `getPort()` y los helpers de búsqueda y prefijos.
+- [ ] Unify every disconnection in an idempotent function.
+- [ ] Use it for `QUIT`, `recv() == 0`, fatal errors, `POLLHUP`, `POLLERR`, `POLLNVAL` and write errors.
+- [ ] Collect recipients before destroying the client and avoid duplicate `QUIT` messages.
+- [ ] Remove the client from `poll`, the main map, the nickname index, channels, operators and invitations.
+- [ ] Close each descriptor once and never use a client after deleting it.
+- [ ] Avoid invalidated iterators when deleting clients or channels.
+- [ ] Recover from individual client errors without stopping the whole server.
+- [ ] Handle descriptor exhaustion and `accept()` failures without corrupting state.
+- [ ] Avoid logging complete lines that include `PASS`.
+- [ ] Complete or remove incomplete declarations such as `stop()`, `getPort()` and the lookup and prefix helpers.
 
-Referencia: [fase 18](phases/phase_18.md).
+Reference: [phase 18](phases/phase_18.md).
 
-## 8. Tests pendientes
+## 8. Pending tests
 
-- [ ] Ampliar los tests del parser: actualmente solo existe un caso feliz.
-- [ ] Probar comandos fragmentados, comandos agrupados, trailing vacío, espacios, prefijos y entradas inválidas.
-- [ ] Probar el límite de 512 bytes y buffers que nunca reciben terminador.
-- [ ] Probar escrituras parciales, clientes lentos y desconexiones con salida pendiente.
-- [ ] Probar todos los numerics y comandos incompletos.
-- [ ] Probar varios clientes, nicknames únicos, canales, mensajes, topics, invitaciones, expulsiones y modos.
-- [ ] Probar todas las rutas de desconexión y limpieza.
-- [ ] Ejecutar Irssi y guardar un transcript completo de conexión y comandos.
-- [ ] Ejecutar Valgrind con seguimiento de descriptores.
-- [ ] Ejecutar ASan y UBSan.
-- [ ] Confirmar ausencia de fugas, dobles cierres, referencias colgantes y canales vacíos.
+- [ ] Expand the parser tests: currently there is only one happy-path case.
+- [ ] Test fragmented commands, grouped commands, empty trailing, spaces, prefixes and invalid input.
+- [ ] Test the 512-byte limit and buffers that never receive a terminator.
+- [ ] Test partial writes, slow clients and disconnections with pending output.
+- [ ] Test every numeric and incomplete command.
+- [ ] Test several clients, unique nicknames, channels, messages, topics, invitations, kicks and modes.
+- [ ] Test every disconnection and cleanup path.
+- [ ] Run Irssi and save a complete transcript of the connection and commands.
+- [ ] Run Valgrind with descriptor tracking.
+- [ ] Run ASan and UBSan.
+- [ ] Confirm there are no leaks, double closes, dangling references or empty channels.
 
-Referencia: [fase 19](phases/phase_19.md).
+Reference: [phase 19](phases/phase_19.md).
 
-## 9. Entrega y documentación
+## 9. Delivery and documentation
 
-- [ ] Crear `PROTOCOL.md` con comandos soportados, registro, formato, numerics, canales, modos y transcript de Irssi.
-- [ ] Añadir al README el comando real de ejecución.
-- [ ] Añadir al README una descripción explícita del uso de IA, obligatoria por el subject.
-- [ ] Añadir referencias técnicas clásicas y corregir erratas del README.
-- [ ] Sacar `-fsanitize=address` de la compilación final y conservarlo en un target de depuración.
-- [ ] Verificar un build limpio, `clean`, `fclean`, `re`, ausencia de relink innecesario y compatibilidad C++98 final.
+- [ ] Create `PROTOCOL.md` with supported commands, registration, format, numerics, channels, modes and an Irssi transcript.
+- [ ] Add the real run command to the README.
+- [ ] Add an explicit description of AI use to the README, required by the subject.
+- [ ] Add classic technical references and fix README typos.
+- [ ] Remove `-fsanitize=address` from the final build and keep it in a debug target.
+- [ ] Verify a clean build, `clean`, `fclean`, `re`, no unnecessary relink and final C++98 compatibility.
 
-Referencias: [subject](en.subject.pdf), [README](../README.md) y [Makefile](../Makefile).
+References: [subject](en.subject.pdf), [README](../README.md) and [Makefile](../Makefile).
 
 ## 10. Bonus
 
-Solo después de completar y verificar toda la parte obligatoria.
+Only after completing and verifying the entire mandatory part.
 
-- [x] Implementar transferencia DCC: retransmitir CTCP exactamente mediante `PRIVMSG`; los bytes del archivo circulan entre clientes.
-- [x] Implementar un bot integrado como usuario IRC sin socket o mediante una abstracción separada.
-- [x] Añadir tests específicos de DCC y bot.
+- [x] Implement DCC transfer: forward CTCP exactly through `PRIVMSG`; the file bytes travel between clients.
+- [x] Implement a built-in bot as an IRC user without a socket or through a separate abstraction.
+- [x] Add specific DCC and bot tests.
 
-Referencia: [arquitectura](architecture.md).
+Reference: [architecture](architecture.md).

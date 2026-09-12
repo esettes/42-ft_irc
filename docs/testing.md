@@ -1,100 +1,100 @@
-# Guía de comprobación
+# Verification guide
 
-Este documento explica cómo verificar que `ircserv` cumple las especificaciones del enunciado (resumidas en `README.md`): varios clientes simultáneos, I/O no bloqueante, un único `poll()`, registro IRC, canales, mensajes privados y comandos de operador.
+This document explains how to verify that `ircserv` meets the subject specifications (summarized in `README.md`): several simultaneous clients, non-blocking I/O, a single `poll()`, IRC registration, channels, private messages and operator commands.
 
-La comprobación combina **tests automáticos** (`make test`) y **pruebas manuales** con netcat y el cliente de referencia (**irssi**).
+Verification combines **automatic tests** (`make test`) and **manual tests** with netcat and the reference client (**irssi**).
 
-## 1. Compilar y arrancar el servidor
+## 1. Compile and start the server
 
-Desde la raíz del repositorio:
+From the repository root:
 
 ```bash
 make
 ./ircserv 6667 secret
 ```
-Uso:
+Usage:
 
 ```text
 ./ircserv <port> <password>
 ```
 
-- El puerto debe ser un entero entre `1` y `65535`.
-- La contraseña no puede estar vacía.
-- Con un número de argumentos distinto de 2, el programa imprime `Usage` y termina.
+- The port must be an integer between `1` and `65535`.
+- The password cannot be empty.
+- With a number of arguments other than 2, the program prints `Usage` and exits.
 
-Para ver las reglas del Makefile:
+To see the Makefile rules:
 
 ```bash
 make help
 ```
 
-El binario se compila con AddressSanitizer (`-fsanitize=address`). Si el servidor aborta durante las pruebas, revisar primero el informe de sanitizer.
+The binary is compiled with AddressSanitizer (`-fsanitize=address`). If the server aborts during tests, review the sanitizer report first.
 
-Detener el servidor: `Ctrl+C` (SIGINT) o `SIGTERM`. Debe cerrar los descriptores y terminar de forma limpia.
+Stop the server: `Ctrl+C` (SIGINT) or `SIGTERM`. It must close the descriptors and terminate cleanly.
 
 ---
 
-## 2. Tests automáticos
+## 2. Automatic tests
 
-Los tests de protocolo arrancan `./ircserv` en un puerto libre, con contraseña `secret`, y hablan IRC por TCP. Hay que ejecutarlos **desde la raíz del repositorio**, donde está el binario.
+The protocol tests start `./ircserv` on a free port, with password `secret`, and speak IRC over TCP. They must be run **from the repository root**, where the binary is.
 
 ```bash
 make test
 ```
 
-Esa regla ejecuta, en este orden:
+That rule runs, in this order:
 
-| Objetivo | Qué comprueba |
+| Target | What it checks |
 |---|---|
-| `make test-parser` | Parser de mensajes IRC (comando en mayúsculas, trailing con espacios, `:` vacío). |
-| `make test-message` | Serialización de `IrcMessage` y casemap RFC 1459. |
-| `make test-protocol` | Checklist de protocolo (registro, PING, CAP, PRIVMSG, JOIN/PART) más las suites independientes. |
-| `make test-channel` | Modelo `Channel`: miembros, operadores, invitaciones, modos, topic y clave. |
+| `make test-parser` | IRC message parser (uppercase command, trailing with spaces, empty `:`). |
+| `make test-message` | `IrcMessage` serialization and RFC 1459 casemap. |
+| `make test-protocol` | Protocol checklist (registration, PING, CAP, PRIVMSG, JOIN/PART) plus the independent suites. |
+| `make test-channel` | `Channel` model: members, operators, invitations, modes, topic and key. |
 
-Si todo va bien, cada suite imprime un mensaje de éxito y el proceso termina con código 0. Un fallo imprime `expected` / `actual` y sale con código distinto de 0.
+If everything is fine, each suite prints a success message and the process exits with code 0. A failure prints `expected` / `actual` and exits with a non-zero code.
 
-### Suites de protocolo (mapeo al enunciado)
+### Protocol suites (mapping to the subject)
 
-`make test-protocol` construye `ircserv` si hace falta y lanza `ProtocolTests.cpp` más todos los `src/tests/Protocol*Tests.cpp` independientes.
+`make test-protocol` builds `ircserv` if needed and launches `ProtocolTests.cpp` plus every independent `src/tests/Protocol*Tests.cpp`.
 
-| Suite | Requisito del enunciado |
+| Suite | Subject requirement |
 |---|---|
-| `ProtocolTests.cpp` | Autenticación (`PASS`/`NICK`/`USER`), bienvenida, `JOIN`, `PRIVMSG` de canal y privado, `PING`/`PONG`, `CAP`, `QUIT`. |
-| `ProtocolChannelHistoryTests.cpp` | Historial de `PRIVMSG` de canal reenviado a quien hace `JOIN` después. |
-| `ProtocolFramingTests.cpp` | Reensamblado de comandos partidos (el test de `nc` + `Ctrl+D` del enunciado). |
-| `ProtocolMultiClientTests.cpp` | Varios clientes a la vez: registro, canal, privado, operadores. |
-| `ProtocolPartialWriteTests.cpp` | Escrituras TCP parciales (cliente lento); el servidor no se bloquea. |
+| `ProtocolTests.cpp` | Authentication (`PASS`/`NICK`/`USER`), welcome, `JOIN`, channel and private `PRIVMSG`, `PING`/`PONG`, `CAP`, `QUIT`. |
+| `ProtocolChannelHistoryTests.cpp` | Channel `PRIVMSG` history forwarded to whoever `JOIN`s later. |
+| `ProtocolFramingTests.cpp` | Reassembly of split commands (the subject’s `nc` + `Ctrl+D` test). |
+| `ProtocolMultiClientTests.cpp` | Several clients at once: registration, channel, private messages, operators. |
+| `ProtocolPartialWriteTests.cpp` | Partial TCP writes (slow client); the server does not block. |
 | `ProtocolKickCommandTests.cpp` / `ProtocolKickErrorTests.cpp` | `KICK`. |
-| `ProtocolInviteCommandTests.cpp` / `ProtocolInviteErrorTests.cpp` / `ProtocolInviteJoinTests.cpp` | `INVITE` y canal `+i`. |
-| `ProtocolTopicQueryTests.cpp` / `ProtocolTopicSetTests.cpp` / `ProtocolTopicErrorTests.cpp` | `TOPIC` y modo `+t`. |
-| `ProtocolModeFlagTests.cpp` | Modos `i` y `t`. |
-| `ProtocolModeKeyLimitTests.cpp` | Modos `k` y `l`. |
-| `ProtocolModeOperatorTests.cpp` | Modo `o` (dar/quitar operador). |
-| `ProtocolModeQueryTests.cpp` / `ProtocolModeCombinationTests.cpp` / `ProtocolModeErrorTests.cpp` | Consulta, combinaciones y errores de `MODE`. |
-| `ProtocolDisconnectTests.cpp` / `ProtocolChannelEdgeTests.cpp` / `ProtocolOversizedInputTests.cpp` / `ProtocolErrorRobustnessTests.cpp` | Desconexiones, último miembro, líneas > 512 bytes, numerics de error. |
-| `ProtocolDccTests.cpp` | Bonus de transferencia de archivos: CTCP `DCC SEND`/`CHAT` retransmitido tal cual, `NOTICE` `DCC REJECT`, y bytes del archivo en TCP entre clientes. |
+| `ProtocolInviteCommandTests.cpp` / `ProtocolInviteErrorTests.cpp` / `ProtocolInviteJoinTests.cpp` | `INVITE` and `+i` channel. |
+| `ProtocolTopicQueryTests.cpp` / `ProtocolTopicSetTests.cpp` / `ProtocolTopicErrorTests.cpp` | `TOPIC` and mode `+t`. |
+| `ProtocolModeFlagTests.cpp` | Modes `i` and `t`. |
+| `ProtocolModeKeyLimitTests.cpp` | Modes `k` and `l`. |
+| `ProtocolModeOperatorTests.cpp` | Mode `o` (grant/remove operator). |
+| `ProtocolModeQueryTests.cpp` / `ProtocolModeCombinationTests.cpp` / `ProtocolModeErrorTests.cpp` | Query, combinations and `MODE` errors. |
+| `ProtocolDisconnectTests.cpp` / `ProtocolChannelEdgeTests.cpp` / `ProtocolOversizedInputTests.cpp` / `ProtocolErrorRobustnessTests.cpp` | Disconnections, last member, lines > 512 bytes, error numerics. |
+| `ProtocolDccTests.cpp` | File-transfer bonus: CTCP `DCC SEND`/`CHAT` forwarded as-is, `NOTICE` `DCC REJECT`, and file bytes over TCP between clients. |
 
-Las suites independientes se descubren solas: un archivo nuevo `src/tests/Protocol*Tests.cpp` (salvo `ProtocolTests.cpp`) entra en `make test-protocol` sin tocar el Makefile.
+Independent suites are discovered automatically: a new `src/tests/Protocol*Tests.cpp` file (except `ProtocolTests.cpp`) is included in `make test-protocol` without touching the Makefile.
 
 ---
 
-## 3. Test de framing del enunciado (netcat)
+## 3. Subject framing test (netcat)
 
-El enunciado pide comprobar que el servidor **agrega fragmentos TCP** antes de parsear un comando. Con el servidor en marcha:
+The subject asks you to check that the server **aggregates TCP fragments** before parsing a command. With the server running:
 
 ```bash
 nc -C 127.0.0.1 6667
 ```
 
-Escribir `com`, pulsar `Ctrl+D`, escribir `man`, pulsar `Ctrl+D`, escribir `d` y pulsar `Enter`. El servidor debe reconstruir `command` (más el salto de línea) y no tratar cada fragmento como un comando distinto.
+Type `com`, press `Ctrl+D`, type `man`, press `Ctrl+D`, type `d` and press `Enter`. The server must reconstruct `command` (plus the newline) and not treat each fragment as a different command.
 
-Comprobación equivalente, más explícita:
+Equivalent, more explicit check:
 
 
 ```bash
-# Tres fragmentos: "NICK", " ro", "xy\n"
+# Three fragments: "NICK", " ro", "xy\n"
 printf 'NICK' >&0
-# Ctrl+D en la sesión nc, o:
+# Ctrl+D in the nc session, or:
 python3 - <<'PY'
 import socket, time
 s = socket.create_connection(("127.0.0.1", 6667))
@@ -110,41 +110,41 @@ s.close()
 PY
 ```
 
-El cliente no debe registrarse hasta que llegue la línea completa. `ProtocolFramingTests.cpp` cubre este caso de forma automática.
+The client must not register until the complete line arrives. `ProtocolFramingTests.cpp` covers this case automatically.
 
 ---
 
-## 4. Cliente de referencia: irssi
+## 4. Reference client: irssi
 
-El enunciado exige un cliente de referencia que se conecte **sin error** y se comporte de forma similar a un servidor IRC real. En este proyecto el cliente de referencia es **irssi**.
+The subject requires a reference client that connects **without error** and behaves similarly to a real IRC server. In this project the reference client is **irssi**.
 
 ```bash
 sudo apt install irssi
 ./ircserv 6667 secret
 ```
 
-En otra terminal:
+In another terminal:
 
 ```bash
 irssi
 ```
 
-Dentro de irssi:
+Inside irssi:
 
 ```text
 /connect 127.0.0.1 6667 secret
 ```
 
-Si el nick por defecto está ocupado:
+If the default nick is taken:
 
 
 ```text
 /nick roxy
 ```
 
-Irssi envía `CAP LS` al conectar. El servidor debe responder (`CAP * LS`) y **no desconectar**. A continuación irssi envía `PASS`, `NICK` y `USER`. Debe aparecer la bienvenida (numeric `001` y siguientes).
+Irssi sends `CAP LS` on connect. The server must reply (`CAP * LS`) and **not disconnect**. Then irssi sends `PASS`, `NICK` and `USER`. The welcome must appear (numeric `001` and following).
 
-### Segunda sesión (mensajes y canal)
+### Second session (messages and channel)
 
 ```bash
 irssi
@@ -155,54 +155,54 @@ irssi
 /connect 127.0.0.1 6667 secret
 ```
 
-Comprobar, como pide el enunciado:
+Check, as the subject asks:
 
-| Acción | Comando irssi | Resultado esperado |
+| Action | irssi command | Expected result |
 |---|---|---|
-| Unirse a un canal | `/join #general` | El primer usuario es operador (`@`). El resto ve el `JOIN`. |
-| Mensaje de canal | escribir en `#general` | Todos los miembros reciben el texto. El emisor no tiene por qué verse duplicado de forma anómala. |
-| Mensaje privado | `/msg dani hola` | Solo `dani` lo recibe. |
-| Ver/cambiar topic | `/topic Hola mundo` | Los miembros ven el topic nuevo. |
-| Modos de canal | `/mode #general +i` | `JOIN` sin invitación falla. |
-| Invitar | `/invite dani #general` | `dani` recibe `INVITE` y puede entrar con `+i`. |
-| Kick | `/kick dani motivo` | `dani` sale del canal; el resto ve `KICK`. |
-| Operador | `/mode #general +o dani` | `dani` pasa a operador. `/mode #general -o dani` se lo quita. |
-| Clave | `/mode #general +k clave` | `JOIN` exige la clave. |
-| Límite | `/mode #general +l 1` | Un tercer usuario no puede entrar. |
+| Join a channel | `/join #general` | The first user is an operator (`@`). The others see the `JOIN`. |
+| Channel message | type in `#general` | Every member receives the text. The sender should not see an abnormal duplicate. |
+| Private message | `/msg dani hello` | Only `dani` receives it. |
+| View/change topic | `/topic Hello world` | Members see the new topic. |
+| Channel modes | `/mode #general +i` | `JOIN` without an invitation fails. |
+| Invite | `/invite dani #general` | `dani` receives `INVITE` and can enter with `+i`. |
+| Kick | `/kick dani reason` | `dani` leaves the channel; the others see `KICK`. |
+| Operator | `/mode #general +o dani` | `dani` becomes an operator. `/mode #general -o dani` removes it. |
+| Key | `/mode #general +k key` | `JOIN` requires the key. |
+| Limit | `/mode #general +l 1` | A third user cannot enter. |
 
-Salir:
+Leave:
 
 ```text
 /quit
 ```
 
-El resto de miembros del canal debe ver `QUIT`. El servidor sigue aceptando conexiones.
+The remaining channel members must see `QUIT`. The server keeps accepting connections.
 
-HexChat u otro cliente gráfico es opcional: sirve para confirmar interoperabilidad, pero la evaluación se centra en irssi.
+HexChat or another graphical client is optional: it is useful to confirm interoperability, but evaluation is focused on irssi.
 
 ---
 
-## 5. Pruebas manuales con netcat (comandos IRC)
+## 5. Manual tests with netcat (IRC commands)
 
-Útil para ver numerics exactos sin la capa de irssi. Terminal 1: el servidor. Terminales 2 y 3: clientes.
+Useful for seeing exact numerics without the irssi layer. Terminal 1: the server. Terminals 2 and 3: clients.
 
-Cliente A:
+Client A:
 
 ```text
 PASS secret
 NICK roxy
 USER roxy 0 * :Roxy
 JOIN #general
-PRIVMSG #general :hola canal
-PRIVMSG dani :hola privado
+PRIVMSG #general :hello channel
+PRIVMSG dani :hello private
 ```
 
-- Debe recibir el `JOIN` de `roxy` (si `roxy` entra después) o ver a `roxy` en `NAMES`.
-- Debe recibir `PRIVMSG #general :hola canal`.
-- Debe recibir el privado `hola privado`.
-- `roxy` no debe recibir su propio privado dirigido a `dani`.
+- Must receive `roxy`’s `JOIN` (if `roxy` enters later) or see `roxy` in `NAMES`.
+- Must receive `PRIVMSG #general :hello channel`.
+- Must receive the private `hello private`.
+- `roxy` must not receive their own private message directed at `dani`.
 
-Cliente B (después de registrarse como `dani` y hacer `JOIN #general`):
+Client B (after registering as `dani` and doing `JOIN #general`):
 
 ```text
 PASS secret
@@ -211,7 +211,7 @@ USER dani 0 * :Dani
 JOIN #general
 ```
 
-Registro incompleto o contraseña mala:
+Incomplete registration or bad password:
 
 ```text
 PASS wrong
@@ -219,15 +219,15 @@ NICK roxy
 USER roxy 0 * :Roxy
 ```
 
-No debe enviarse `001`. Contraseña incorrecta → `464`. Faltan parámetros → `461`. Comando desconocido → `421`.
+`001` must not be sent. Incorrect password → `464`. Missing parameters → `461`. Unknown command → `421`.
 
-Operadores de canal (cliente A es `@` por haber creado `#general`):
+Channel operators (client A is `@` because they created `#general`):
 
 ```text
 MODE #general +i
 INVITE dani #general
-TOPIC #general :tema
-KICK #general dani :fuera
+TOPIC #general :topic
+KICK #general dani :out
 MODE #general +o dani
 MODE #general +t
 MODE #general +k secretkey
@@ -237,152 +237,152 @@ MODE #general -i-t-k-l-o dani
 
 ---
 
-## 6. Lista de comprobación del enunciado
+## 6. Subject checklist
 
-Marcar cada punto durante la evaluación o antes de entregar.
+Tick each point during evaluation or before submitting.
 
-- [ ] El programa se llama `ircserv` y se arranca con `port` y `password`.
-- [ ] `make` / `make all` / `clean` / `fclean` / `re` funcionan.
-- [ ] Varios clientes se atienden a la vez sin que el servidor se quede colgado.
-- [ ] No se usa `fork` para clientes. Toda la I/O es no bloqueante (`fcntl`).
-- [ ] Un único `poll()` (o equivalente) cubre listen, lectura y escritura.
+- [ ] The program is called `ircserv` and is started with `port` and `password`.
+- [ ] `make` / `make all` / `clean` / `fclean` / `re` work.
+- [ ] Several clients are served at the same time without the server hanging.
+- [ ] `fork` is not used for clients. All I/O is non-blocking (`fcntl`).
+- [ ] A single `poll()` (or equivalent) covers listen, read and write.
 
-### Cliente de referencia
+### Reference client
 
-- [ ] irssi conecta a `ircserv` sin error.
-- [ ] El flujo se parece al de un servidor IRC habitual (bienvenida, canales, mensajes).
+- [ ] irssi connects to `ircserv` without error.
+- [ ] The flow looks like a usual IRC server (welcome, channels, messages).
 
-### Funcionalidad obligatoria
+### Mandatory functionality
 
-- [ ] Autenticación con la contraseña del servidor (`PASS`).
-- [ ] Nickname (`NICK`) y username (`USER`).
-- [ ] `JOIN` a un canal.
-- [ ] Mensajes privados (`PRIVMSG` a un nick).
-- [ ] Un `PRIVMSG` a un canal llega a **todos** los demás miembros.
-- [ ] Hay operadores de canal y usuarios normales.
-- [ ] `KICK` expulsa a un cliente del canal.
-- [ ] `INVITE` invita a un cliente a un canal.
-- [ ] `TOPIC` consulta o cambia el topic.
-- [ ] `MODE +i` / `-i`: canal solo por invitación.
-- [ ] `MODE +t` / `-t`: solo operadores pueden cambiar el topic.
-- [ ] `MODE +k` / `-k`: clave del canal.
-- [ ] `MODE +o` / `-o`: dar o quitar privilegio de operador.
-- [ ] `MODE +l` / `-l`: límite de usuarios.
+- [ ] Authentication with the server password (`PASS`).
+- [ ] Nickname (`NICK`) and username (`USER`).
+- [ ] `JOIN` a channel.
+- [ ] Private messages (`PRIVMSG` to a nick).
+- [ ] A `PRIVMSG` to a channel reaches **every** other member.
+- [ ] There are channel operators and regular users.
+- [ ] `KICK` removes a client from the channel.
+- [ ] `INVITE` invites a client to a channel.
+- [ ] `TOPIC` queries or changes the topic.
+- [ ] `MODE +i` / `-i`: invite-only channel.
+- [ ] `MODE +t` / `-t`: only operators can change the topic.
+- [ ] `MODE +k` / `-k`: channel key.
+- [ ] `MODE +o` / `-o`: grant or remove operator privilege.
+- [ ] `MODE +l` / `-l`: user limit.
 
-### Robustez (ejemplo del enunciado)
+### Robustness (subject example)
 
-- [ ] Un comando partido en varios `recv` se reensambla (`nc` + `Ctrl+D` o `make test-protocol`).
-- [ ] Tras un cliente problemático (desconexión brusca, línea enorme, comando inválido), el servidor sigue vivo.
+- [ ] A command split across several `recv`s is reassembled (`nc` + `Ctrl+D` or `make test-protocol`).
+- [ ] After a problematic client (abrupt disconnect, huge line, invalid command), the server stays alive.
 
 ---
 
-## 7. Varios clientes y límites
+## 7. Several clients and limits
 
-El enunciado exige no colgarse con varios clientes. Comprobaciones rápidas:
+The subject requires not hanging with several clients. Quick checks:
 
 ```bash
-# Servidor con pocos descriptores (el proceso no debe abortar de forma sucia)
+# Server with few descriptors (the process must not abort uncleanly)
 bash -c 'ulimit -n 16; exec ./ircserv 6667 secret'
 ```
 
-En otra terminal, muchas conexiones:
+In another terminal, many connections:
 
 ```bash
 python3 -c 'import socket,time; c=[socket.create_connection(("127.0.0.1",6667)) for _ in range(30)]; print(len(c),"clients"); time.sleep(10)'
 ```
 
-Si el límite de fds se agota, el servidor debe seguir el bucle de `poll` con los clientes que ya tenía; no debe bloquearse.
+If the fd limit is exhausted, the server must keep the `poll` loop with the clients it already had; it must not block.
 
-Scripts auxiliares en `docs/utils/`:
+Helper scripts in `docs/utils/`:
 
-| Script | Uso |
+| Script | Use |
 |---|---|
-| `docs/utils/force_close_tcp.py` | Cierre TCP con `SO_LINGER` (RST). El servidor debe limpiar al cliente. |
-| `docs/utils/search_errors.py` | Abre y cierra 1000 conexiones seguidas. |
-| `docs/utils/monitoring.sh` | Estadísticas del proceso `ircserv` (CPU, memoria, fds). |
-| `docs/utils/commands.md` | Cómo localizar `IP:PORT` con `ss`. |
+| `docs/utils/force_close_tcp.py` | TCP close with `SO_LINGER` (RST). The server must clean up the client. |
+| `docs/utils/search_errors.py` | Opens and closes 1000 connections in a row. |
+| `docs/utils/monitoring.sh` | Statistics of the `ircserv` process (CPU, memory, fds). |
+| `docs/utils/commands.md` | How to locate `IP:PORT` with `ss`. |
 
-Ver también `docs/slow_client.md` (buffer de salida y cliente lento) y `docs/phases/phase_19.md` (framing, desconexiones, líneas oversized).
+See also `docs/slow_client.md` (output buffer and slow client) and `docs/phases/phase_19.md` (framing, disconnections, oversized lines).
 
 ---
 
-## 8. Memoria y descriptores
+## 8. Memory and descriptors
 
-La build por defecto lleva AddressSanitizer. `make test` ya detecta muchos accesos inválidos.
+The default build includes AddressSanitizer. `make test` already detects many invalid accesses.
 
-Para fugas y file descriptors, **recompilar sin sanitizer** (ASan y Valgrind no se combinan bien):
+For leaks and file descriptors, **recompile without sanitizer** (ASan and Valgrind do not combine well):
 
 ```bash
 make fclean
-# Compilar temporalmente sin -fsanitize=address, o usar una build de depuración equivalente
+# Temporarily compile without -fsanitize=address, or use an equivalent debug build
 valgrind --leak-check=full --track-fds=yes ./ircserv 6667 secret
 ```
 
-Conectar y desconectar varios clientes (irssi o netcat), unirse a canales y salir. Al parar el servidor, Valgrind no debe reportar leaks de clientes ni sockets sin cerrar (salvo descriptores estándar).
+Connect and disconnect several clients (irssi or netcat), join channels and leave. When stopping the server, Valgrind must not report client leaks or unclosed sockets (except standard descriptors).
 
 ---
 
-## 9. Parte bonus (si está implementada)
+## 9. Bonus part (if implemented)
 
-El enunciado marca como bonus:
+The subject marks as bonus:
 
-- Transferencia de archivos (DCC sobre `PRIVMSG` CTCP; el servidor retransmite el mensaje).
-- Un bot.
+- File transfer (DCC over CTCP `PRIVMSG`; the server forwards the message).
+- A bot.
 
-No forman parte de la checklist obligatoria. Si existen, probarlos con irssi (`/dcc send`, mensaje al bot, `/list`) además de `make test`.
+They are not part of the mandatory checklist. If they exist, try them with irssi (`/dcc send`, message to the bot, `/list`) in addition to `make test`.
 
-### Transferencia de archivos (DCC)
+### File transfer (DCC)
 
-El archivo **no pasa por el servidor IRC**. El emisor abre un socket TCP, anuncia `DCC SEND` en un `PRIVMSG` CTCP, el servidor reenvía ese texto sin cambiarlo (incluidos los `\x01`) y el receptor se conecta al emisor.
+The file **does not pass through the IRC server**. The sender opens a TCP socket, announces `DCC SEND` in a CTCP `PRIVMSG`, the server forwards that text unchanged (including the `\x01`) and the receiver connects to the sender.
 
-Comprobación automática: `make test-protocol` incluye `ProtocolDccTests.cpp`.
+Automatic check: `make test-protocol` includes `ProtocolDccTests.cpp`.
 
-Comprobación con irssi (dos clientes, servidor `./ircserv 6667 secret`):
+Check with irssi (two clients, server `./ircserv 6667 secret`):
 
 ```text
-# Cliente A
+# Client A
 /connect 127.0.0.1 6667 secret
 /nick alice
-/dcc send bob /tmp/hola.txt
+/dcc send bob /tmp/hello.txt
 
-# Cliente B
+# Client B
 /connect 127.0.0.1 6667 secret
 /nick bob
 /dcc get alice
 ```
 
-- B debe recibir la oferta DCC (mensaje CTCP `DCC SEND`).
-- Tras aceptar, el fichero debe llegar a B.
-- El servidor no debe reescribir el payload ni recortar el nombre del archivo.
+- B must receive the DCC offer (CTCP `DCC SEND` message).
+- After accepting, the file must arrive at B.
+- The server must not rewrite the payload or truncate the file name.
 
-Con netcat, el handshake es un `PRIVMSG` normal:
+With netcat, the handshake is a normal `PRIVMSG`:
 
 ```text
-PRIVMSG bob :^ADCC SEND hola.txt 2130706433 5000 5^A
+PRIVMSG bob :^ADCC SEND hello.txt 2130706433 5000 5^A
 ```
 
-`^A` es el carácter SOH (`\x01`). El servidor debe entregarlo a `bob` con los mismos bytes.
+`^A` is the SOH character (`\x01`). The server must deliver it to `bob` with the same bytes.
 
 ### Bot
 
-El bot es un usuario IRC virtual **sin socket**: no entra en `poll()`, reserva el nick `marvin` y permanece en `#bot`. Responde a consultas privadas y a `!comando` o `marvin: comando` en los canales de los que es miembro. Un `INVITE` hace que entre al canal; `NOTICE` no genera respuesta automática.
+The bot is a virtual IRC user **without a socket**: it does not enter `poll()`, reserves the nick `marvin` and stays in `#bot`. It replies to private queries and to `!command` or `marvin: command` in the channels it is a member of. An `INVITE` makes it join the channel; `NOTICE` does not generate an automatic reply.
 
-Comprobación automática: `make test-protocol` incluye `ProtocolBotTests.cpp`.
+Automatic check: `make test-protocol` includes `ProtocolBotTests.cpp`.
 
-Comprobación con irssi (`./ircserv 6667 secret`):
+Check with irssi (`./ircserv 6667 secret`):
 
 ```text
 /connect 127.0.0.1 6667 secret
 /nick alice
 /msg marvin help
 /join #bot
-# en #bot:
+# in #bot:
 !ping
 !time
 marvin: dice
 ```
 
-Para llevarlo a otro canal:
+To take it to another channel:
 
 ```text
 /join #lounge
@@ -390,9 +390,9 @@ Para llevarlo a otro canal:
 !help
 ```
 
-Comandos: `help`, `ping`, `time`, `date`, `info`, `uptime`, `version`, `users`, `whoami`, `echo <texto>`, `dice`.
+Commands: `help`, `ping`, `time`, `date`, `info`, `uptime`, `version`, `users`, `whoami`, `echo <text>`, `dice`.
 
-Con netcat, tras `PASS` / `NICK` / `USER`:
+With netcat, after `PASS` / `NICK` / `USER`:
 
 ```text
 PRIVMSG marvin :help
@@ -401,38 +401,38 @@ JOIN #bot
 PRIVMSG #bot :!ping
 ```
 
-El nick `marvin` no se puede registrar (433). El bot no usa un `poll()` extra ni un proceso hijo.
+The nick `marvin` cannot be registered (433). The bot does not use an extra `poll()` or a child process.
 
 ---
 
-## 10. Orden de trabajo recomendado
+## 10. Recommended work order
 
-1. `make test` — si falla, el protocolo o el framing no están listos.
-2. Arrancar `./ircserv 6667 secret` e irssi: conectar, `JOIN`, mensajes de canal y privados.
-3. Segunda sesión irssi: operadores (`KICK`, `INVITE`, `TOPIC`, `MODE i/t/k/o/l`).
-4. Test de `nc` + `Ctrl+D` del enunciado.
-5. Desconexiones bruscas y varios clientes (`docs/utils/`).
-6. Recorrer la lista de la sección 6.
+1. `make test` — if it fails, the protocol or framing is not ready.
+2. Start `./ircserv 6667 secret` and irssi: connect, `JOIN`, channel and private messages.
+3. Second irssi session: operators (`KICK`, `INVITE`, `TOPIC`, `MODE i/t/k/o/l`).
+4. Subject `nc` + `Ctrl+D` test.
+5. Abrupt disconnections and several clients (`docs/utils/`).
+6. Walk through the list in section 6.
 
 ---
 
-## 11. Más tests
+## 11. More tests
 
-Servidor en marcha (`./ircserv 6667 secret`) y clientes netcat como en la sección 5. En cada caso, registrar primero a los clientes (`PASS` / `NICK` / `USER`). El primer usuario que entra en un canal vacío es operador (`@`).
+Server running (`./ircserv 6667 secret`) and netcat clients as in section 5. In each case, register the clients first (`PASS` / `NICK` / `USER`). The first user who enters an empty channel is an operator (`@`).
 
-### 1. Los mensajes llegan a los clientes que ya están en el canal
+### 1. Messages reach clients already in the channel
 
-Cliente A:
+Client A:
 
 ```text
 PASS secret
 NICK roxy
 USER roxy 0 * :Roxy
 JOIN #general
-PRIVMSG #general :hola canal
+PRIVMSG #general :hello channel
 ```
 
-Cliente B:
+Client B:
 
 ```text
 PASS secret
@@ -441,380 +441,380 @@ USER dani 0 * :Dani
 JOIN #general
 ```
 
-- B debe recibir `:roxy!… PRIVMSG #general :hola canal`.
-- A no debe recibir su propio mensaje de canal.
-- Un cliente C registrado, sin `JOIN #general`, no debe recibir ese `PRIVMSG`.
+- B must receive `:roxy!… PRIVMSG #general :hello channel`.
+- A must not receive their own channel message.
+- A registered client C, without `JOIN #general`, must not receive that `PRIVMSG`.
 
-### 2. Un usuario regular no puede usar comandos de operador
+### 2. A regular user cannot use operator commands
 
-Cliente A crea el canal y restringe el topic. Cliente B entra como miembro normal. Cliente C se registra (`charlie`) y no entra al canal.
+Client A creates the channel and restricts the topic. Client B enters as a normal member. Client C registers (`charlie`) and does not enter the channel.
 
-Cliente A:
+Client A:
 
 ```text
 JOIN #ops
 MODE #ops +t
 ```
 
-Cliente B:
+Client B:
 
 ```text
 JOIN #ops
-KICK #ops roxy :fuera
+KICK #ops roxy :out
 INVITE charlie #ops
-TOPIC #ops :no deberia
+TOPIC #ops :should not
 MODE #ops +i
 ```
 
-- Cada comando de B debe responder `482` (`ERR_CHANOPRIVSNEEDED`).
-- A no debe ver `KICK`, `INVITE`, `TOPIC` ni `MODE`.
-- C no debe recibir `INVITE`.
-- `MODE #ops` (consulta, sin flags) sí puede usarlo B: numeric `324`.
+- Each of B’s commands must reply `482` (`ERR_CHANOPRIVSNEEDED`).
+- A must not see `KICK`, `INVITE`, `TOPIC` or `MODE`.
+- C must not receive `INVITE`.
+- `MODE #ops` (query, no flags) can be used by B: numeric `324`.
 
-### 3. Un operador puede usar los comandos de operador en cada canal que ha creado
+### 3. An operator can use operator commands in each channel they created
 
-Cliente A crea dos canales. Cliente B entra en ambos. Cliente C se registra (`charlie`) y no entra.
+Client A creates two channels. Client B enters both. Client C registers (`charlie`) and does not enter.
 
-Cliente A:
+Client A:
 
 ```text
 JOIN #alpha
 JOIN #bravo
 MODE #alpha +t
 MODE #bravo +t
-TOPIC #alpha :tema alpha
-TOPIC #bravo :tema bravo
+TOPIC #alpha :alpha topic
+TOPIC #bravo :bravo topic
 INVITE charlie #alpha
 INVITE charlie #bravo
 MODE #alpha +o dani
 MODE #bravo +o dani
-KICK #alpha dani :fuera
-KICK #bravo dani :fuera
+KICK #alpha dani :out
+KICK #bravo dani :out
 ```
 
-- En `#alpha` y en `#bravo`, B debe ver `MODE`, `TOPIC` y `KICK`.
-- C debe recibir ambos `INVITE`.
-- A debe recibir `341` (`RPL_INVITING`) por cada invitación.
-- Privilegio por canal: si B crea `#charlie` y A entra después, A es miembro normal. `MODE #charlie +i` desde A debe responder `482`.
+- In `#alpha` and `#bravo`, B must see `MODE`, `TOPIC` and `KICK`.
+- C must receive both `INVITE`s.
+- A must receive `341` (`RPL_INVITING`) for each invitation.
+- Privilege is per channel: if B creates `#charlie` and A enters later, A is a regular member. `MODE #charlie +i` from A must reply `482`.
 
-### 4. Cliente A envía un mensaje; B lo recibe al unirse
+### 4. Client A sends a message; B receives it when joining
 
-Cliente A:
+Client A:
 
 ```text
 JOIN #general
-PRIVMSG #general :antes de que entre b
+PRIVMSG #general :before b joins
 ```
 
-- B, todavía fuera del canal, no debe recibir ese `PRIVMSG` en tiempo real.
+- B, still outside the channel, must not receive that `PRIVMSG` in real time.
 
-Cliente B:
+Client B:
 
 ```text
 JOIN #general
 ```
 
-- Tras `JOIN`, `331`/`332`, `353` y `366`, B debe recibir `:roxy!… PRIVMSG #general :antes de que entre b`.
+- After `JOIN`, `331`/`332`, `353` and `366`, B must receive `:roxy!… PRIVMSG #general :before b joins`.
 
-Cliente A:
+Client A:
 
 ```text
-PRIVMSG #general :despues de que entre b
+PRIVMSG #general :after b joins
 ```
 
-- B debe recibir `:roxy!… PRIVMSG #general :despues de que entre b`.
+- B must receive `:roxy!… PRIVMSG #general :after b joins`.
 
-### 5. Canal solo por invitación (`+i`)
+### 5. Invite-only channel (`+i`)
 
-Cliente A:
+Client A:
 
 ```text
 JOIN #invite
 MODE #invite +i
 ```
 
-Cliente B:
+Client B:
 
 ```text
 JOIN #invite
 ```
 
-- B debe recibir `473` (`ERR_INVITEONLYCHAN`) y no entrar.
-- A no debe ver un `JOIN` de B.
+- B must receive `473` (`ERR_INVITEONLYCHAN`) and not enter.
+- A must not see a `JOIN` from B.
 
-Opcional, para confirmar que la invitación desbloquea la entrada:
+Optional, to confirm that the invitation unlocks entry:
 
 ```text
 INVITE dani #invite
 ```
 
-Cliente B:
+Client B:
 
 ```text
 JOIN #invite
 ```
 
-- B entra. A y B ven el `JOIN` de B.
+- B enters. A and B see B’s `JOIN`.
 
-### 6. Canal con clave (`+k`)
+### 6. Channel with a key (`+k`)
 
-Cliente A:
+Client A:
 
 ```text
 JOIN #keyed
 MODE #keyed +k secretkey
 ```
 
-Cliente B:
+Client B:
 
 ```text
 JOIN #keyed
 JOIN #keyed wrong
 ```
 
-- Ambos `JOIN` deben responder `475` (`ERR_BADCHANNELKEY`). B no entra.
+- Both `JOIN`s must reply `475` (`ERR_BADCHANNELKEY`). B does not enter.
 
-Cliente B, con la clave correcta:
+Client B, with the correct key:
 
 ```text
 JOIN #keyed secretkey
 ```
 
-- B entra. A y B ven el `JOIN` de B.
+- B enters. A and B see B’s `JOIN`.
 
-### 7. Límite de usuarios (`+l`)
+### 7. User limit (`+l`)
 
-Cliente A (único miembro; el límite debe ser `1` para que B no quepa):
+Client A (only member; the limit must be `1` so B does not fit):
 
 ```text
 JOIN #limited
 MODE #limited +l 1
 ```
 
-Cliente B:
+Client B:
 
 ```text
 JOIN #limited
 ```
 
-- B debe recibir `471` (`ERR_CHANNELISFULL`) y no entrar.
-- A no debe ver un `JOIN` de B.
+- B must receive `471` (`ERR_CHANNELISFULL`) and not enter.
+- A must not see a `JOIN` from B.
 
-Opcional: `MODE #limited -l` o `MODE #limited +l 2` y repetir el `JOIN` de B; ahora debe entrar.
+Optional: `MODE #limited -l` or `MODE #limited +l 2` and repeat B’s `JOIN`; now they must enter.
 
 ---
 
-## 12. Más tests (irssi)
+## 12. More tests (irssi)
 
-Los mismos casos que la sección 11, con el cliente de referencia. Servidor en marcha (`./ircserv 6667 secret`) y una sesión irssi por cliente, como en la sección 4. Los numerics de error (`482`, `473`, `475`, `471`, `324`, `341`) aparecen en la ventana de estado.
+The same cases as section 11, with the reference client. Server running (`./ircserv 6667 secret`) and one irssi session per client, as in section 4. Error numerics (`482`, `473`, `475`, `471`, `324`, `341`) appear in the status window.
 
-Cliente A:
+Client A:
 
 ```text
 /set nick roxy
 /connect 127.0.0.1 6667 secret
 ```
 
-Cliente B:
+Client B:
 
 ```text
 /set nick dani
 /connect 127.0.0.1 6667 secret
 ```
 
-Cuando haga falta un tercer cliente (casos 2 y 3):
+When a third client is needed (cases 2 and 3):
 
 ```text
 /set nick charlie
 /connect 127.0.0.1 6667 secret
 ```
 
-El primer usuario que entra en un canal vacío es operador (`@`).
+The first user who enters an empty channel is an operator (`@`).
 
-### 1. Los mensajes llegan a los clientes que ya están en el canal
+### 1. Messages reach clients already in the channel
 
-Cliente A:
-
-```text
-/join #general
-```
-
-Cliente B:
+Client A:
 
 ```text
 /join #general
 ```
 
-Cliente A, en la ventana de `#general`:
+Client B:
 
 ```text
-hola canal
+/join #general
 ```
 
-- B debe ver `hola canal` en `#general`.
-- A no debe ver su propio mensaje duplicado de forma anómala.
-- Un cliente C conectado, sin `/join #general`, no debe recibir ese texto.
+Client A, in the `#general` window:
 
-### 2. Un usuario regular no puede usar comandos de operador
+```text
+hello channel
+```
 
-Cliente A crea el canal y restringe el topic. Cliente B entra como miembro normal. Cliente C (`charlie`) no entra al canal.
+- B must see `hello channel` in `#general`.
+- A must not see their own message duplicated abnormally.
+- A connected client C, without `/join #general`, must not receive that text.
 
-Cliente A:
+### 2. A regular user cannot use operator commands
+
+Client A creates the channel and restricts the topic. Client B enters as a normal member. Client C (`charlie`) does not enter the channel.
+
+Client A:
 
 ```text
 /join #ops
 /mode #ops +t
 ```
 
-Cliente B:
+Client B:
 
 ```text
 /join #ops
-/kick roxy fuera
+/kick roxy out
 /invite charlie #ops
-/topic no deberia
+/topic should not
 /mode #ops +i
 ```
 
-- Cada comando de B debe mostrar `482` (`ERR_CHANOPRIVSNEEDED`) en la ventana de estado.
-- A no debe ver `KICK`, `INVITE`, `TOPIC` ni cambio de modo.
-- C no debe recibir invitación.
-- `/mode #ops` (consulta, sin flags) sí puede usarlo B: numeric `324`.
+- Each of B’s commands must show `482` (`ERR_CHANOPRIVSNEEDED`) in the status window.
+- A must not see `KICK`, `INVITE`, `TOPIC` or a mode change.
+- C must not receive an invitation.
+- `/mode #ops` (query, no flags) can be used by B: numeric `324`.
 
-### 3. Un operador puede usar los comandos de operador en cada canal que ha creado
+### 3. An operator can use operator commands in each channel they created
 
-Cliente A crea dos canales. Cliente B entra en ambos. Cliente C (`charlie`) no entra.
+Client A creates two channels. Client B enters both. Client C (`charlie`) does not enter.
 
-Cliente A:
+Client A:
 
 ```text
 /join #alpha
 /join #bravo
 /mode #alpha +t
 /mode #bravo +t
-/topic #alpha tema alpha
-/topic #bravo tema bravo
+/topic #alpha alpha topic
+/topic #bravo bravo topic
 /invite charlie #alpha
 /invite charlie #bravo
 /mode #alpha +o dani
 /mode #bravo +o dani
-/kick #alpha dani fuera
-/kick #bravo dani fuera
+/kick #alpha dani out
+/kick #bravo dani out
 ```
 
-- En `#alpha` y en `#bravo`, B debe ver el cambio de modo, el topic nuevo y el `KICK`.
-- C debe recibir ambas invitaciones (aviso de `INVITE` en la ventana de estado).
-- A debe recibir `341` (`RPL_INVITING`) por cada invitación.
-- Privilegio por canal: si B crea `#charlie` (`/join #charlie`) y A entra después, A es miembro normal. `/mode #charlie +i` desde A debe mostrar `482`.
+- In `#alpha` and `#bravo`, B must see the mode change, the new topic and the `KICK`.
+- C must receive both invitations (`INVITE` notice in the status window).
+- A must receive `341` (`RPL_INVITING`) for each invitation.
+- Privilege is per channel: if B creates `#charlie` (`/join #charlie`) and A enters later, A is a regular member. `/mode #charlie +i` from A must show `482`.
 
-### 4. Cliente A envía un mensaje; B lo recibe al unirse
+### 4. Client A sends a message; B receives it when joining
 
-Cliente A:
+Client A:
 
 ```text
 /join #general
 ```
 
-En la ventana de `#general`:
+In the `#general` window:
 
 ```text
-antes de que entre b
+before b joins
 ```
 
-- B, todavía fuera del canal, no debe ver ese texto en tiempo real.
+- B, still outside the channel, must not see that text in real time.
 
-Cliente B:
+Client B:
 
 ```text
 /join #general
 ```
 
-- B debe ver `antes de que entre b` en `#general` al entrar.
+- B must see `before b joins` in `#general` when they enter.
 
-Cliente A, otra vez en `#general`:
+Client A, again in `#general`:
 
 ```text
-despues de que entre b
+after b joins
 ```
 
-- B debe ver `despues de que entre b` en `#general`.
+- B must see `after b joins` in `#general`.
 
-### 5. Canal solo por invitación (`+i`)
+### 5. Invite-only channel (`+i`)
 
-Cliente A:
+Client A:
 
 ```text
 /join #invite
 /mode #invite +i
 ```
 
-Cliente B:
+Client B:
 
 ```text
 /join #invite
 ```
 
-- B debe ver `473` (`ERR_INVITEONLYCHAN`) y no entrar.
-- A no debe ver un `JOIN` de B.
+- B must see `473` (`ERR_INVITEONLYCHAN`) and not enter.
+- A must not see a `JOIN` from B.
 
-Opcional, para confirmar que la invitación desbloquea la entrada.
+Optional, to confirm that the invitation unlocks entry.
 
-Cliente A:
+Client A:
 
 ```text
 /invite dani #invite
 ```
 
-Cliente B:
+Client B:
 
 ```text
 /join #invite
 ```
 
-- B entra. A y B ven el `JOIN` de B.
+- B enters. A and B see B’s `JOIN`.
 
-### 6. Canal con clave (`+k`)
+### 6. Channel with a key (`+k`)
 
-Cliente A:
+Client A:
 
 ```text
 /join #keyed
 /mode #keyed +k secretkey
 ```
 
-Cliente B:
+Client B:
 
 ```text
 /join #keyed
 /join #keyed wrong
 ```
 
-- Ambos `/join` deben mostrar `475` (`ERR_BADCHANNELKEY`). B no entra.
+- Both `/join`s must show `475` (`ERR_BADCHANNELKEY`). B does not enter.
 
-Cliente B, con la clave correcta:
+Client B, with the correct key:
 
 ```text
 /join #keyed secretkey
 ```
 
-- B entra. A y B ven el `JOIN` de B.
+- B enters. A and B see B’s `JOIN`.
 
-### 7. Límite de usuarios (`+l`)
+### 7. User limit (`+l`)
 
-Cliente A (único miembro; el límite debe ser `1` para que B no quepa):
+Client A (only member; the limit must be `1` so B does not fit):
 
 ```text
 /join #limited
 /mode #limited +l 1
 ```
 
-Cliente B:
+Client B:
 
 ```text
 /join #limited
 ```
 
-- B debe ver `471` (`ERR_CHANNELISFULL`) y no entrar.
-- A no debe ver un `JOIN` de B.
+- B must see `471` (`ERR_CHANNELISFULL`) and not enter.
+- A must not see a `JOIN` from B.
 
-Opcional: `/mode #limited -l` o `/mode #limited +l 2` y repetir el `/join #limited` de B; ahora debe entrar.
+Optional: `/mode #limited -l` or `/mode #limited +l 2` and repeat B’s `/join #limited`; now they must enter.

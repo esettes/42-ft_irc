@@ -1,10 +1,10 @@
-# Fase 11 — Modelo de canal
+# Phase 11 — Channel model
 
-## Objetivo
+## Goal
 
-Implementar la clase `Channel`, responsable de representar el estado de un canal IRC.
+Implement the `Channel` class, responsible for representing the state of an IRC channel.
 
-Esta fase prepara la estructura necesaria para implementar posteriormente:
+This phase prepares the structure needed to later implement:
 
 - `JOIN`
 - `PART`
@@ -15,13 +15,13 @@ Esta fase prepara la estructura necesaria para implementar posteriormente:
 - `MODE`
 - `QUIT`
 
-En esta fase debe definirse principalmente el modelo de datos y las operaciones básicas sobre los miembros y modos del canal.
+In this phase the data model and the basic operations on channel members and modes must mainly be defined.
 
 ---
 
-## Estructura del canal
+## Channel structure
 
-Cada canal debe almacenar:
+Each channel must store:
 
 ```text
 Channel
@@ -36,7 +36,7 @@ Channel
 └── user limit
 ```
 
-Una posible declaración inicial sería:
+A possible initial declaration would be:
 
 ```cpp
 class Client;
@@ -69,19 +69,19 @@ public:
 #endif
 ```
 
-La declaración anticipada:
+The forward declaration:
 
 ```cpp
 class Client;
 ```
 
-permite almacenar punteros a clientes sin incluir toda la definición de `Client` dentro de `Channel.hpp`.
+lets you store pointers to clients without including the full `Client` definition inside `Channel.hpp`.
 
 ---
 
-## Constructor del canal
+## Channel constructor
 
-El constructor debe guardar el nombre e inicializar todos los modos desactivados:
+The constructor must store the name and initialize every mode as disabled:
 
 ```cpp
 Channel::Channel(const std::string &channelName)
@@ -97,72 +97,72 @@ Channel::Channel(const std::string &channelName)
 }
 ```
 
-El canal comienza:
+The channel starts:
 
-- Sin tema.
-- Sin miembros.
-- Sin operadores.
-- Sin invitaciones.
-- Sin contraseña.
-- Sin límite de usuarios.
-- Con todos los modos desactivados.
+- Without a topic.
+- Without members.
+- Without operators.
+- Without invitations.
+- Without a password.
+- Without a user limit.
+- With every mode disabled.
 
 ---
 
-## Nombre del canal
+## Channel name
 
-El canal debe guardar su nombre completo:
+The channel must store its full name:
 
 ```cpp
 std::string name;
 ```
 
-Ejemplos válidos habituales:
+Usual valid examples:
 
 ```text
 #general
-#programacion
+#programming
 #irc
 ```
 
-El nombre debe utilizarse como identificador único dentro del servidor.
+The name must be used as a unique identifier inside the server.
 
-La validación completa del nombre puede realizarse en el comando `JOIN`, antes de crear el canal.
+Full name validation can be performed in the `JOIN` command, before creating the channel.
 
 ---
 
-## Tema del canal
+## Channel topic
 
-El tema se almacena en:
+The topic is stored in:
 
 ```cpp
 std::string topic;
 ```
 
-Puede estar vacío si todavía no se ha definido ninguno.
+It may be empty if none has been defined yet.
 
-Operaciones necesarias:
+Required operations:
 
 ```cpp
 const std::string &Channel::getTopic() const;
 void Channel::setTopic(const std::string &newTopic);
 ```
 
-El modo `+t` determinará posteriormente si solamente los operadores pueden modificarlo.
+Mode `+t` will later determine whether only operators can change it.
 
 ---
 
-## Miembros del canal
+## Channel members
 
-Los clientes conectados al canal pueden almacenarse mediante:
+Clients connected to the channel can be stored through:
 
 ```cpp
 std::set<Client *> members;
 ```
 
-El uso de `std::set` evita que el mismo cliente aparezca más de una vez.
+Using `std::set` prevents the same client from appearing more than once.
 
-Operaciones básicas:
+Basic operations:
 
 ```cpp
 void Channel::addMember(Client *client);
@@ -172,7 +172,7 @@ std::size_t Channel::getMemberCount() const;
 bool Channel::isEmpty() const;
 ```
 
-Ejemplo de implementación:
+Implementation example:
 
 ```cpp
 void Channel::addMember(Client *client)
@@ -202,23 +202,23 @@ bool Channel::isEmpty() const
 }
 ```
 
-El canal no debe eliminar los objetos `Client`.
+The channel must not delete the `Client` objects.
 
-Los punteros solamente representan relaciones con clientes administrados por el servidor.
+The pointers only represent relationships with clients managed by the server.
 
 ---
 
-## Operadores del canal
+## Channel operators
 
-Los operadores pueden almacenarse en otro conjunto:
+Operators can be stored in another set:
 
 ```cpp
 std::set<Client *> operators;
 ```
 
-Un operador siempre debe ser también miembro del canal.
+An operator must always also be a member of the channel.
 
-Antes de añadir un operador debe comprobarse:
+Before adding an operator it must be checked:
 
 ```cpp
 void Channel::addOperator(Client *client)
@@ -228,14 +228,14 @@ void Channel::addOperator(Client *client)
 }
 ```
 
-También deben existir operaciones para consultar y retirar permisos:
+There must also be operations to query and remove privileges:
 
 ```cpp
 bool Channel::hasOperator(const Client *client) const;
 void Channel::removeOperator(Client *client);
 ```
 
-Cuando un cliente abandona el canal, también debe eliminarse del conjunto de operadores.
+When a client leaves the channel, it must also be removed from the operator set.
 
 ```cpp
 void Channel::removeMember(Client *client)
@@ -248,25 +248,25 @@ void Channel::removeMember(Client *client)
 
 ---
 
-## Primer operador del canal
+## First channel operator
 
-El primer usuario que entra en un canal nuevo debe convertirse automáticamente en operador.
+The first user who enters a new channel must automatically become an operator.
 
-El flujo de `JOIN` será:
+The `JOIN` flow will be:
 
 ```text
-El cliente solicita JOIN
+The client requests JOIN
         ↓
-El servidor busca el canal
+The server looks up the channel
         ↓
-Si no existe, crea el canal
+If it does not exist, it creates the channel
         ↓
-Añade al cliente como miembro
+It adds the client as a member
         ↓
-Si era el primer miembro, lo convierte en operador
+If they were the first member, it makes them an operator
 ```
 
-Ejemplo:
+Example:
 
 ```cpp
 bool channelWasEmpty = channel.isEmpty();
@@ -277,19 +277,19 @@ if (channelWasEmpty)
     channel.addOperator(&client);
 ```
 
-No conviene comprobar si el canal está vacío después de añadir al cliente, porque en ese momento ya contendrá un miembro.
+It is not a good idea to check whether the channel is empty after adding the client, because at that moment it already contains a member.
 
 ---
 
-## Clientes invitados
+## Invited clients
 
-Los clientes invitados se almacenan en:
+Invited clients are stored in:
 
 ```cpp
 std::set<Client *> invitedClients;
 ```
 
-Operaciones necesarias:
+Required operations:
 
 ```cpp
 void Channel::inviteClient(Client *client);
@@ -297,7 +297,7 @@ void Channel::removeInvitation(Client *client);
 bool Channel::hasInvitation(const Client *client) const;
 ```
 
-Esta colección será utilizada por:
+This collection will be used by:
 
 ```text
 INVITE
@@ -305,39 +305,39 @@ JOIN
 MODE +i
 ```
 
-Cuando un cliente invitado entra correctamente en el canal, su invitación debe consumirse:
+When an invited client enters the channel correctly, their invitation must be consumed:
 
 ```cpp
 channel.removeInvitation(&client);
 ```
 
-Una invitación no convierte automáticamente al cliente en miembro. Solamente le permite superar la restricción del modo `+i`.
+An invitation does not automatically make the client a member. It only lets them bypass the `+i` restriction.
 
 ---
 
-## Modos obligatorios
+## Mandatory modes
 
-El canal debe almacenar el estado de los modos exigidos por el proyecto:
+The channel must store the state of the modes required by the project:
 
-| Modo | Estado interno | Función |
+| Mode | Internal state | Function |
 |---|---|---|
-| `+i` | `inviteOnly` | Solamente pueden entrar clientes invitados |
-| `+t` | `topicRestricted` | Solamente los operadores pueden cambiar el tema |
-| `+k` | `keyEnabled` y `channelKey` | Exige una contraseña para entrar |
-| `+l` | `limitEnabled` y `userLimit` | Limita el número de miembros |
-| `+o` | `operators` | Concede o retira privilegios de operador |
+| `+i` | `inviteOnly` | Only invited clients can enter |
+| `+t` | `topicRestricted` | Only operators can change the topic |
+| `+k` | `keyEnabled` and `channelKey` | Requires a password to enter |
+| `+l` | `limitEnabled` and `userLimit` | Limits the number of members |
+| `+o` | `operators` | Grants or removes operator privileges |
 
 ---
 
-## Modo de invitación: `+i`
+## Invite mode: `+i`
 
-Estado:
+State:
 
 ```cpp
 bool inviteOnly;
 ```
 
-Métodos:
+Methods:
 
 ```cpp
 bool Channel::isInviteOnly() const
@@ -351,19 +351,19 @@ void Channel::setInviteOnly(bool enabled)
 }
 ```
 
-Cuando está activado, `JOIN` debe permitir la entrada únicamente si el cliente aparece en `invitedClients`.
+When it is enabled, `JOIN` must allow entry only if the client appears in `invitedClients`.
 
 ---
 
-## Restricción del tema: `+t`
+## Topic restriction: `+t`
 
-Estado:
+State:
 
 ```cpp
 bool topicRestricted;
 ```
 
-Métodos:
+Methods:
 
 ```cpp
 bool Channel::isTopicRestricted() const
@@ -377,22 +377,22 @@ void Channel::setTopicRestricted(bool enabled)
 }
 ```
 
-Cuando está activado, solamente un operador puede modificar el tema del canal.
+When it is enabled, only an operator can change the channel topic.
 
-Cuando está desactivado, cualquier miembro puede modificarlo.
+When it is disabled, any member can change it.
 
 ---
 
-## Contraseña del canal: `+k`
+## Channel password: `+k`
 
-Estados:
+States:
 
 ```cpp
 bool keyEnabled;
 std::string channelKey;
 ```
 
-Métodos:
+Methods:
 
 ```cpp
 bool Channel::isKeyEnabled() const
@@ -418,22 +418,22 @@ void Channel::removeKey()
 }
 ```
 
-Al activar `+k`, debe proporcionarse una contraseña.
+When enabling `+k`, a password must be provided.
 
-Al retirar `-k`, la contraseña almacenada debe eliminarse para mantener un estado coherente.
+When removing `-k`, the stored password must be deleted to keep a consistent state.
 
 ---
 
-## Límite de usuarios: `+l`
+## User limit: `+l`
 
-Estados:
+States:
 
 ```cpp
 bool limitEnabled;
 std::size_t userLimit;
 ```
 
-Métodos:
+Methods:
 
 ```cpp
 bool Channel::isLimitEnabled() const
@@ -459,44 +459,44 @@ void Channel::removeUserLimit()
 }
 ```
 
-Cuando está activo, `JOIN` debe impedir la entrada si:
+When it is active, `JOIN` must prevent entry if:
 
 ```cpp
 channel.getMemberCount() >= channel.getUserLimit()
 ```
 
-El límite debe ser un número válido mayor que cero.
+The limit must be a valid number greater than zero.
 
 ---
 
-## Propiedad de los canales
+## Ownership of channels
 
-El servidor debe ser propietario de todos los canales.
+The server must own every channel.
 
-Relación recomendada:
+Recommended relationship:
 
 ```text
 Server
 └── channels
     ├── "#general" → Channel
-    ├── "#programacion" → Channel
+    ├── "#programming" → Channel
     └── "#irc" → Channel
 ```
 
-Una posible estructura sería:
+A possible structure would be:
 
 ```cpp
 std::map<std::string, Channel *> channels;
 ```
 
-El servidor será responsable de:
+The server will be responsible for:
 
-- Crear los canales.
-- Buscar los canales por nombre.
-- Eliminar los canales vacíos.
-- Liberar su memoria al cerrar el servidor.
+- Creating the channels.
+- Looking up channels by name.
+- Deleting empty channels.
+- Freeing their memory when the server closes.
 
-Ejemplo de búsqueda:
+Lookup example:
 
 ```cpp
 std::map<std::string, Channel *>::iterator channelIterator;
@@ -509,87 +509,87 @@ if (channelIterator != channels.end())
 }
 ```
 
-Cada cliente puede almacenar referencias o punteros a los canales a los que pertenece, pero no debe poseer copias independientes de esos canales.
+Each client can store references or pointers to the channels it belongs to, but it must not own independent copies of those channels.
 
 ---
 
-## Evitar copias independientes
+## Avoid independent copies
 
-No debe existir una copia distinta del mismo canal dentro de cada cliente.
+There must not be a different copy of the same channel inside each client.
 
-Diseño incorrecto:
+Incorrect design:
 
 ```text
-Client A → copia de #general
-Client B → copia diferente de #general
-Server   → otra copia de #general
+Client A → copy of #general
+Client B → different copy of #general
+Server   → another copy of #general
 ```
 
-Esto provocaría estados inconsistentes:
+This would cause inconsistent states:
 
-- Un usuario aparecería en una copia, pero no en otra.
-- El tema podría ser diferente.
-- Los operadores podrían no coincidir.
-- Los modos podrían tener valores distintos.
+- A user would appear in one copy but not in another.
+- The topic could be different.
+- The operators might not match.
+- The modes could have different values.
 
-Diseño correcto:
+Correct design:
 
 ```text
 Server
-└── único objeto Channel "#general"
+└── single Channel object "#general"
     ├── Client A
     ├── Client B
     └── Client C
 ```
 
-Todos los clientes deben referirse al mismo objeto `Channel`.
+Every client must refer to the same `Channel` object.
 
 ---
 
-## Estabilidad de los punteros
+## Pointer stability
 
-Si `Channel` almacena punteros a clientes:
+If `Channel` stores pointers to clients:
 
 ```cpp
 std::set<Client *> members;
 ```
 
-los objetos `Client` deben permanecer en direcciones de memoria estables.
+the `Client` objects must remain at stable memory addresses.
 
-Este diseño es compatible con una estructura como:
+This design is compatible with a structure such as:
 
 ```cpp
 std::map<int, Client *> clients;
 ```
 
-El servidor crea los clientes dinámicamente y sus direcciones no cambian mientras permanezcan conectados.
+The server creates the clients dynamically and their addresses do not change while they stay connected.
 
-Antes de destruir un cliente, el servidor debe eliminar su puntero de:
+Before destroying a client, the server must remove its pointer from:
 
-- Los miembros de todos sus canales.
-- Los operadores de todos sus canales.
-- Las listas de invitados.
-- Cualquier otro índice global.
+- The members of all of its channels.
+- The operators of all of its channels.
+- The invite lists.
+- Any other global index.
 
-Nunca debe quedar un puntero a un cliente destruido dentro de un canal.
+A pointer to a destroyed client must never remain inside a channel.
 
 ---
 
-## Eliminación de canales vacíos
+## Deleting empty channels
 
-Cuando el último miembro abandona un canal mediante `PART`, `KICK` o `QUIT`, el servidor debe eliminar el canal.
+When the last member leaves a channel through `PART`, `KICK` or `QUIT`, the server must delete the channel.
 
-Flujo:
+Flow:
 
 ```text
-Se elimina el cliente del canal
+The client is removed from the channel
         ↓
-Se comprueba si el canal está vacío
+It is checked whether the channel is empty
         ↓
-Si está vacío, el servidor elimina el canal
+If it is empty, the server deletes the channel
 ```
 
-Ejemplo:
+Example:
 
 ```cpp
 channel->removeMember(&client);
@@ -601,92 +601,92 @@ if (channel->isEmpty())
 }
 ```
 
-La eliminación corresponde al servidor porque es el propietario del objeto `Channel`.
+Deletion belongs to the server because it owns the `Channel` object.
 
 ---
 
-## Responsabilidades de `Channel`
+## Responsibilities of `Channel`
 
-La clase `Channel` debe encargarse de:
+The `Channel` class must take care of:
 
-- Almacenar el nombre y el tema.
-- Mantener la lista de miembros.
-- Mantener la lista de operadores.
-- Mantener la lista de invitados.
-- Consultar si un cliente es miembro.
-- Consultar si un cliente es operador.
-- Añadir y eliminar miembros.
-- Añadir y eliminar operadores.
-- Añadir y consumir invitaciones.
-- Almacenar el estado de los modos.
-- Mantener coherencia entre sus colecciones.
+- Storing the name and the topic.
+- Keeping the member list.
+- Keeping the operator list.
+- Keeping the invite list.
+- Querying whether a client is a member.
+- Querying whether a client is an operator.
+- Adding and removing members.
+- Adding and removing operators.
+- Adding and consuming invitations.
+- Storing the mode state.
+- Keeping consistency among its collections.
 
-La clase `Channel` no debería encargarse de:
+The `Channel` class should not take care of:
 
-- Leer datos del socket.
-- Enviar directamente mensajes con `send()`.
-- Registrar clientes.
-- Buscar canales globalmente.
-- Crear o destruir objetos `Client`.
-- Interpretar comandos IRC completos.
-- Construir respuestas numéricas.
+- Reading data from the socket.
+- Sending messages directly with `send()`.
+- Registering clients.
+- Looking up channels globally.
+- Creating or destroying `Client` objects.
+- Interpreting complete IRC commands.
+- Building numeric replies.
 
-Estas responsabilidades pertenecen al servidor, al sistema de respuestas o a los manejadores de comandos.
-
----
-
-## Invariantes importantes
-
-El modelo debe mantener siempre estas reglas:
-
-1. Un operador también debe ser miembro del canal.
-2. Un cliente no debe aparecer dos veces como miembro.
-3. Un cliente desconectado no debe permanecer en ninguna colección.
-4. Si `keyEnabled` es `false`, `channelKey` debe estar vacío.
-5. Si `limitEnabled` es `false`, `userLimit` debe valer `0`.
-6. Un canal vacío debe ser eliminado por el servidor.
-7. La clase `Channel` no debe destruir los objetos `Client`.
-8. Todos los clientes deben compartir el mismo objeto para un mismo canal.
+Those responsibilities belong to the server, the reply system or the command handlers.
 
 ---
 
-## Pruebas mínimas
+## Important invariants
 
-Antes de continuar con los comandos de canal, conviene comprobar:
+The model must always keep these rules:
 
-- Crear un canal con todos los modos desactivados.
-- Añadir un miembro.
-- Intentar añadir dos veces el mismo miembro.
-- Convertir al primer miembro en operador.
-- Comprobar si un cliente es miembro.
-- Comprobar si un cliente es operador.
-- Añadir y retirar una invitación.
-- Activar y desactivar `+i`.
-- Activar y desactivar `+t`.
-- Establecer y eliminar una contraseña.
-- Establecer y eliminar un límite.
-- Eliminar un miembro y retirarlo también de operadores e invitados.
-- Detectar cuándo el canal queda vacío.
-- Eliminar el canal vacío desde el servidor.
+1. An operator must also be a member of the channel.
+2. A client must not appear twice as a member.
+3. A disconnected client must not remain in any collection.
+4. If `keyEnabled` is `false`, `channelKey` must be empty.
+5. If `limitEnabled` is `false`, `userLimit` must be `0`.
+6. An empty channel must be deleted by the server.
+7. The `Channel` class must not destroy the `Client` objects.
+8. Every client must share the same object for the same channel.
 
 ---
 
-## Resultado esperado
+## Minimum tests
 
-Al terminar esta fase debe existir una clase `Channel` capaz de representar correctamente:
+Before continuing with the channel commands, it is useful to check:
+
+- Creating a channel with every mode disabled.
+- Adding a member.
+- Trying to add the same member twice.
+- Making the first member an operator.
+- Checking whether a client is a member.
+- Checking whether a client is an operator.
+- Adding and removing an invitation.
+- Enabling and disabling `+i`.
+- Enabling and disabling `+t`.
+- Setting and removing a password.
+- Setting and removing a limit.
+- Removing a member and also removing them from operators and invitees.
+- Detecting when the channel becomes empty.
+- Deleting the empty channel from the server.
+
+---
+
+## Expected result
+
+At the end of this phase there must be a `Channel` class able to represent correctly:
 
 ```text
-Nombre
-Tema
-Miembros
-Operadores
-Invitados
-Modo +i
-Modo +t
-Modo +k
-Modo +l
+Name
+Topic
+Members
+Operators
+Invitees
+Mode +i
+Mode +t
+Mode +k
+Mode +l
 ```
 
-El servidor debe mantener una única instancia de cada canal y ser responsable de su creación y destrucción.
+The server must keep a single instance of each channel and be responsible for its creation and destruction.
 
-La lógica completa de `JOIN`, `PART`, `KICK`, `INVITE`, `TOPIC` y `MODE` se implementará sobre este modelo en las siguientes fases.
+The full logic of `JOIN`, `PART`, `KICK`, `INVITE`, `TOPIC` and `MODE` will be implemented on this model in the following phases.

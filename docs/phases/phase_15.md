@@ -1,48 +1,48 @@
-# Fase 15 — Implementación de `INVITE`
+# Phase 15 — Implementing `INVITE`
 
-## Objetivo
+## Goal
 
-Implementar el comando `INVITE`, que permite invitar a un usuario a un canal.
+Implement the `INVITE` command, which lets you invite a user to a channel.
 
-La invitación es especialmente importante para los canales que tienen activado el modo `+i`, ya que solamente los usuarios invitados podrán entrar en ellos.
-
----
-
-## Sintaxis del comando
-
-```irc
-INVITE <nickname> <canal>
-```
-
-Ejemplo:
-
-```irc
-INVITE roxana #privado
-```
-
-En este ejemplo, el usuario que ejecuta el comando invita a `roxana` al canal `#privado`.
+The invitation is especially important for channels that have mode `+i` enabled, since only invited users will be able to enter them.
 
 ---
 
-## Estado necesario en `Channel`
+## Command syntax
 
-Cada canal debe mantener una colección de usuarios invitados.
+```irc
+INVITE <nickname> <channel>
+```
 
-Una posible representación sería:
+Example:
+
+```irc
+INVITE roxana #private
+```
+
+In this example, the user who runs the command invites `roxana` to channel `#private`.
+
+---
+
+## Required state in `Channel`
+
+Each channel must keep a collection of invited users.
+
+A possible representation would be:
 
 ```cpp
 std::set<Client *> invitedClients;
 ```
 
-También se puede utilizar un identificador estable del cliente, como su descriptor de archivo:
+A stable client identifier, such as its file descriptor, can also be used:
 
 ```cpp
 std::set<int> invitedClientDescriptors;
 ```
 
-No conviene almacenar copias completas de los clientes.
+Complete copies of the clients should not be stored.
 
-La clase `Channel` debería proporcionar métodos similares a los siguientes:
+The `Channel` class should provide methods similar to the following:
 
 ```cpp
 void inviteClient(Client &client);
@@ -50,60 +50,60 @@ bool isClientInvited(const Client &client) const;
 void removeInvitation(const Client &client);
 ```
 
-El uso de un `std::set` evita almacenar varias veces la misma invitación.
+Using a `std::set` avoids storing the same invitation several times.
 
 ---
 
-## Comprobaciones iniciales
+## Initial checks
 
-Antes de procesar la invitación, el servidor debe comprobar:
+Before processing the invitation, the server must check:
 
-1. Que el cliente emisor está registrado.
-2. Que se han recibido el nickname y el canal.
-3. Que el canal existe.
-4. Que el usuario objetivo existe.
-5. Que el emisor pertenece al canal.
-6. Que el usuario objetivo no pertenece ya al canal.
-7. Que el emisor tiene permisos para invitar.
-8. Que el usuario objetivo todavía no está invitado, si se quiere controlar explícitamente este caso.
+1. That the sending client is registered.
+2. That the nickname and the channel have been received.
+3. That the channel exists.
+4. That the target user exists.
+5. That the sender belongs to the channel.
+6. That the target user does not already belong to the channel.
+7. That the sender has permission to invite.
+8. That the target user is not already invited, if this case is to be controlled explicitly.
 
 ---
 
-## Orden recomendado de validación
+## Recommended validation order
 
-El flujo del comando puede seguir este orden:
+The command flow can follow this order:
 
 ```text
-¿El cliente está registrado?
+Is the client registered?
     ↓
-¿Se recibieron nickname y canal?
+Were nickname and channel received?
     ↓
-¿Existe el canal?
+Does the channel exist?
     ↓
-¿Existe el usuario objetivo?
+Does the target user exist?
     ↓
-¿El emisor pertenece al canal?
+Does the sender belong to the channel?
     ↓
-¿El objetivo pertenece ya al canal?
+Does the target already belong to the channel?
     ↓
-¿El emisor tiene permisos?
+Does the sender have permissions?
     ↓
-Añadir al objetivo a la colección de invitados
+Add the target to the invited collection
     ↓
-Confirmar la invitación al emisor
+Confirm the invitation to the sender
     ↓
-Notificar la invitación al usuario objetivo
+Notify the invitation to the target user
 ```
 
-Mantener siempre el mismo orden de validación hace que los errores sean predecibles y facilita las pruebas.
+Always keeping the same validation order makes errors predictable and makes tests easier.
 
 ---
 
-## Permisos para invitar
+## Permissions to invite
 
-Como mínimo, cuando el canal tenga activado el modo `+i`, solamente un operador debería poder invitar usuarios.
+At a minimum, when the channel has mode `+i` enabled, only an operator should be able to invite users.
 
-Para `ft_irc`, la opción más segura es considerar `INVITE` una acción de operador y exigir que el emisor sea operador del canal.
+For `ft_irc`, the safest option is to treat `INVITE` as an operator action and require the sender to be a channel operator.
 
 ```cpp
 if (!channel.isOperator(client))
@@ -113,52 +113,52 @@ if (!channel.isOperator(client))
 }
 ```
 
-La regla elegida debe aplicarse de forma consistente en todo el servidor.
+The chosen rule must be applied consistently throughout the server.
 
 ---
 
-## Invitación correcta
+## Correct invitation
 
-Cuando todas las comprobaciones sean válidas, el servidor debe:
+When every check is valid, the server must:
 
-1. Añadir al usuario objetivo a la colección de invitados del canal.
-2. Enviar `RPL_INVITING` al usuario que ejecutó el comando.
-3. Enviar un mensaje `INVITE` al usuario invitado.
+1. Add the target user to the channel’s invited collection.
+2. Send `RPL_INVITING` to the user who ran the command.
+3. Send an `INVITE` message to the invited user.
 
-### Confirmación al emisor
+### Confirmation to the sender
 
-La respuesta numérica habitual es:
+The usual numeric reply is:
 
 ```irc
-:irc.local 341 operador roxana #privado
+:irc.local 341 operator roxana #private
 ```
 
-El código `341` corresponde a:
+Code `341` corresponds to:
 
 ```text
 RPL_INVITING
 ```
 
-### Notificación al usuario invitado
+### Notification to the invited user
 
-El usuario objetivo debe recibir un mensaje con el prefijo completo del emisor:
+The target user must receive a message with the sender’s full prefix:
 
 ```irc
-:operador!username@localhost INVITE roxana :#privado
+:operator!username@localhost INVITE roxana :#private
 ```
 
-La invitación no debería notificarse a todos los miembros del canal. Solamente necesitan recibirla:
+The invitation should not be notified to every channel member. Only these need to receive it:
 
-- El usuario que envía la invitación, mediante `341 RPL_INVITING`.
-- El usuario invitado, mediante el mensaje `INVITE`.
+- The user who sends the invitation, through `341 RPL_INVITING`.
+- The invited user, through the `INVITE` message.
 
 ---
 
-## Integración con `JOIN`
+## Integration with `JOIN`
 
-La implementación de `JOIN` debe consultar si el usuario está invitado cuando el canal tenga activado el modo `+i`.
+The `JOIN` implementation must check whether the user is invited when the channel has mode `+i` enabled.
 
-Una comprobación simplificada sería:
+A simplified check would be:
 
 ```cpp
 if (channel.isInviteOnly()
@@ -169,155 +169,155 @@ if (channel.isInviteOnly()
 }
 ```
 
-Si el usuario aparece en la colección de invitados, puede superar la restricción `+i`.
+If the user appears in the invited collection, they can bypass the `+i` restriction.
 
-La invitación solamente debe evitar el error:
+The invitation must only avoid the error:
 
 ```text
 473 ERR_INVITEONLYCHAN
 ```
 
-No debería permitir saltarse otras restricciones, salvo que se haya decidido expresamente lo contrario.
+It should not allow skipping other restrictions, unless that has been decided expressly.
 
-Por ejemplo, el usuario invitado todavía debe cumplir:
+For example, the invited user must still satisfy:
 
-- La contraseña del canal establecida mediante `+k`.
-- El límite de usuarios establecido mediante `+l`.
+- The channel password set through `+k`.
+- The user limit set through `+l`.
 
 ---
 
-## Consumo de la invitación
+## Consuming the invitation
 
-La invitación debe eliminarse después de que el usuario entre correctamente en el canal:
+The invitation must be removed after the user enters the channel correctly:
 
 ```cpp
 channel.addMember(client);
 channel.removeInvitation(client);
 ```
 
-Es importante eliminarla después de completar correctamente el `JOIN`.
+It is important to remove it after completing `JOIN` correctly.
 
-No debe consumirse si la entrada falla debido a:
+It must not be consumed if entry fails because of:
 
-- Una contraseña incorrecta.
-- El límite de usuarios.
-- Otro error de validación.
+- An incorrect password.
+- The user limit.
+- Another validation error.
 
-De esta manera, el usuario puede corregir el problema y volver a intentar entrar sin necesitar una nueva invitación.
-
----
-
-## Limpieza de invitaciones
-
-También deben eliminarse las referencias a un usuario invitado cuando:
-
-- El usuario se desconecta mediante `QUIT`.
-- Su conexión se cierra inesperadamente.
-- El canal se elimina.
-- El usuario entra correctamente y consume la invitación.
-
-Esto evita referencias inválidas a clientes que ya no existen.
-
-Si las invitaciones se almacenan mediante nickname, también será necesario actualizarlas cuando el usuario cambie de nickname. Por este motivo, resulta preferible utilizar un identificador estable.
+This way the user can correct the problem and try to enter again without needing a new invitation.
 
 ---
 
-## Errores relevantes
+## Cleaning up invitations
 
-### Cliente no registrado
+References to an invited user must also be removed when:
+
+- The user disconnects through `QUIT`.
+- Their connection is closed unexpectedly.
+- The channel is deleted.
+- The user enters correctly and consumes the invitation.
+
+This avoids invalid references to clients that no longer exist.
+
+If invitations are stored by nickname, they will also need to be updated when the user changes nickname. For this reason, using a stable identifier is preferable.
+
+---
+
+## Relevant errors
+
+### Unregistered client
 
 ```text
 451 ERR_NOTREGISTERED
 ```
 
-Se utiliza si el cliente intenta ejecutar `INVITE` antes de completar su registro.
+Used if the client tries to run `INVITE` before completing registration.
 
-Ejemplo:
+Example:
 
 ```irc
 :irc.local 451 * :You have not registered
 ```
 
-### Faltan parámetros
+### Missing parameters
 
 ```text
 461 ERR_NEEDMOREPARAMS
 ```
 
-Se utiliza cuando falta el nickname o el canal.
+Used when the nickname or the channel is missing.
 
-Ejemplos incorrectos:
+Incorrect examples:
 
 ```irc
 INVITE
 INVITE roxana
 ```
 
-Respuesta:
+Reply:
 
 ```irc
-:irc.local 461 operador INVITE :Not enough parameters
+:irc.local 461 operator INVITE :Not enough parameters
 ```
 
-### Usuario inexistente
+### Nonexistent user
 
 ```text
 401 ERR_NOSUCHNICK
 ```
 
-Se utiliza cuando el nickname objetivo no existe.
+Used when the target nickname does not exist.
 
 ```irc
-:irc.local 401 operador desconocido :No such nick
+:irc.local 401 operator unknown :No such nick
 ```
 
-### Canal inexistente
+### Nonexistent channel
 
 ```text
 403 ERR_NOSUCHCHANNEL
 ```
 
-Se utiliza cuando el canal especificado no existe.
+Used when the specified channel does not exist.
 
 ```irc
-:irc.local 403 operador #desconocido :No such channel
+:irc.local 403 operator #unknown :No such channel
 ```
 
-### El emisor no pertenece al canal
+### The sender does not belong to the channel
 
 ```text
 442 ERR_NOTONCHANNEL
 ```
 
 ```irc
-:irc.local 442 operador #privado :You're not on that channel
+:irc.local 442 operator #private :You're not on that channel
 ```
 
-### El objetivo ya pertenece al canal
+### The target already belongs to the channel
 
 ```text
 443 ERR_USERONCHANNEL
 ```
 
 ```irc
-:irc.local 443 operador roxana #privado :is already on channel
+:irc.local 443 operator roxana #private :is already on channel
 ```
 
-### El emisor no es operador
+### The sender is not an operator
 
 ```text
 482 ERR_CHANOPRIVSNEEDED
 ```
 
 ```irc
-:irc.local 482 usuario #privado :You're not channel operator
+:irc.local 482 user #private :You're not channel operator
 ```
 
 ---
 
-## Funciones recomendadas
+## Recommended functions
 
-La lógica puede dividirse en funciones pequeñas y claramente diferenciadas:
+The logic can be split into small, clearly distinct functions:
 
 ```cpp
 void Server::handleInvite(Client &client, const Command &command);
@@ -325,7 +325,7 @@ Client *Server::findClientByNickname(const std::string &nickname);
 Channel *Server::findChannel(const std::string &channelName);
 ```
 
-La clase `Channel` puede encargarse de gestionar el estado de las invitaciones:
+The `Channel` class can take care of managing invitation state:
 
 ```cpp
 void Channel::inviteClient(Client &client);
@@ -333,76 +333,76 @@ bool Channel::isClientInvited(const Client &client) const;
 void Channel::removeInvitation(const Client &client);
 ```
 
-El `Server` debe validar el comando y enviar las respuestas, mientras que `Channel` debe gestionar el estado interno del canal.
+`Server` must validate the command and send the replies, while `Channel` must manage the channel’s internal state.
 
 ---
 
-## Casos de prueba mínimos
+## Minimum test cases
 
-### Invitación válida
+### Valid invitation
 
-1. Crear un canal.
-2. Hacer que el emisor sea operador.
-3. Invitar a otro usuario.
-4. Comprobar que el emisor recibe `341 RPL_INVITING`.
-5. Comprobar que el usuario objetivo recibe el mensaje `INVITE`.
+1. Create a channel.
+2. Make the sender an operator.
+3. Invite another user.
+4. Check that the sender receives `341 RPL_INVITING`.
+5. Check that the target user receives the `INVITE` message.
 
-### Entrada en un canal `+i`
+### Entering a `+i` channel
 
-1. Activar el modo `+i`.
-2. Intentar entrar sin invitación.
-3. Comprobar que se recibe `473 ERR_INVITEONLYCHAN`.
-4. Invitar al usuario.
-5. Repetir el `JOIN`.
-6. Comprobar que ahora puede entrar.
+1. Enable mode `+i`.
+2. Try to enter without an invitation.
+3. Check that `473 ERR_INVITEONLYCHAN` is received.
+4. Invite the user.
+5. Repeat the `JOIN`.
+6. Check that they can now enter.
 
-### Consumo de la invitación
+### Consuming the invitation
 
-1. Invitar a un usuario.
-2. Hacer que entre correctamente.
-3. Comprobar que la invitación ha sido eliminada.
-4. Hacer que abandone el canal.
-5. Intentar entrar otra vez sin una nueva invitación.
-6. Comprobar que recibe `473 ERR_INVITEONLYCHAN`.
+1. Invite a user.
+2. Have them enter correctly.
+3. Check that the invitation has been removed.
+4. Have them leave the channel.
+5. Try to enter again without a new invitation.
+6. Check that they receive `473 ERR_INVITEONLYCHAN`.
 
-### Invitación sin permisos
+### Invitation without permissions
 
-1. Entrar en el canal con un usuario que no sea operador.
-2. Intentar invitar a otro usuario.
-3. Comprobar que se recibe `482 ERR_CHANOPRIVSNEEDED`.
-4. Comprobar que la invitación no se almacena.
+1. Enter the channel with a user who is not an operator.
+2. Try to invite another user.
+3. Check that `482 ERR_CHANOPRIVSNEEDED` is received.
+4. Check that the invitation is not stored.
 
-### Usuario ya presente
+### User already present
 
-1. Invitar a un usuario que ya pertenece al canal.
-2. Comprobar que se recibe `443 ERR_USERONCHANNEL`.
-3. Comprobar que no se añade ninguna invitación.
+1. Invite a user who already belongs to the channel.
+2. Check that `443 ERR_USERONCHANNEL` is received.
+3. Check that no invitation is added.
 
-### Restricciones adicionales
+### Additional restrictions
 
-1. Activar `+i` y `+k`.
-2. Invitar a un usuario.
-3. Intentar entrar con una contraseña incorrecta.
-4. Comprobar que el `JOIN` falla.
-5. Comprobar que la invitación no se consume.
-6. Entrar con la contraseña correcta.
-7. Comprobar que la invitación se elimina después del `JOIN`.
+1. Enable `+i` and `+k`.
+2. Invite a user.
+3. Try to enter with an incorrect password.
+4. Check that the `JOIN` fails.
+5. Check that the invitation is not consumed.
+6. Enter with the correct password.
+7. Check that the invitation is removed after the `JOIN`.
 
 ---
 
-## Resultado esperado de la fase
+## Expected result of the phase
 
-Al terminar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-- Procesar correctamente `INVITE <nickname> <canal>`.
-- Validar la existencia del usuario y del canal.
-- Comprobar que el emisor pertenece al canal.
-- Comprobar los permisos del emisor.
-- Evitar invitar a usuarios que ya pertenecen al canal.
-- Almacenar las invitaciones sin duplicados.
-- Enviar `341 RPL_INVITING` al emisor.
-- Notificar la invitación al usuario objetivo.
-- Permitir que un usuario invitado supere el modo `+i`.
-- Consumir la invitación solamente después de un `JOIN` correcto.
-- Limpiar las invitaciones cuando un cliente se desconecta.
-- Responder con códigos numéricos coherentes ante cada error.
+- Process `INVITE <nickname> <channel>` correctly.
+- Validate that the user and the channel exist.
+- Check that the sender belongs to the channel.
+- Check the sender’s permissions.
+- Avoid inviting users who already belong to the channel.
+- Store invitations without duplicates.
+- Send `341 RPL_INVITING` to the sender.
+- Notify the invitation to the target user.
+- Let an invited user bypass mode `+i`.
+- Consume the invitation only after a successful `JOIN`.
+- Clean up invitations when a client disconnects.
+- Reply with consistent numeric codes for each error.

@@ -1,4 +1,4 @@
-El servidor IRC seguirá aproximadamente este proceso:
+The IRC server will roughly follow this process:
 
 ```text
 socket()
@@ -18,76 +18,76 @@ close()
 
 `socket()`
 
-Crea el socket principal del servidor:
+Creates the server’s main socket:
 
 ```cpp
 socket(AF_INET, SOCK_STREAM, 0);
 ```
 
-- `AF_INET`: usar direcciones IPv4.
-- `SOCK_STREAM`: utilizar TCP.
-- `0`: seleccionar automáticamente el protocolo correspondiente.
+- `AF_INET`: use IPv4 addresses.
+- `SOCK_STREAM`: use TCP.
+- `0`: automatically select the corresponding protocol.
 
 `bind()`
 
-Asocia el socket a una dirección y un puerto:
+Associates the socket with an address and a port:
 
 `0.0.0.0:6667`
 
-Es como decir:
+It is like saying:
 
-Este programa será responsable de las conexiones que lleguen al puerto 6667.
+This program will be responsible for connections that arrive on port 6667.
 
 `listen()`
 
-Coloca el socket en modo escucha. Desde ese momento puede recibir solicitudes de conexión.
+Puts the socket into listening mode. From that moment it can receive connection requests.
 
 `accept()`
 
-Acepta una conexión pendiente.
+Accepts a pending connection.
 
-Muy importante: `accept()` crea un socket nuevo para ese cliente.
+Very important: `accept()` creates a new socket for that client.
 
 ```text
-Socket servidor
+Server socket
     │
-    ├── socket del cliente 1
-    ├── socket del cliente 2
-    └── socket del cliente 3
+    ├── client 1 socket
+    ├── client 2 socket
+    └── client 3 socket
 ```
 
-El socket principal sigue escuchando. Los sockets creados por `accept()` se usan para hablar con cada cliente.
+The main socket keeps listening. The sockets created by `accept()` are used to talk to each client.
 
 `recv()`
 
-Recibe bytes enviados por un cliente.
+Receives bytes sent by a client.
 
-Los datos pueden representar comandos IRC completos, varios comandos o solamente una parte.
+The data may represent complete IRC commands, several commands, or only a fragment.
 
 `send()`
 
-Envía bytes al cliente.
+Sends bytes to the client.
 
-Por ejemplo:
+For example:
 
 `:server 001 roxana :Welcome to the IRC server\r\n`
 
 `close()`
 
-Cierra un socket cuando el cliente se desconecta o se produce un error.
+Closes a socket when the client disconnects or an error occurs.
 
 ---
 
-Para TCP todo son bytes:
+For TCP everything is bytes:
 
 `4e 49 43 4b 20 72 6f 78 61 6e 61 0d 0a`
 
-Es tu servidor quien interpreta esos bytes como:
+It is your server that interprets those bytes as:
 
 `NICK roxana\r\n`
 
-Tampoco cifra la información. Una contraseña enviada mediante TCP normal no está cifrada; para eso haría falta TLS.
+It also does not encrypt the information. A password sent over plain TCP is not encrypted; TLS would be needed for that.
 
 ---
 
-TCP crea un flujo fiable y ordenado de bytes entre Irssi y `ft_irc`. El servidor IRC debe convertir ese flujo de bytes en comandos IRC completos y responderlos correctamente.
+TCP creates a reliable, ordered byte stream between Irssi and `ft_irc`. The IRC server must turn that byte stream into complete IRC commands and reply to them correctly.

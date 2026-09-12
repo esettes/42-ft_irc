@@ -1,26 +1,26 @@
-# Fase 18 — Limpieza de estado y desconexiones
+# Phase 18 — State cleanup and disconnections
 
-## Objetivo
+## Goal
 
-Implementar una eliminación segura y completa de los clientes desconectados.
+Implement a safe and complete removal of disconnected clients.
 
-Esta fase es crítica porque un cliente puede estar referenciado desde varias estructuras del servidor:
+This phase is critical because a client may be referenced from several server structures:
 
-- Lista utilizada por `poll()`.
-- Mapa de clientes conectados.
-- Índice global de nicknames.
-- Canales a los que pertenece.
-- Listas de operadores.
-- Listas de invitados.
-- Buffers de entrada y salida.
+- List used by `poll()`.
+- Map of connected clients.
+- Global nickname index.
+- Channels they belong to.
+- Operator lists.
+- Invite lists.
+- Input and output buffers.
 
-Una desconexión incompleta puede dejar referencias inválidas, provocar comportamientos incoherentes o producir errores de memoria.
+An incomplete disconnection can leave invalid references, cause inconsistent behaviour or produce memory errors.
 
 ---
 
-## Función central de desconexión
+## Central disconnection function
 
-Toda desconexión debe pasar por una única función:
+Every disconnection must go through a single function:
 
 ```cpp
 void Server::disconnectClient(
@@ -29,49 +29,49 @@ void Server::disconnectClient(
 );
 ```
 
-Esta función debe ser la responsable de eliminar completamente al cliente del servidor.
+This function must be responsible for completely removing the client from the server.
 
-Debe utilizarse cuando:
+It must be used when:
 
-- El cliente envía `QUIT`.
-- `recv()` devuelve `0`.
-- `recv()` devuelve un error irrecuperable.
-- Se detecta una desconexión mediante `poll()`.
-- El servidor necesita cerrar explícitamente la conexión.
+- The client sends `QUIT`.
+- `recv()` returns `0`.
+- `recv()` returns an unrecoverable error.
+- A disconnection is detected through `poll()`.
+- The server needs to close the connection explicitly.
 
-No se debe duplicar esta lógica en diferentes handlers.
+This logic must not be duplicated in different handlers.
 
 ---
 
-## Flujo recomendado
+## Recommended flow
 
 ```text
-Localizar al cliente
+Locate the client
         ↓
-Construir el mensaje QUIT
+Build the QUIT message
         ↓
-Obtener los clientes que deben recibirlo
+Obtain the clients that must receive it
         ↓
-Eliminar al cliente de todos los canales
+Remove the client from every channel
         ↓
-Eliminarlo de operadores e invitados
+Remove them from operators and invitees
         ↓
-Eliminar los canales vacíos
+Delete empty channels
         ↓
-Eliminar su nickname del índice global
+Remove their nickname from the global index
         ↓
-Eliminarlo de poll()
+Remove them from poll()
         ↓
-Cerrar su descriptor
+Close their descriptor
         ↓
-Eliminarlo del mapa de clientes
+Remove them from the client map
 ```
 
 ---
 
-## 1. Localizar al cliente
+## 1. Locate the client
 
-Antes de comenzar, debe comprobarse que el descriptor corresponde a un cliente existente.
+Before starting, it must be checked that the descriptor corresponds to an existing client.
 
 ```cpp
 std::map<int, Client>::iterator clientIterator;
@@ -83,77 +83,77 @@ if (clientIterator == clients.end())
 }
 ```
 
-La función debe tolerar que se intente desconectar un descriptor que ya ha sido eliminado, evitando dobles cierres y accesos inválidos.
+The function must tolerate an attempt to disconnect a descriptor that has already been removed, avoiding double closes and invalid accesses.
 
 ---
 
-## 2. Construir el mensaje `QUIT`
+## 2. Build the `QUIT` message
 
-Si el cliente estaba registrado, debe construirse el mensaje que recibirán los demás usuarios:
+If the client was registered, the message that the other users will receive must be built:
 
 ```text
 :nickname!username@hostname QUIT :Connection closed
 ```
 
-Si la desconexión procede del comando:
+If the disconnection comes from the command:
 
 ```text
 QUIT :Leaving
 ```
 
-El motivo proporcionado por el usuario debe conservarse:
+The reason provided by the user must be kept:
 
 ```text
 :nickname!username@hostname QUIT :Leaving
 ```
 
-El mensaje debe construirse antes de destruir el objeto `Client`, porque después ya no estarán disponibles su nickname, username y hostname.
+The message must be built before destroying the `Client` object, because afterwards its nickname, username and hostname will no longer be available.
 
 ---
 
-## 3. Determinar quién debe recibir el `QUIT`
+## 3. Determine who must receive the `QUIT`
 
-El mensaje `QUIT` debe enviarse a los usuarios que compartan al menos un canal con el cliente desconectado.
+The `QUIT` message must be sent to the users who share at least one channel with the disconnected client.
 
-Un mismo usuario puede compartir varios canales con él, pero debe recibir el mensaje una sola vez.
+The same user may share several channels with them, but must receive the message only once.
 
-Para evitar duplicados, conviene recopilar los destinatarios en un `std::set`:
+To avoid duplicates, it is useful to collect the recipients in a `std::set`:
 
 ```cpp
 std::set<int> recipientFileDescriptors;
 ```
 
-Por cada canal al que pertenezca el cliente:
+For each channel the client belongs to:
 
-1. Recorrer sus miembros.
-2. Excluir al cliente que se está desconectando.
-3. Añadir el descriptor de cada miembro al conjunto.
+1. Traverse its members.
+2. Exclude the client who is being disconnected.
+3. Add each member’s descriptor to the set.
 
-Después se envía el mensaje `QUIT` a todos los destinatarios recopilados.
+Then the `QUIT` message is sent to every collected recipient.
 
 ---
 
-## 4. Eliminar al cliente de todos los canales
+## 4. Remove the client from every channel
 
-El cliente debe desaparecer de todas las colecciones internas de cada canal:
+The client must disappear from every internal collection of each channel:
 
-- Miembros.
-- Operadores.
-- Invitados.
+- Members.
+- Operators.
+- Invitees.
 
-Después de la eliminación deben cumplirse siempre estas condiciones:
+After the removal these conditions must always be met:
 
-- Ningún operador puede existir si no es miembro del canal.
-- Ninguna invitación debe apuntar a un cliente inexistente.
-- Ningún canal debe mantener referencias al cliente desconectado.
+- No operator can exist if they are not a channel member.
+- No invitation must point to a nonexistent client.
+- No channel must keep references to the disconnected client.
 
-Puede resultar útil implementar una función auxiliar:
+It can be useful to implement a helper function:
 
 ```cpp
 void Channel::removeClient(int clientFileDescriptor);
 ```
 
-Esta función puede encargarse de eliminar al cliente de:
+This function can take care of removing the client from:
 
 - `members`.
 - `operators`.
@@ -161,9 +161,9 @@ Esta función puede encargarse de eliminar al cliente de:
 
 ---
 
-## 5. Eliminar canales vacíos
+## 5. Delete empty channels
 
-Después de retirar al cliente, cada canal debe comprobarse:
+After removing the client, each channel must be checked:
 
 ```cpp
 if (channel.isEmpty())
@@ -172,11 +172,11 @@ if (channel.isEmpty())
 }
 ```
 
-Los canales que se queden sin miembros deben eliminarse del mapa global del servidor.
+Channels that are left without members must be deleted from the server’s global map.
 
-No se deben borrar elementos de un contenedor mientras se recorre incorrectamente, porque eso puede invalidar el iterador.
+Elements of a container must not be erased while it is being traversed incorrectly, because that can invalidate the iterator.
 
-Una forma segura es guardar el siguiente iterador antes de borrar:
+A safe way is to save the next iterator before erasing:
 
 ```cpp
 std::map<std::string, Channel>::iterator channelIterator;
@@ -199,35 +199,35 @@ while (channelIterator != channels.end())
 }
 ```
 
-Otra opción es recopilar primero los nombres de los canales vacíos y eliminarlos después.
+Another option is to first collect the names of the empty channels and delete them afterwards.
 
 ---
 
-## 6. Eliminar el nickname
+## 6. Remove the nickname
 
-Si existe un índice global como:
+If there is a global index such as:
 
 ```cpp
 std::map<std::string, int> nicknameIndex;
 ```
 
-Debe eliminarse la entrada correspondiente al nickname del cliente:
+The entry corresponding to the client’s nickname must be removed:
 
 ```cpp
 nicknameIndex.erase(client.getNickname());
 ```
 
-La eliminación debe realizarse antes de destruir el objeto `Client`.
+The removal must be performed before destroying the `Client` object.
 
-Si el cliente todavía no había enviado `NICK`, no habrá ninguna entrada que eliminar.
+If the client had not sent `NICK` yet, there will be no entry to remove.
 
 ---
 
-## 7. Eliminar el descriptor de `poll()`
+## 7. Remove the descriptor from `poll()`
 
-El descriptor debe eliminarse del contenedor de estructuras `pollfd`.
+The descriptor must be removed from the container of `pollfd` structures.
 
-Si se utiliza un `std::vector<pollfd>`, hay que buscar la estructura cuyo campo `fd` coincida con el descriptor del cliente.
+If a `std::vector<pollfd>` is used, the structure whose `fd` field matches the client’s descriptor must be found.
 
 ```cpp
 for (std::vector<pollfd>::iterator iterator = pollFileDescriptors.begin();
@@ -242,53 +242,53 @@ for (std::vector<pollfd>::iterator iterator = pollFileDescriptors.begin();
 }
 ```
 
-Después de eliminarlo, el servidor no debe volver a procesar eventos asociados a ese descriptor durante la misma iteración del bucle.
+After removing it, the server must not process events associated with that descriptor again during the same loop iteration.
 
 ---
 
-## 8. Cerrar el descriptor
+## 8. Close the descriptor
 
-Una vez eliminado de las estructuras del servidor, debe cerrarse el socket:
+Once it has been removed from the server structures, the socket must be closed:
 
 ```cpp
 ::close(clientFileDescriptor);
 ```
 
-El descriptor debe cerrarse una sola vez.
+The descriptor must be closed only once.
 
-Después de llamar a `close()`, no debe volver a utilizarse para:
+After calling `close()`, it must not be used again to:
 
-- Leer datos.
-- Enviar mensajes.
-- Buscar al cliente.
-- Modificar eventos de `poll()`.
-- Acceder a buffers.
+- Read data.
+- Send messages.
+- Look up the client.
+- Modify `poll()` events.
+- Access buffers.
 
 ---
 
-## 9. Eliminar el cliente del mapa
+## 9. Remove the client from the map
 
-Finalmente, el cliente puede eliminarse del contenedor principal:
+Finally, the client can be removed from the main container:
 
 ```cpp
 clients.erase(clientFileDescriptor);
 ```
 
-Esta operación debe realizarse después de haber utilizado toda la información necesaria del objeto, como:
+This operation must be performed after using all of the object’s necessary information, such as:
 
 - Nickname.
 - Username.
 - Hostname.
-- Canales.
-- Prefijo IRC.
+- Channels.
+- IRC prefix.
 
-Después de `erase()`, cualquier referencia, puntero o iterador al cliente deja de ser válido.
+After `erase()`, any reference, pointer or iterator to the client is no longer valid.
 
 ---
 
-## Tratamiento de `recv()`
+## Handling `recv()`
 
-Cuando `recv()` devuelve `0`, significa que el cliente ha cerrado la conexión:
+When `recv()` returns `0`, it means the client has closed the connection:
 
 ```cpp
 ssize_t receivedBytes;
@@ -310,15 +310,15 @@ if (receivedBytes == 0)
 }
 ```
 
-Si `recv()` devuelve `-1`, debe comprobarse `errno`.
+If `recv()` returns `-1`, `errno` must be checked.
 
-Los errores temporales no deben desconectar al cliente:
+Temporary errors must not disconnect the client:
 
 - `EAGAIN`.
 - `EWOULDBLOCK`.
 - `EINTR`.
 
-Otros errores pueden tratarse como una desconexión:
+Other errors can be treated as a disconnection:
 
 ```cpp
 if (receivedBytes == -1)
@@ -343,15 +343,15 @@ if (receivedBytes == -1)
 
 ---
 
-## Tratamiento de eventos de `poll()`
+## Handling `poll()` events
 
-Los eventos que pueden indicar una conexión cerrada o inválida incluyen:
+Events that can indicate a closed or invalid connection include:
 
 - `POLLHUP`.
 - `POLLERR`.
 - `POLLNVAL`.
 
-Ejemplo:
+Example:
 
 ```cpp
 if (pollFileDescriptor.revents & (POLLHUP | POLLERR | POLLNVAL))
@@ -364,19 +364,19 @@ if (pollFileDescriptor.revents & (POLLHUP | POLLERR | POLLNVAL))
 }
 ```
 
-Debe evitarse seguir procesando el mismo cliente después de llamar a `disconnectClient()`.
+The same client must not continue to be processed after calling `disconnectClient()`.
 
 ---
 
-## Integración con `QUIT`
+## Integration with `QUIT`
 
-El handler de `QUIT` no debe implementar manualmente toda la limpieza.
+The `QUIT` handler must not manually implement the entire cleanup.
 
-Su responsabilidad debe limitarse a:
+Its responsibility must be limited to:
 
-1. Obtener el motivo opcional.
-2. Llamar a `disconnectClient()`.
-3. Finalizar inmediatamente el procesamiento del cliente.
+1. Obtaining the optional reason.
+2. Calling `disconnectClient()`.
+3. Immediately finishing processing of the client.
 
 ```cpp
 void Server::handleQuit(
@@ -398,23 +398,23 @@ void Server::handleQuit(
 }
 ```
 
-Después de llamar a `disconnectClient()`, el handler no debe volver a acceder a `client`, porque la referencia puede haber quedado invalidada.
+After calling `disconnectClient()`, the handler must not access `client` again, because the reference may have been invalidated.
 
 ---
 
-## Diferencia entre `QUIT` y `KICK`
+## Difference between `QUIT` and `KICK`
 
-`QUIT` desconecta completamente al cliente del servidor.
+`QUIT` completely disconnects the client from the server.
 
-`KICK` solamente expulsa a un usuario de un canal:
+`KICK` only removes a user from a channel:
 
 ```text
 KICK #general roxana :Reason
 ```
 
-Por tanto, `KICK` no debe llamar a `disconnectClient()`.
+Therefore `KICK` must not call `disconnectClient()`.
 
-Puede reutilizar una función auxiliar de eliminación de canales:
+It can reuse a helper function for channel removal:
 
 ```cpp
 void Server::removeClientFromChannel(
@@ -423,209 +423,209 @@ void Server::removeClientFromChannel(
 );
 ```
 
-Esta función debe:
+This function must:
 
-- Eliminar al cliente de los miembros del canal.
-- Eliminar sus privilegios de operador en ese canal.
-- Eliminarlo de la lista de invitados si corresponde.
-- Eliminar el canal si queda vacío.
+- Remove the client from the channel members.
+- Remove their operator privileges on that channel.
+- Remove them from the invite list if appropriate.
+- Delete the channel if it becomes empty.
 
-El cliente debe continuar conectado al servidor y puede seguir utilizando otros canales.
-
----
-
-## Evitar iteradores invalidados
-
-La desconexión puede modificar contenedores que están siendo recorridos, especialmente:
-
-- El vector de `pollfd`.
-- El mapa de clientes.
-- El mapa de canales.
-- Las colecciones de miembros.
-- Las colecciones de operadores.
-- Las colecciones de invitados.
-
-Nunca debe incrementarse o utilizarse un iterador después de que su elemento haya sido eliminado.
-
-Cuando se borra durante un recorrido, debe usarse una estrategia segura:
-
-- Guardar el siguiente iterador antes de borrar.
-- Utilizar el iterador devuelto por `erase()` si el estándar disponible lo permite.
-- Guardar primero los elementos que deben eliminarse y borrarlos después.
-
-En C++98, guardar el siguiente iterador antes de llamar a `erase()` suele ser la opción más sencilla y portable.
+The client must stay connected to the server and can keep using other channels.
 
 ---
 
-## Evitar punteros y referencias colgantes
+## Avoid invalidated iterators
 
-Si los canales almacenan punteros o referencias a objetos `Client`, deben eliminarse antes de borrar el cliente del mapa principal.
+Disconnection can modify containers that are being traversed, especially:
 
-Orden obligatorio:
+- The `pollfd` vector.
+- The client map.
+- The channel map.
+- The member collections.
+- The operator collections.
+- The invite collections.
+
+An iterator must never be incremented or used after its element has been removed.
+
+When erasing during a traversal, a safe strategy must be used:
+
+- Save the next iterator before erasing.
+- Use the iterator returned by `erase()` if the available standard allows it.
+- First store the elements that must be removed and erase them afterwards.
+
+In C++98, saving the next iterator before calling `erase()` is usually the simplest and most portable option.
+
+---
+
+## Avoid dangling pointers and references
+
+If channels store pointers or references to `Client` objects, they must be removed before deleting the client from the main map.
+
+Mandatory order:
 
 ```text
-Eliminar referencias desde canales
+Remove references from channels
         ↓
-Eliminar el objeto Client
+Delete the Client object
 ```
 
-Nunca debe hacerse:
+This must never be done:
 
 ```text
-Eliminar el objeto Client
+Delete the Client object
         ↓
-Intentar retirarlo de los canales
+Try to remove it from the channels
 ```
 
-La segunda secuencia obligaría a acceder a un objeto que ya no existe.
+The second sequence would require accessing an object that no longer exists.
 
-Una alternativa más robusta es que los canales almacenen identificadores estables, como descriptores, en lugar de punteros directos.
+A more robust alternative is for channels to store stable identifiers, such as descriptors, instead of direct pointers.
 
 ---
 
-## Desconexiones durante el bucle de eventos
+## Disconnections during the event loop
 
-Si el servidor recorre el vector de `pollfd` mediante índices y elimina un elemento, las posiciones posteriores se desplazan.
+If the server traverses the `pollfd` vector by indexes and removes an element, later positions shift.
 
-Por ejemplo:
+For example:
 
 ```text
-Antes:  [server][client A][client B][client C]
-Borrar:                  [client B]
-Después:[server][client A][client C]
+Before:  [server][client A][client B][client C]
+Erase:                   [client B]
+After:   [server][client A][client C]
 ```
 
-Si el índice se incrementa inmediatamente, `client C` podría no procesarse.
+If the index is incremented immediately, `client C` might not be processed.
 
-Las soluciones posibles son:
+Possible solutions are:
 
-- No incrementar el índice cuando se elimina el elemento actual.
-- Recorrer el vector en orden inverso.
-- Marcar los clientes que deben desconectarse y eliminarlos después.
-- Hacer que `disconnectClient()` indique si el vector ha cambiado.
-
----
-
-## Invariantes que deben mantenerse
-
-Después de cada desconexión deben cumplirse estas reglas:
-
-- Todo descriptor presente en `poll()` corresponde a una conexión válida.
-- Todo cliente conectado aparece una sola vez en el mapa de clientes.
-- Todo nickname registrado pertenece a un cliente existente.
-- Todo miembro de un canal pertenece a un cliente conectado.
-- Todo operador también es miembro del canal.
-- Toda invitación pertenece a un cliente conectado.
-- Ningún canal vacío permanece almacenado.
-- Ningún descriptor se cierra más de una vez.
-- Ningún destinatario recibe dos veces el mismo mensaje `QUIT`.
+- Do not increment the index when the current element is removed.
+- Traverse the vector in reverse order.
+- Mark the clients that must be disconnected and remove them afterwards.
+- Have `disconnectClient()` indicate whether the vector has changed.
 
 ---
 
-## Casos de prueba recomendados
+## Invariants that must be kept
 
-### Desconexión normal
+After each disconnection these rules must be met:
+
+- Every descriptor present in `poll()` corresponds to a valid connection.
+- Every connected client appears only once in the client map.
+- Every registered nickname belongs to an existing client.
+- Every channel member belongs to a connected client.
+- Every operator is also a channel member.
+- Every invitation belongs to a connected client.
+- No empty channel remains stored.
+- No descriptor is closed more than once.
+- No recipient receives the same `QUIT` message twice.
+
+---
+
+## Recommended test cases
+
+### Normal disconnection
 
 ```text
 QUIT :Leaving
 ```
 
-Comprobar que:
+Check that:
 
-- Los demás usuarios reciben `QUIT`.
-- El socket se cierra.
-- El cliente desaparece de `poll()`.
-- El nickname queda disponible.
-- El cliente desaparece de todos sus canales.
+- The other users receive `QUIT`.
+- The socket is closed.
+- The client disappears from `poll()`.
+- The nickname becomes available.
+- The client disappears from all of their channels.
 
-### Cierre inesperado
+### Unexpected close
 
-Cerrar `netcat` o el cliente IRC sin enviar `QUIT`.
+Close `netcat` or the IRC client without sending `QUIT`.
 
-Comprobar que:
+Check that:
 
-- `recv()` devuelve `0`.
-- Se ejecuta la misma limpieza.
-- Los demás miembros reciben la notificación.
-- No quedan referencias al cliente.
+- `recv()` returns `0`.
+- The same cleanup is executed.
+- The other members receive the notification.
+- No references to the client remain.
 
-### Usuario presente en varios canales
+### User present in several channels
 
-Añadir un usuario a varios canales y desconectarlo.
+Add a user to several channels and disconnect them.
 
-Comprobar que:
+Check that:
 
-- Desaparece de todos los canales.
-- Desaparece de todas las listas de operadores.
-- Los usuarios que compartían varios canales reciben un solo `QUIT`.
+- They disappear from every channel.
+- They disappear from every operator list.
+- Users who shared several channels receive a single `QUIT`.
 
-### Último miembro de un canal
+### Last member of a channel
 
-Desconectar al único miembro.
+Disconnect the only member.
 
-Comprobar que:
+Check that:
 
-- El canal queda vacío.
-- El canal se elimina del servidor.
+- The channel becomes empty.
+- The channel is deleted from the server.
 
-### Operador desconectado
+### Disconnected operator
 
-Desconectar a un operador.
+Disconnect an operator.
 
-Comprobar que:
+Check that:
 
-- Se elimina de `operators`.
-- No queda registrado como operador después de abandonar el canal.
-- El canal sigue funcionando si todavía tiene miembros.
+- They are removed from `operators`.
+- They are not left registered as an operator after leaving the channel.
+- The channel keeps working if it still has members.
 
-### Usuario invitado
+### Invited user
 
-Invitar a un usuario y desconectarlo antes de que haga `JOIN`.
+Invite a user and disconnect them before they `JOIN`.
 
-Comprobar que:
+Check that:
 
-- Se elimina de `invitedClients`.
-- No queda ninguna referencia inválida.
+- They are removed from `invitedClients`.
+- No invalid reference remains.
 
-### Desconexión doble
+### Double disconnection
 
-Intentar desconectar dos veces el mismo descriptor.
+Try to disconnect the same descriptor twice.
 
-Comprobar que:
+Check that:
 
-- No se produce un doble `close()`.
-- No se accede a un cliente inexistente.
-- El servidor continúa funcionando.
+- A double `close()` does not occur.
+- A nonexistent client is not accessed.
+- The server keeps working.
 
-### Varios clientes desconectados durante el mismo `poll()`
+### Several clients disconnected during the same `poll()`
 
-Cerrar varias conexiones casi simultáneamente.
+Close several connections almost simultaneously.
 
-Comprobar que:
+Check that:
 
-- Ningún evento se salta por el desplazamiento del vector.
-- Todos los clientes se eliminan correctamente.
-- No se invalidan índices o iteradores.
+- No event is skipped because of the vector shift.
+- Every client is removed correctly.
+- Indexes or iterators are not invalidated.
 
 ---
 
-## Resultado esperado
+## Expected result
 
-Al terminar esta fase, cualquier tipo de desconexión debe dejar el servidor en un estado completamente coherente:
+At the end of this phase, any kind of disconnection must leave the server in a completely consistent state:
 
 ```text
-Cliente desconectado
+Client disconnected
         ↓
-Sin descriptor en poll()
-Sin entrada en clients
-Sin nickname reservado
-Sin pertenencia a canales
-Sin privilegios de operador
-Sin invitaciones pendientes
-Sin canales vacíos
-Sin referencias colgantes
+No descriptor in poll()
+No entry in clients
+No reserved nickname
+No channel membership
+No operator privileges
+No pending invitations
+No empty channels
+No dangling references
 ```
 
-La regla principal de esta fase es:
+The main rule of this phase is:
 
-> Toda desconexión completa debe ejecutarse mediante `Server::disconnectClient()`, y ninguna función debe continuar utilizando al cliente después de llamarla.
+> Every complete disconnection must be executed through `Server::disconnectClient()`, and no function must continue using the client after calling it.

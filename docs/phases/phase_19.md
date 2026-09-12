@@ -1,63 +1,63 @@
-# Fase 19 — Robustez y tests adversos
+# Phase 19 — Robustness and adversarial tests
 
-## Objetivo
+## Goal
 
-En esta fase hay que comprobar que el servidor IRC se comporta correctamente ante entradas incompletas, comandos inválidos, escrituras parciales, desconexiones inesperadas y estados límite.
+In this phase it must be checked that the IRC server behaves correctly when facing incomplete input, invalid commands, partial writes, unexpected disconnections and edge states.
 
-No se añaden nuevas funcionalidades principales. El objetivo es detectar:
+No new main features are added. The goal is to detect:
 
-- Pérdidas de datos.
-- Estados inconsistentes.
-- Accesos a memoria inválidos.
-- Fugas de memoria.
-- Descriptores sin cerrar.
-- Errores provocados por el funcionamiento real de TCP.
+- Data loss.
+- Inconsistent states.
+- Invalid memory accesses.
+- Memory leaks.
+- Unclosed descriptors.
+- Errors caused by the real behaviour of TCP.
 
 ---
 
-## 1. Framing TCP
+## 1. TCP framing
 
-TCP transmite un flujo continuo de bytes. Una llamada a `recv()` no garantiza recibir un comando IRC completo.
+TCP transmits a continuous byte stream. A call to `recv()` does not guarantee receiving a complete IRC command.
 
-Un comando puede llegar dividido en varios fragmentos:
+A command may arrive split into several fragments:
 
 ```text
 "PRIV"
-"MSG #general :ho"
-"la\r"
+"MSG #general :he"
+"llo\r"
 "\n"
 ```
 
-El servidor debe acumularlos hasta poder reconstruir:
+The server must accumulate them until it can reconstruct:
 
 ```text
-PRIVMSG #general :hola
+PRIVMSG #general :hello
 ```
 
-### Comportamiento necesario
+### Required behaviour
 
-Para cada cliente:
+For each client:
 
-1. Añadir los bytes recibidos a su buffer de entrada.
-2. Buscar comandos completos terminados en `\n`.
-3. Extraer y procesar únicamente los comandos completos.
-4. Mantener en el buffer cualquier fragmento incompleto.
-5. Continuar procesando mientras queden líneas completas.
-6. Eliminar el `\r` situado antes del `\n`, cuando exista.
+1. Append the received bytes to their input buffer.
+2. Search for complete commands ending in `\n`.
+3. Extract and process only the complete commands.
+4. Keep any incomplete fragment in the buffer.
+5. Continue processing while complete lines remain.
+6. Remove the `\r` located before the `\n`, when it exists.
 
-Un fragmento incompleto nunca debe enviarse directamente al parser.
+An incomplete fragment must never be sent directly to the parser.
 
 ---
 
-## 2. Varios comandos en una misma recepción
+## 2. Several commands in the same reception
 
-Una sola llamada a `recv()` también puede devolver varios comandos completos:
+A single call to `recv()` can also return several complete commands:
 
 ```text
 "NICK one\r\nUSER one 0 * :One\r\nJOIN #a\r\n"
 ```
 
-El servidor debe separar y procesar individualmente:
+The server must separate and process individually:
 
 ```text
 NICK one
@@ -65,28 +65,28 @@ USER one 0 * :One
 JOIN #a
 ```
 
-No debe procesar todo el contenido como si fuese un único comando.
+It must not process the whole content as if it were a single command.
 
 ---
 
-## 3. Terminadores de línea
+## 3. Line terminators
 
-Hay que probar los dos terminadores siguientes:
+The following two terminators must be tested:
 
 ```text
 \r\n
 \n
 ```
 
-El servidor puede ser tolerante y aceptar `\n` como final de comando.
+The server can be tolerant and accept `\n` as the end of a command.
 
-Sin embargo, todos los mensajes enviados por el servidor deben finalizar obligatoriamente con:
+However, every message sent by the server must obligatorily end with:
 
 ```text
 \r\n
 ```
 
-Ejemplo:
+Example:
 
 ```text
 :irc.server 001 roxana :Welcome to the IRC Network\r\n
@@ -94,16 +94,16 @@ Ejemplo:
 
 ---
 
-## 4. Escrituras parciales
+## 4. Partial writes
 
-Una llamada a `send()` puede enviar menos bytes de los solicitados, especialmente cuando:
+A call to `send()` may send fewer bytes than requested, especially when:
 
-- El socket es no bloqueante.
-- El buffer del sistema está lleno.
-- Se intenta enviar una gran cantidad de información.
-- El cliente recibe datos lentamente.
+- The socket is non-blocking.
+- The system buffer is full.
+- A large amount of information is being sent.
+- The client receives data slowly.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 const ssize_t bytesSent = send(
@@ -114,40 +114,40 @@ const ssize_t bytesSent = send(
 );
 ```
 
-Si `bytesSent` es menor que `outputBuffer.size()`, no se debe eliminar todo el mensaje.
+If `bytesSent` is smaller than `outputBuffer.size()`, the whole message must not be removed.
 
-Solo deben retirarse del buffer los bytes enviados correctamente:
+Only the bytes sent correctly must be removed from the buffer:
 
 ```cpp
 outputBuffer.erase(0, bytesSent);
 ```
 
-Los bytes restantes deben mantenerse para intentar enviarlos de nuevo cuando `poll()` indique que el socket está preparado para escritura mediante `POLLOUT`.
+The remaining bytes must be kept so they can be sent again when `poll()` reports that the socket is ready for writing through `POLLOUT`.
 
-### Casos que deben gestionarse
+### Cases that must be handled
 
-- `send()` devuelve un número positivo menor que el tamaño solicitado.
-- `send()` devuelve `-1` con `errno == EAGAIN`.
-- `send()` devuelve `-1` con `errno == EWOULDBLOCK`.
-- `send()` devuelve `-1` con `errno == EINTR`.
-- `send()` devuelve un error definitivo.
-- El cliente se desconecta mientras todavía tiene mensajes pendientes.
+- `send()` returns a positive number smaller than the requested size.
+- `send()` returns `-1` with `errno == EAGAIN`.
+- `send()` returns `-1` with `errno == EWOULDBLOCK`.
+- `send()` returns `-1` with `errno == EINTR`.
+- `send()` returns a fatal error.
+- The client disconnects while it still has pending messages.
 
-### Resultado esperado
+### Expected result
 
-- No se pierden bytes.
-- No se duplican fragmentos.
-- Se mantiene el orden de los mensajes.
-- Los mensajes pendientes se eliminan al destruir al cliente.
-- `POLLOUT` solo se solicita mientras existan datos pendientes.
+- Bytes are not lost.
+- Fragments are not duplicated.
+- Message order is kept.
+- Pending messages are deleted when the client is destroyed.
+- `POLLOUT` is only requested while pending data exists.
 
 ---
 
-## 5. Errores de protocolo
+## 5. Protocol errors
 
-Hay que probar comandos incompletos, parámetros inválidos y recursos inexistentes.
+Incomplete commands, invalid parameters and nonexistent resources must be tested.
 
-### Registro
+### Registration
 
 ```text
 PASS
@@ -158,7 +158,7 @@ USER
 USER roxana
 ```
 
-### Canales
+### Channels
 
 ```text
 JOIN
@@ -168,7 +168,7 @@ PART
 PART #nonexistent
 ```
 
-### Mensajes
+### Messages
 
 ```text
 PRIVMSG
@@ -177,7 +177,7 @@ PRIVMSG nobody :hello
 PRIVMSG #nonexistent :hello
 ```
 
-### Comandos de operador
+### Operator commands
 
 ```text
 MODE
@@ -195,44 +195,44 @@ TOPIC
 TOPIC #nonexistent
 ```
 
-### Comportamiento esperado
+### Expected behaviour
 
-Para cada comando inválido, el servidor debe:
+For each invalid command, the server must:
 
-- No cerrarse inesperadamente.
-- No acceder a parámetros inexistentes.
-- No modificar el estado parcialmente.
-- Enviar una respuesta numérica coherente.
-- Mantener al resto de clientes funcionando.
-- Permitir que el cliente continúe enviando comandos.
+- Not close unexpectedly.
+- Not access nonexistent parameters.
+- Not modify state partially.
+- Send a consistent numeric reply.
+- Keep the rest of the clients working.
+- Allow the client to continue sending commands.
 
 ---
 
-## 6. Desconexiones problemáticas
+## 6. Problematic disconnections
 
-Hay que probar desconexiones en diferentes estados.
+Disconnections in different states must be tested.
 
-### Casos de prueba
+### Test cases
 
-- Desconectar un cliente no registrado.
-- Desconectar un usuario registrado sin canales.
-- Desconectar un usuario presente en varios canales.
-- Desconectar a un operador.
-- Desconectar al único operador de un canal.
-- Desconectar al último miembro de un canal.
-- Desconectar un usuario que aparece en listas de invitados.
-- Desconectar un cliente con mensajes pendientes.
-- Recibir `POLLHUP`.
-- Recibir `POLLERR`.
-- Recibir `POLLNVAL`.
-- Recibir `recv() == 0`.
-- Recibir un error definitivo de `recv()`.
-- Ejecutar el comando `QUIT`.
-- Cerrar el programa mientras existen clientes conectados.
+- Disconnect an unregistered client.
+- Disconnect a registered user without channels.
+- Disconnect a user present in several channels.
+- Disconnect an operator.
+- Disconnect the only operator of a channel.
+- Disconnect the last member of a channel.
+- Disconnect a user who appears in invite lists.
+- Disconnect a client with pending messages.
+- Receive `POLLHUP`.
+- Receive `POLLERR`.
+- Receive `POLLNVAL`.
+- Receive `recv() == 0`.
+- Receive a fatal `recv()` error.
+- Run the `QUIT` command.
+- Close the program while clients are connected.
 
-### Comportamiento esperado
+### Expected behaviour
 
-Toda desconexión debe pasar por una única función:
+Every disconnection must go through a single function:
 
 ```cpp
 void Server::disconnectClient(
@@ -241,88 +241,88 @@ void Server::disconnectClient(
 );
 ```
 
-Esta función debe encargarse de:
+This function must take care of:
 
-1. Notificar el `QUIT` a los usuarios afectados.
-2. Eliminar al cliente de todos los canales.
-3. Eliminarlo de las colecciones de operadores.
-4. Eliminarlo de las listas de invitados.
-5. Eliminar su nickname del índice global.
-6. Eliminar su descriptor de `poll()`.
-7. Cerrar el descriptor.
-8. Eliminar el objeto `Client`.
-9. Eliminar los canales que hayan quedado vacíos.
+1. Notifying `QUIT` to the affected users.
+2. Removing the client from every channel.
+3. Removing them from the operator collections.
+4. Removing them from the invite lists.
+5. Removing their nickname from the global index.
+6. Removing their descriptor from `poll()`.
+7. Closing the descriptor.
+8. Deleting the `Client` object.
+9. Deleting the channels that have become empty.
 
-La función debe evitar enviar varias veces el mismo `QUIT` a usuarios que compartían más de un canal con el cliente desconectado.
-
----
-
-## 7. Casos límite relacionados con canales
-
-También hay que comprobar:
-
-- El primer usuario crea el canal y se convierte en operador.
-- Un canal se elimina cuando sale su último miembro.
-- Un operador expulsado deja de aparecer en `operators`.
-- Un usuario invitado que se desconecta deja de aparecer en `invited`.
-- Un usuario no puede estar duplicado en `members`.
-- Un usuario no puede ser operador sin pertenecer al canal.
-- El límite `+l` se respeta exactamente.
-- La clave `+k` se comprueba correctamente.
-- El modo `+i` permite entrar a usuarios invitados.
-- La invitación se consume después de un `JOIN` correcto.
-- `KICK`, `PART`, `QUIT` y una desconexión inesperada mantienen el mismo estado final.
+The function must avoid sending the same `QUIT` several times to users who shared more than one channel with the disconnected client.
 
 ---
 
-## 8. Protección frente a mensajes demasiado grandes
+## 7. Channel-related edge cases
 
-Conviene limitar el tamaño del buffer de entrada de cada cliente.
+It must also be checked that:
 
-Si un cliente envía datos indefinidamente sin ningún terminador, el buffer no debe crecer sin límite.
-
-Se debe definir un tamaño máximo razonable y:
-
-- Rechazar mensajes excesivamente grandes.
-- Limpiar el estado correspondiente.
-- Desconectar al cliente si está enviando datos inválidos de forma continuada.
-- Evitar un consumo ilimitado de memoria.
-
-El protocolo IRC tradicional limita cada mensaje a `512` bytes incluyendo `\r\n`, aunque el comportamiento exacto puede adaptarse a los requisitos del proyecto.
+- The first user creates the channel and becomes an operator.
+- A channel is deleted when its last member leaves.
+- A kicked operator no longer appears in `operators`.
+- An invited user who disconnects no longer appears in `invited`.
+- A user cannot be duplicated in `members`.
+- A user cannot be an operator without belonging to the channel.
+- The `+l` limit is respected exactly.
+- The `+k` key is checked correctly.
+- Mode `+i` lets invited users enter.
+- The invitation is consumed after a successful `JOIN`.
+- `KICK`, `PART`, `QUIT` and an unexpected disconnection keep the same final state.
 
 ---
 
-## 9. Pruebas con varios clientes
+## 8. Protection against messages that are too large
 
-Las pruebas no deben realizarse únicamente con un cliente.
+It is useful to limit the size of each client’s input buffer.
 
-Hay que conectar varios clientes simultáneamente y comprobar:
+If a client sends data indefinitely without any terminator, the buffer must not grow without a limit.
 
-- Registro independiente.
-- Nicknames únicos.
-- Entrada simultánea en canales.
-- Mensajes privados.
-- Mensajes a canales.
-- Cambios de topic.
-- Invitaciones.
-- Expulsiones.
-- Modos de canal.
-- Desconexiones inesperadas.
-- Cierre de un cliente mientras otro continúa conectado.
+A reasonable maximum size must be defined and:
 
-Se pueden abrir varias terminales:
+- Excessively large messages must be rejected.
+- The corresponding state must be cleared.
+- The client must be disconnected if they are sending invalid data continuously.
+- Unlimited memory consumption must be avoided.
+
+The traditional IRC protocol limits each message to `512` bytes including `\r\n`, although the exact behaviour can be adapted to the project requirements.
+
+---
+
+## 9. Tests with several clients
+
+The tests must not be performed with only one client.
+
+Several clients must be connected simultaneously and it must be checked:
+
+- Independent registration.
+- Unique nicknames.
+- Simultaneous entry into channels.
+- Private messages.
+- Channel messages.
+- Topic changes.
+- Invitations.
+- Kicks.
+- Channel modes.
+- Unexpected disconnections.
+- Closing one client while another stays connected.
+
+Several terminals can be opened:
 
 ```bash
 nc 127.0.0.1 6667
 ```
 
-También conviene probar el servidor con el cliente de referencia elegido, por ejemplo `irssi`.
+It is also useful to test the server with the chosen reference client, for example `irssi`.
 
 ---
 
-## 10. Comprobación de memoria y descriptores
+## 10. Checking memory and descriptors
 
-Ejecutad el servidor con Valgrind:
+Run the server with Valgrind:
 
 ```bash
 valgrind --leak-check=full \
@@ -332,40 +332,40 @@ valgrind --leak-check=full \
     ./ircserv 6667 secret
 ```
 
-Durante la ejecución:
+During execution:
 
-1. Conectad varios clientes.
-2. Registradlos.
-3. Cread varios canales.
-4. Enviad mensajes.
-5. Ejecutad `JOIN`, `PART`, `KICK`, `INVITE`, `TOPIC` y `MODE`.
-6. Desconectad clientes de distintas formas.
-7. Cerrad el servidor.
+1. Connect several clients.
+2. Register them.
+3. Create several channels.
+4. Send messages.
+5. Run `JOIN`, `PART`, `KICK`, `INVITE`, `TOPIC` and `MODE`.
+6. Disconnect clients in different ways.
+7. Close the server.
 
-### Resultado esperado
+### Expected result
 
-Al finalizar no deberían quedar:
+At the end there should not remain:
 
-- Bloques de memoria definitivamente perdidos.
-- Clientes sin destruir.
-- Canales sin destruir.
-- Buffers pendientes sin liberar.
-- Descriptores de clientes abiertos.
-- El descriptor del socket de escucha abierto.
-- Accesos a memoria liberada.
-- Lecturas o escrituras fuera de los límites.
+- Definitely lost memory blocks.
+- Clients that were not destroyed.
+- Channels that were not destroyed.
+- Pending buffers that were not freed.
+- Open client descriptors.
+- The listening socket descriptor open.
+- Accesses to freed memory.
+- Reads or writes outside the limits.
 
 ---
 
-## 11. Pruebas con sanitizers
+## 11. Tests with sanitizers
 
-Si el entorno lo permite, también conviene compilar temporalmente con sanitizers:
+If the environment allows it, it is also useful to compile temporarily with sanitizers:
 
 ```bash
 -fsanitize=address,undefined -g3
 ```
 
-Ejemplo:
+Example:
 
 ```bash
 c++ -Wall -Wextra -Werror -std=c++98 \
@@ -375,45 +375,45 @@ c++ -Wall -Wextra -Werror -std=c++98 \
     -o ircserv
 ```
 
-Estas herramientas ayudan a detectar:
+These tools help detect:
 
-- Desbordamientos de buffer.
-- Uso de memoria después de liberarla.
-- Accesos fuera de rango.
-- Dobles liberaciones.
-- Comportamiento indefinido.
+- Buffer overflows.
+- Use of memory after freeing it.
+- Out-of-range accesses.
+- Double frees.
+- Undefined behaviour.
 
-Estas opciones son para depuración y no tienen por qué formar parte de la compilación final del proyecto.
-
----
-
-## 12. Lista final de comprobación
-
-Antes de dar la fase por terminada, verificad que:
-
-- [ ] Los comandos fragmentados se reconstruyen correctamente.
-- [ ] Los comandos agrupados se separan correctamente.
-- [ ] Se aceptan correctamente los terminadores elegidos.
-- [ ] Todas las respuestas usan `\r\n`.
-- [ ] Las escrituras parciales conservan los bytes pendientes.
-- [ ] `EAGAIN`, `EWOULDBLOCK` y `EINTR` se gestionan correctamente.
-- [ ] Los comandos inválidos no provocan cierres inesperados.
-- [ ] Los errores producen respuestas numéricas coherentes.
-- [ ] Todas las desconexiones pasan por una única función.
-- [ ] No quedan clientes en canales después de desconectarse.
-- [ ] No quedan operadores que ya no sean miembros.
-- [ ] No quedan invitaciones a clientes inexistentes.
-- [ ] Los canales vacíos se eliminan.
-- [ ] No se envía el mismo `QUIT` varias veces al mismo usuario.
-- [ ] Los buffers tienen un tamaño máximo.
-- [ ] El servidor funciona con varios clientes simultáneos.
-- [ ] Valgrind no detecta fugas de memoria.
-- [ ] Valgrind no detecta descriptores abiertos.
-- [ ] Los sanitizers no detectan accesos inválidos.
-- [ ] El servidor sigue funcionando después de recibir entradas problemáticas.
+These options are for debugging and do not have to form part of the project’s final compilation.
 
 ---
 
-## Resultado de la fase
+## 12. Final checklist
 
-Al terminar esta fase, el servidor debe ser capaz de soportar tráfico TCP real, entradas malformadas, varios clientes simultáneos y desconexiones inesperadas sin perder datos, dejar estados inconsistentes ni producir errores de memoria.
+Before considering the phase finished, verify that:
+
+- [ ] Fragmented commands are reconstructed correctly.
+- [ ] Grouped commands are separated correctly.
+- [ ] The chosen terminators are accepted correctly.
+- [ ] Every reply uses `\r\n`.
+- [ ] Partial writes keep the pending bytes.
+- [ ] `EAGAIN`, `EWOULDBLOCK` and `EINTR` are handled correctly.
+- [ ] Invalid commands do not cause unexpected closes.
+- [ ] Errors produce consistent numeric replies.
+- [ ] Every disconnection goes through a single function.
+- [ ] No clients remain in channels after disconnecting.
+- [ ] No operators remain who are no longer members.
+- [ ] No invitations remain to nonexistent clients.
+- [ ] Empty channels are deleted.
+- [ ] The same `QUIT` is not sent several times to the same user.
+- [ ] The buffers have a maximum size.
+- [ ] The server works with several simultaneous clients.
+- [ ] Valgrind does not detect memory leaks.
+- [ ] Valgrind does not detect open descriptors.
+- [ ] The sanitizers do not detect invalid accesses.
+- [ ] The server keeps working after receiving problematic input.
+
+---
+
+## Result of the phase
+
+At the end of this phase, the server must be able to support real TCP traffic, malformed input, several simultaneous clients and unexpected disconnections without losing data, leaving inconsistent states or producing memory errors.

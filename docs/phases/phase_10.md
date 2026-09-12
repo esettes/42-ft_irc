@@ -1,80 +1,80 @@
-# Fase 10 — Comandos auxiliares de conexión
+# Phase 10 — Auxiliary connection commands
 
-## Objetivo
+## Goal
 
-Implementar los comandos auxiliares necesarios para mantener, negociar y cerrar correctamente una conexión IRC:
+Implement the auxiliary commands needed to keep, negotiate and close an IRC connection correctly:
 
 - `PING` / `PONG`
 - `QUIT`
 - `CAP`
 
-Estos comandos facilitan que clientes IRC reales, como Irssi, puedan conectarse y funcionar correctamente.
+These commands make it easier for real IRC clients, such as Irssi, to connect and work correctly.
 
 ---
 
-## 1. Comando `PING`
+## 1. `PING` command
 
-Los clientes utilizan `PING` para comprobar que la conexión continúa activa.
+Clients use `PING` to check that the connection is still active.
 
-Ejemplo recibido:
+Received example:
 
 ```irc
 PING :token
 ```
 
-El servidor debe responder utilizando el mismo token:
+The server must reply using the same token:
 
 ```irc
 PONG :token
 ```
 
-### Comprobaciones necesarias
+### Required checks
 
-- Verificar que se ha recibido un parámetro.
-- Conservar el token recibido.
-- Permitir `PING` antes de completar el registro.
-- Añadir la respuesta al buffer de salida.
-- Activar `POLLOUT` para enviar la respuesta de forma no bloqueante.
+- Verify that a parameter has been received.
+- Keep the received token.
+- Allow `PING` before completing registration.
+- Append the reply to the output buffer.
+- Enable `POLLOUT` to send the reply in a non-blocking way.
 
-Si falta el parámetro, puede enviarse:
+If the parameter is missing, this can be sent:
 
 ```irc
 :server.name 409 nickname :No origin specified
 ```
 
-No debe llamarse directamente a `send()` desde el handler si el servidor ya dispone de un sistema centralizado de escritura.
+`send()` must not be called directly from the handler if the server already has a centralized write system.
 
 ---
 
-## 2. Comando `PONG`
+## 2. `PONG` command
 
-El servidor debe generar la respuesta mediante un handler similar a:
+The server must generate the reply through a handler similar to:
 
 ```cpp
 void Server::handlePing(Client &client, const Command &command);
 ```
 
-El flujo debe ser:
+The flow must be:
 
 ```text
-PING recibido
+PING received
     ↓
-construir PONG
+build PONG
     ↓
-añadirlo al outputBuffer
+append it to outputBuffer
     ↓
-activar POLLOUT
+enable POLLOUT
     ↓
-enviar los datos pendientes
+send the pending data
 ```
 
 ---
 
-## 3. Comando `QUIT`
+## 3. `QUIT` command
 
-`QUIT` permite que un cliente cierre voluntariamente su conexión.
+`QUIT` lets a client close its connection voluntarily.
 
-Ejemplos:
+Examples:
 
 ```irc
 QUIT
@@ -84,23 +84,23 @@ QUIT
 QUIT :Leaving
 ```
 
-Si no se proporciona un motivo, puede utilizarse uno predeterminado:
+If no reason is provided, a default one can be used:
 
 ```text
 Client Quit
 ```
 
-### Notificación de salida
+### Leave notification
 
-Los usuarios que compartan algún canal con el cliente deben recibir:
+Users who share any channel with the client must receive:
 
 ```irc
 :nickname!username@hostname QUIT :Leaving
 ```
 
-Cada usuario debe recibir la notificación una sola vez, aunque comparta varios canales con el cliente.
+Each user must receive the notification only once, even if they share several channels with the client.
 
-Para evitar duplicados puede utilizarse:
+To avoid duplicates, this can be used:
 
 ```cpp
 std::set<Client *> recipients;
@@ -108,104 +108,104 @@ std::set<Client *> recipients;
 
 ---
 
-## 4. Limpieza completa del cliente
+## 4. Complete client cleanup
 
-Después de recibir `QUIT`, debe realizarse la limpieza en este orden:
+After receiving `QUIT`, cleanup must be performed in this order:
 
-1. Guardar el prefijo y el motivo de salida.
-2. Obtener los destinatarios de la notificación.
-3. Enviar el mensaje `QUIT`.
-4. Eliminar al cliente de todos sus canales.
-5. Eliminarlo de las listas de operadores.
-6. Eliminarlo de las listas de invitados.
-7. Eliminar los canales que hayan quedado vacíos.
-8. Eliminar su nickname del índice global.
-9. Eliminar su descriptor de la estructura utilizada por `poll()`.
-10. Cerrar el descriptor.
-11. Destruir o eliminar el objeto `Client`.
+1. Store the prefix and the leave reason.
+2. Obtain the notification recipients.
+3. Send the `QUIT` message.
+4. Remove the client from all of its channels.
+5. Remove it from the operator lists.
+6. Remove it from the invite lists.
+7. Delete the channels that have become empty.
+8. Remove its nickname from the global index.
+9. Remove its descriptor from the structure used by `poll()`.
+10. Close the descriptor.
+11. Destroy or delete the `Client` object.
 
-Si existe un índice global como:
+If there is a global index such as:
 
 ```cpp
 std::map<std::string, Client *> clientsByNickname;
 ```
 
-debe eliminarse la entrada correspondiente. De lo contrario, el nickname permanecería ocupado después de la desconexión.
+the corresponding entry must be removed. Otherwise the nickname would stay occupied after the disconnection.
 
 ---
 
-## 5. Centralización de las desconexiones
+## 5. Centralizing disconnections
 
-La misma limpieza será necesaria cuando:
+The same cleanup will be needed when:
 
-- El cliente envíe `QUIT`.
-- `recv()` devuelva `0`.
-- Se produzca un error fatal de lectura.
-- Se produzca un error fatal de escritura.
-- El cliente pierda la conexión.
-- El servidor expulse al cliente.
+- The client sends `QUIT`.
+- `recv()` returns `0`.
+- A fatal read error occurs.
+- A fatal write error occurs.
+- The client loses the connection.
+- The server kicks the client.
 
-Conviene centralizar el proceso:
+It is useful to centralize the process:
 
 ```cpp
 void Server::disconnectClient(int clientFileDescriptor,
                               const std::string &reason);
 ```
 
-El handler de `QUIT` solamente debería obtener el motivo y solicitar la desconexión:
+The `QUIT` handler should only obtain the reason and request the disconnection:
 
 ```cpp
 void Server::handleQuit(Client &client, const Command &command);
 ```
 
-Esto evita duplicar la lógica de limpieza.
+This avoids duplicating the cleanup logic.
 
 ---
 
-## 6. Evitar invalidar iteradores
+## 6. Avoid invalidating iterators
 
-No se debe eliminar al cliente de una colección mientras se recorre esa misma colección si la operación puede invalidar los iteradores.
+The client must not be removed from a collection while that same collection is being traversed if the operation can invalidate the iterators.
 
-Una estrategia segura consiste en:
+A safe strategy is:
 
-1. Copiar la lista de canales del cliente.
-2. Recorrer la copia.
-3. Eliminar al cliente de cada canal.
-4. Eliminar posteriormente los canales vacíos.
+1. Copy the client’s channel list.
+2. Traverse the copy.
+3. Remove the client from each channel.
+4. Delete empty channels afterwards.
 
-Tampoco debe accederse al objeto `Client` después de eliminarlo de la colección principal o destruirlo.
+The `Client` object must also not be accessed after removing it from the main collection or destroying it.
 
 ---
 
-## 7. Comando `CAP`
+## 7. `CAP` command
 
-`CAP` se utiliza para negociar capacidades entre el cliente y el servidor.
+`CAP` is used to negotiate capabilities between the client and the server.
 
-Un cliente real puede enviar:
+A real client may send:
 
 ```irc
 CAP LS 302
 ```
 
-Aunque el servidor no implemente capacidades adicionales, debe responder para que el cliente no se quede esperando.
+Even if the server does not implement extra capabilities, it must reply so the client does not stay waiting.
 
-Una respuesta mínima sería:
+A minimal reply would be:
 
 ```irc
 :server.name CAP * LS :
 ```
 
-El cliente puede finalizar la negociación enviando:
+The client can finish the negotiation by sending:
 
 ```irc
 CAP END
 ```
 
-### Subcomandos mínimos
+### Minimum subcommands
 
 #### `CAP LS`
 
-Informa de las capacidades disponibles:
+Reports the available capabilities:
 
 ```irc
 :server.name CAP * LS :
@@ -213,69 +213,69 @@ Informa de las capacidades disponibles:
 
 #### `CAP END`
 
-Finaliza la negociación de capacidades.
+Finishes capability negotiation.
 
-No necesita producir una respuesta, pero debe permitir que el registro continúe.
+It does not need to produce a reply, but it must allow registration to continue.
 
 ---
 
-## 8. Estado de negociación de capacidades
+## 8. Capability negotiation state
 
-Cada cliente puede almacenar:
+Each client can store:
 
 ```cpp
 bool capNegotiationActive;
 ```
 
-Al recibir:
+On receiving:
 
 ```irc
 CAP LS 302
 ```
 
-se activa la negociación:
+negotiation is enabled:
 
 ```text
 capNegotiationActive = true
 ```
 
-Al recibir:
+On receiving:
 
 ```irc
 CAP END
 ```
 
-se finaliza:
+it is finished:
 
 ```text
 capNegotiationActive = false
 ```
 
-Después de `CAP END`, debe comprobarse nuevamente el registro:
+After `CAP END`, registration must be checked again:
 
 ```cpp
 tryRegisterClient(client);
 ```
 
-Si la negociación `CAP` bloquea temporalmente el registro, los requisitos serán:
+If `CAP` negotiation temporarily blocks registration, the requirements will be:
 
 ```text
-contraseña aceptada
+password accepted
     +
-nickname válido y disponible
+valid and available nickname
     +
-USER recibido
+USER received
     +
-negociación CAP finalizada
+CAP negotiation finished
 ```
 
-También puede implementarse una versión más sencilla en la que `CAP` no bloquee el registro, pero el servidor debe responder como mínimo a `CAP LS`.
+A simpler version can also be implemented in which `CAP` does not block registration, but the server must at least reply to `CAP LS`.
 
 ---
 
-## 9. Registro de los handlers
+## 9. Registering the handlers
 
-Los comandos deben añadirse al sistema de despacho:
+The commands must be added to the dispatch system:
 
 ```text
 PING → handlePing()
@@ -283,13 +283,13 @@ QUIT → handleQuit()
 CAP  → handleCap()
 ```
 
-Los siguientes comandos deben permitirse antes de que el cliente complete el registro:
+The following commands must be allowed before the client completes registration:
 
 - `PING`
 - `QUIT`
 - `CAP`
 
-Por tanto, no deben responder con:
+Therefore they must not reply with:
 
 ```irc
 451 ERR_NOTREGISTERED
@@ -297,88 +297,88 @@ Por tanto, no deben responder con:
 
 ---
 
-## 10. Pruebas recomendadas
+## 10. Recommended tests
 
-### Probar `PING`
+### Test `PING`
 
-Entrada:
+Input:
 
 ```irc
 PING :12345
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 PONG :12345
 ```
 
-### Probar `PING` sin parámetro
+### Test `PING` without a parameter
 
-Entrada:
+Input:
 
 ```irc
 PING
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 :server.name 409 nickname :No origin specified
 ```
 
-### Probar `QUIT`
+### Test `QUIT`
 
-Entrada:
+Input:
 
 ```irc
 QUIT :Goodbye
 ```
 
-Resultado esperado:
+Expected result:
 
-- Los usuarios relacionados reciben el mensaje `QUIT`.
-- El cliente desaparece de todos sus canales.
-- El nickname vuelve a quedar disponible.
-- El descriptor desaparece de `poll()`.
-- La conexión se cierra correctamente.
-- El objeto `Client` deja de estar almacenado en el servidor.
+- Related users receive the `QUIT` message.
+- The client disappears from all of its channels.
+- The nickname becomes available again.
+- The descriptor disappears from `poll()`.
+- The connection is closed correctly.
+- The `Client` object is no longer stored in the server.
 
-### Probar `CAP`
+### Test `CAP`
 
-Entrada:
+Input:
 
 ```irc
 CAP LS 302
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 :server.name CAP * LS :
 ```
 
-Después:
+Then:
 
 ```irc
 CAP END
 ```
 
-El cliente debe poder completar el registro normalmente.
+The client must be able to complete registration normally.
 
 ---
 
-## Resultado esperado
+## Expected result
 
-Al terminar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-- Mantener conexiones activas mediante `PING` y `PONG`.
-- Procesar cierres voluntarios mediante `QUIT`.
-- Notificar la salida a los usuarios afectados.
-- Evitar notificaciones duplicadas.
-- Eliminar todas las referencias de un cliente desconectado.
-- Liberar correctamente su nickname.
-- Eliminar canales vacíos.
-- Responder mínimamente a la negociación `CAP`.
-- Permitir la conexión de clientes IRC reales.
-- Reutilizar el mismo proceso para desconexiones voluntarias e inesperadas.
+- Keep connections alive through `PING` and `PONG`.
+- Process voluntary closes through `QUIT`.
+- Notify the leave to the affected users.
+- Avoid duplicate notifications.
+- Remove every reference of a disconnected client.
+- Release its nickname correctly.
+- Delete empty channels.
+- Reply minimally to `CAP` negotiation.
+- Allow real IRC clients to connect.
+- Reuse the same process for voluntary and unexpected disconnections.

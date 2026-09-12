@@ -1,18 +1,18 @@
-#### Encontrar IP:PORT del servidor:
+#### Find the server IP:PORT:
 
 ```bash
 sudo ss -ltnp 'sport = :6667'
 ```
 
-#### Ejecuta servidor imponiendo max. 16 descriptores simultáneos
+#### Run the server with a maximum of 16 simultaneous descriptors
 
 ```bash
 bash -c 'ulimit -n 16; exec ./ircserv 6667 secret'
 ```
 
-`EMFILE` significa que ese proceso ha alcanzado su límite de descriptores. No debe confundirse con `ENFILE`, que indica que todo el sistema ha alcanzado su límite.
+`EMFILE` means that process has reached its descriptor limit. It must not be confused with `ENFILE`, which means the whole system has reached its limit.
 
-#### Abre 30 clientes TCP simultáneos y los mantiene conectados ~8 mins.
+#### Open 30 simultaneous TCP clients and keep them connected for ~8 minutes.
 
 ```bash
 python3 -c 'import socket,time; clients=[socket.create_connection(("127.0.0.1",6667)) for connection_number in range(30)]; print(f"{len(clients)} clients connected"); time.sleep(450)'

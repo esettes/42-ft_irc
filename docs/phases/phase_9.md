@@ -1,22 +1,22 @@
-# Fase 9 — Registro del cliente
+# Phase 9 — Client registration
 
-## Objetivo
+## Goal
 
-Implementar el proceso mediante el cual una conexión TCP pasa a convertirse en un cliente IRC registrado.
+Implement the process through which a TCP connection becomes a registered IRC client.
 
-Para completar el registro, el cliente debe haber enviado correctamente:
+To complete registration, the client must have correctly sent:
 
 1. `PASS`
 2. `NICK`
 3. `USER`
 
-El servidor debe guardar el estado de cada paso y comprobar después de cada comando si el registro ya puede completarse.
+The server must store the state of each step and check after each command whether registration can already be completed.
 
 ---
 
-## Estado necesario en `Client`
+## Required state in `Client`
 
-Cada cliente debería almacenar, como mínimo:
+Each client should store, at a minimum:
 
 ```cpp
 bool passwordAccepted;
@@ -29,44 +29,44 @@ std::string username;
 std::string realName;
 ```
 
-Cada variable representa una parte independiente del registro:
+Each variable represents an independent part of registration:
 
-- `passwordAccepted`: la contraseña enviada mediante `PASS` es correcta.
-- `nicknameReceived`: el cliente tiene un nickname válido y disponible.
-- `usernameReceived`: el cliente ha enviado correctamente `USER`.
-- `registered`: el proceso de registro ya se completó.
+- `passwordAccepted`: the password sent through `PASS` is correct.
+- `nicknameReceived`: the client has a valid and available nickname.
+- `usernameReceived`: the client has correctly sent `USER`.
+- `registered`: the registration process has already been completed.
 
-No conviene sustituir estos estados por un único booleano como `authenticated`, porque el registro IRC depende de varias condiciones diferentes.
+These states should not be replaced by a single boolean such as `authenticated`, because IRC registration depends on several different conditions.
 
 ---
 
-## Flujo general del registro
+## General registration flow
 
 ```text
-Cliente conectado
+Client connected
     ↓
-PASS correcto
+correct PASS
     ↓
-NICK válido y disponible
+valid and available NICK
     ↓
-USER válido
+valid USER
     ↓
 tryRegisterClient()
     ↓
-Cliente registrado
+Client registered
     ↓
-Mensaje de bienvenida
+Welcome message
 ```
 
-Aunque normalmente los comandos se envían en el orden `PASS`, `NICK` y `USER`, el servidor debería comprobar el estado después de cada uno.
+Although the commands are normally sent in the order `PASS`, `NICK` and `USER`, the server should check the state after each one.
 
-La función que completa el registro puede tener una estructura similar a:
+The function that completes registration can have a structure similar to:
 
 ```cpp
 void Server::tryRegisterClient(Client &client);
 ```
 
-Debe llamarse después de procesar correctamente:
+It must be called after correctly processing:
 
 - `PASS`
 - `NICK`
@@ -74,183 +74,183 @@ Debe llamarse después de procesar correctamente:
 
 ---
 
-# Comando `PASS`
+# `PASS` command
 
-## Formato
+## Format
 
 ```irc
 PASS secret
 ```
 
-## Responsabilidad
+## Responsibility
 
-El comando `PASS` permite comprobar que el cliente conoce la contraseña con la que se inició el servidor.
+The `PASS` command lets you check that the client knows the password the server was started with.
 
-## Validaciones necesarias
+## Required validations
 
-El handler de `PASS` debe comprobar:
+The `PASS` handler must check:
 
-1. Que se ha proporcionado una contraseña.
-2. Que el cliente todavía no está registrado.
-3. Que la contraseña coincide con la contraseña del servidor.
+1. That a password has been provided.
+2. That the client is not registered yet.
+3. That the password matches the server password.
 
-## Comportamiento esperado
+## Expected behaviour
 
-Si no se proporciona ningún parámetro:
+If no parameter is provided:
 
 ```irc
 PASS
 ```
 
-El servidor debe responder:
+The server must reply:
 
 ```irc
 461 PASS :Not enough parameters
 ```
 
-Si el cliente ya está registrado:
+If the client is already registered:
 
 ```irc
 462 :You may not reregister
 ```
 
-Si la contraseña no coincide:
+If the password does not match:
 
 ```irc
 464 :Password incorrect
 ```
 
-Si la contraseña es correcta:
+If the password is correct:
 
 ```cpp
 client.setPasswordAccepted(true);
 ```
 
-Después debe comprobarse si el cliente ya puede registrarse:
+Then it must be checked whether the client can already register:
 
 ```cpp
 tryRegisterClient(client);
 ```
 
-## Consideración importante
+## Important consideration
 
-Una contraseña incorrecta nunca debe marcarse como aceptada:
+An incorrect password must never be marked as accepted:
 
 ```cpp
 client.setPasswordAccepted(false);
 ```
 
-El cliente no podrá completar el registro mientras `passwordAccepted` sea `false`.
+The client will not be able to complete registration while `passwordAccepted` is `false`.
 
 ---
 
-# Comando `NICK`
+# `NICK` command
 
-## Formato
+## Format
 
 ```irc
 NICK roxana
 ```
 
-## Responsabilidad
+## Responsibility
 
-El comando `NICK` asigna un nickname visible al cliente.
+The `NICK` command assigns a visible nickname to the client.
 
-También puede utilizarse después del registro para cambiar el nickname.
+It can also be used after registration to change the nickname.
 
-## Validaciones necesarias
+## Required validations
 
-El handler de `NICK` debe comprobar:
+The `NICK` handler must check:
 
-1. Que existe un parámetro.
-2. Que el nickname no está vacío.
-3. Que su formato es válido.
-4. Que no está siendo utilizado por otro cliente.
-5. Si el cliente ya tenía nickname, actualizar correctamente el índice global.
-6. Si el cliente ya estaba registrado, comunicar el cambio a los clientes relacionados.
+1. That a parameter exists.
+2. That the nickname is not empty.
+3. That its format is valid.
+4. That it is not being used by another client.
+5. If the client already had a nickname, update the global index correctly.
+6. If the client was already registered, communicate the change to related clients.
 
-## Nickname ausente
+## Missing nickname
 
-Si el cliente envía:
+If the client sends:
 
 ```irc
 NICK
 ```
 
-El servidor debe responder:
+The server must reply:
 
 ```irc
 431 :No nickname given
 ```
 
-## Formato inválido
+## Invalid format
 
-Si el nickname contiene caracteres no permitidos:
+If the nickname contains disallowed characters:
 
 ```irc
 NICK rox@na
 ```
 
-El servidor debe responder:
+The server must reply:
 
 ```irc
 432 rox@na :Erroneous nickname
 ```
 
-## Nickname ocupado
+## Nickname in use
 
-Si otro cliente ya utiliza el nickname:
+If another client already uses the nickname:
 
 ```irc
 433 roxana :Nickname is already in use
 ```
 
-El nickname anterior del cliente no debe modificarse si el nuevo nickname es rechazado.
+The client’s previous nickname must not be modified if the new nickname is rejected.
 
 ---
 
-## Validación del nickname
+## Nickname validation
 
-Conviene centralizar esta comprobación:
+It is useful to centralize this check:
 
 ```cpp
 bool Server::isValidNickname(const std::string &nickname) const;
 ```
 
-Como criterio inicial, se puede exigir:
+As an initial criterion, you can require:
 
-- Que no esté vacío.
-- Que no empiece por un número.
-- Que no contenga espacios.
-- Que no contenga `:`.
-- Que no contenga `,`.
-- Que no contenga `*`.
-- Que no contenga `?`.
-- Que no contenga `!`.
-- Que no contenga `@`.
-- Que no contenga caracteres de control.
+- That it is not empty.
+- That it does not start with a number.
+- That it does not contain spaces.
+- That it does not contain `:`.
+- That it does not contain `,`.
+- That it does not contain `*`.
+- That it does not contain `?`.
+- That it does not contain `!`.
+- That it does not contain `@`.
+- That it does not contain control characters.
 
-No es necesario implementar toda la especificación histórica de IRC si el subject no lo exige, pero la validación debe ser consistente.
+It is not necessary to implement the entire historical IRC specification if the subject does not require it, but the validation must be consistent.
 
 ---
 
-# Índice global de nicknames
+# Global nickname index
 
-El servidor necesita localizar rápidamente qué cliente utiliza un nickname.
+The server needs to quickly locate which client uses a nickname.
 
-Una estructura posible es:
+A possible structure is:
 
 ```cpp
 std::map<std::string, Client *> clientsByNickname;
 ```
 
-La relación almacenada será:
+The stored relationship will be:
 
 ```text
 nickname → Client
 ```
 
-Por ejemplo:
+For example:
 
 ```text
 "roxana" → Client*
@@ -258,15 +258,15 @@ Por ejemplo:
 "bob"    → Client*
 ```
 
-Esto evita recorrer todos los clientes cada vez que se procesa un `NICK`, `PRIVMSG`, `KICK`, `INVITE` u otro comando que necesita buscar usuarios.
+This avoids traversing every client each time a `NICK`, `PRIVMSG`, `KICK`, `INVITE` or other command that needs to look up users is processed.
 
 ---
 
-## Comparación de nicknames
+## Nickname comparison
 
-IRC normalmente trata los nicknames sin distinguir entre mayúsculas y minúsculas.
+IRC normally treats nicknames without distinguishing between uppercase and lowercase.
 
-Por ejemplo, estos nombres deberían considerarse equivalentes:
+For example, these names should be considered equivalent:
 
 ```text
 roxana
@@ -274,7 +274,7 @@ Roxana
 ROXANA
 ```
 
-Para conseguirlo, se puede generar una clave normalizada:
+To achieve this, a normalized key can be generated:
 
 ```cpp
 std::string Server::normalizeNickname(
@@ -282,122 +282,122 @@ std::string Server::normalizeNickname(
 ) const;
 ```
 
-La clave normalizada se utiliza en el mapa:
+The normalized key is used in the map:
 
 ```cpp
 clientsByNickname[normalizeNickname(nickname)] = &client;
 ```
 
-El objeto `Client` puede conservar el nickname original para mostrarlo en los mensajes.
+The `Client` object can keep the original nickname to display it in messages.
 
 ---
 
-## Asignación inicial de nickname
+## Initial nickname assignment
 
-Cuando el nickname es válido y está disponible:
+When the nickname is valid and available:
 
-1. Se guarda en el cliente.
-2. Se añade al índice global.
-3. Se marca `nicknameReceived`.
-4. Se intenta completar el registro.
+1. It is stored on the client.
+2. It is added to the global index.
+3. `nicknameReceived` is marked.
+4. Completing registration is attempted.
 
-Flujo:
+Flow:
 
 ```text
-Validar nickname
+Validate nickname
     ↓
-Comprobar disponibilidad
+Check availability
     ↓
-Guardar nickname
+Store nickname
     ↓
-Añadirlo a clientsByNickname
+Add it to clientsByNickname
     ↓
-Marcar nicknameReceived
+Mark nicknameReceived
     ↓
 tryRegisterClient()
 ```
 
 ---
 
-## Cambio de nickname
+## Nickname change
 
-Un cliente registrado puede cambiar su nickname:
-
-```irc
-NICK nuevaRoxana
-```
-
-La actualización debe realizarse de forma coherente:
-
-1. Guardar temporalmente el nickname anterior.
-2. Comprobar que el nuevo nickname es válido.
-3. Comprobar que el nuevo nickname está disponible.
-4. Eliminar el nickname anterior del índice.
-5. Guardar el nuevo nickname en el cliente.
-6. Añadir el nuevo nickname al índice.
-7. Notificar el cambio a los clientes que comparten canales con él.
-
-El mensaje debe utilizar el nickname anterior en el prefijo:
+A registered client can change its nickname:
 
 ```irc
-:roxana!username@hostname NICK :nuevaRoxana
+NICK newRoxana
 ```
 
-No se debe eliminar el nickname anterior del índice hasta confirmar que el nuevo nickname puede utilizarse.
+The update must be performed consistently:
+
+1. Temporarily store the previous nickname.
+2. Check that the new nickname is valid.
+3. Check that the new nickname is available.
+4. Remove the previous nickname from the index.
+5. Store the new nickname on the client.
+6. Add the new nickname to the index.
+7. Notify the change to the clients that share channels with it.
+
+The message must use the previous nickname in the prefix:
+
+```irc
+:roxana!username@hostname NICK :newRoxana
+```
+
+The previous nickname must not be removed from the index until it is confirmed that the new nickname can be used.
 
 ---
 
-## Limpieza del nickname al desconectar
+## Cleaning up the nickname on disconnect
 
-Cuando un cliente se desconecte, su nickname debe eliminarse del índice global:
+When a client disconnects, its nickname must be removed from the global index:
 
 ```cpp
 clientsByNickname.erase(normalizeNickname(client.getNickname()));
 ```
 
-Si no se elimina, el servidor podría considerar permanentemente ocupado un nickname perteneciente a un cliente que ya no existe.
+If it is not removed, the server could permanently consider occupied a nickname belonging to a client that no longer exists.
 
 ---
 
-# Comando `USER`
+# `USER` command
 
-## Formato
+## Format
 
 ```irc
 USER roxana 0 * :Roxana Example
 ```
 
-Sus parámetros representan:
+Its parameters represent:
 
 ```text
 USER <username> <mode> <unused> :<realname>
 ```
 
-Para este proyecto, normalmente basta con guardar:
+For this project, it is normally enough to store:
 
 - Username.
 - Real name.
 
-Los campos intermedios pueden validarse y descartarse, o conservarse si resultan útiles.
+The intermediate fields can be validated and discarded, or kept if they are useful.
 
 ---
 
-## Validaciones necesarias
+## Required validations
 
-El handler de `USER` debe comprobar:
+The `USER` handler must check:
 
-1. Que el cliente todavía no está registrado.
-2. Que existen suficientes parámetros.
-3. Que el username no está vacío.
-4. Que existe el real name.
+1. That the client is not registered yet.
+2. That there are enough parameters.
+3. That the username is not empty.
+4. That the real name exists.
 
-Si faltan parámetros:
+If parameters are missing:
 
 ```irc
 461 USER :Not enough parameters
 ```
 
-Si el cliente ya está registrado:
+If the client is already registered:
 
 ```irc
 462 :You may not reregister
@@ -405,24 +405,24 @@ Si el cliente ya está registrado:
 
 ---
 
-## Datos que deben guardarse
+## Data that must be stored
 
-Para este mensaje:
+For this message:
 
 ```irc
 USER roxana 0 * :Roxana Example
 ```
 
-El cliente debería almacenar:
+The client should store:
 
 ```text
 username = "roxana"
 realName = "Roxana Example"
 ```
 
-El parámetro final puede contener espacios porque el parser ya debe haberlo reconstruido como un único parámetro.
+The final parameter may contain spaces because the parser must already have reconstructed it as a single parameter.
 
-Después de almacenar los datos:
+After storing the data:
 
 ```cpp
 client.setUsernameReceived(true);
@@ -431,17 +431,17 @@ tryRegisterClient(client);
 
 ---
 
-# Función `tryRegisterClient()`
+# `tryRegisterClient()` function
 
-## Responsabilidad
+## Responsibility
 
-Esta función centraliza la comprobación de los requisitos del registro.
+This function centralizes the check of the registration requirements.
 
 ```cpp
 void Server::tryRegisterClient(Client &client);
 ```
 
-Debe registrar al cliente solamente cuando se cumplan todas estas condiciones:
+It must register the client only when all of these conditions are met:
 
 ```text
 passwordAccepted == true
@@ -450,7 +450,7 @@ usernameReceived == true
 registered == false
 ```
 
-Una posible lógica es:
+Possible logic is:
 
 ```cpp
 void Server::tryRegisterClient(Client &client)
@@ -472,35 +472,35 @@ void Server::tryRegisterClient(Client &client)
 }
 ```
 
-Esta función debe ser idempotente: llamarla varias veces no debe volver a registrar al cliente ni repetir el mensaje de bienvenida.
+This function must be idempotent: calling it several times must not register the client again or repeat the welcome message.
 
 ---
 
-# Mensaje de bienvenida
+# Welcome message
 
-Cuando el registro se completa, el servidor debe enviar el mensaje de bienvenida una única vez.
+When registration is complete, the server must send the welcome message exactly once.
 
-Respuesta mínima:
+Minimum reply:
 
 ```irc
 :server.name 001 roxana :Welcome to the IRC Network roxana
 ```
 
-El prefijo completo del cliente también puede incluirse:
+The client’s full prefix can also be included:
 
 ```irc
 :server.name 001 roxana :Welcome to the IRC Network roxana!username@hostname
 ```
 
-Conviene centralizar el envío:
+It is useful to centralize the send:
 
 ```cpp
 void Server::sendWelcomeMessages(Client &client);
 ```
 
-La respuesta debe añadirse al buffer de salida mediante el sistema implementado en las fases anteriores.
+The reply must be appended to the output buffer through the system implemented in the previous phases.
 
-Por ejemplo:
+For example:
 
 ```cpp
 queueNumericReply(
@@ -510,32 +510,32 @@ queueNumericReply(
 );
 ```
 
-No se debe llamar directamente a `send()` desde el handler.
+`send()` must not be called directly from the handler.
 
 ---
 
-## Evitar mensajes de bienvenida duplicados
+## Avoid duplicate welcome messages
 
-La primera comprobación de `tryRegisterClient()` debe ser:
+The first check of `tryRegisterClient()` must be:
 
 ```cpp
 if (client.isRegistered())
     return;
 ```
 
-Esto evita que el servidor vuelva a enviar `001` si el cliente utiliza posteriormente:
+This prevents the server from sending `001` again if the client later uses:
 
 ```irc
-NICK nuevoNombre
+NICK newName
 ```
 
-Un cambio de nickname después del registro no es un nuevo registro.
+A nickname change after registration is not a new registration.
 
 ---
 
-# Restricción de comandos antes del registro
+# Restricting commands before registration
 
-Antes de completar el registro, el cliente solamente debería poder utilizar los comandos necesarios para conectarse, como:
+Before completing registration, the client should only be able to use the commands needed to connect, such as:
 
 - `CAP`
 - `PASS`
@@ -544,30 +544,30 @@ Antes de completar el registro, el cliente solamente debería poder utilizar los
 - `PING`
 - `QUIT`
 
-Si intenta ejecutar un comando que requiere registro:
+If it tries to run a command that requires registration:
 
 ```irc
 JOIN #general
 ```
 
-El servidor debe responder:
+The server must reply:
 
 ```irc
 451 :You have not registered
 ```
 
-Esta comprobación puede centralizarse en el dispatcher o al comienzo de los handlers protegidos.
+This check can be centralized in the dispatcher or at the beginning of the protected handlers.
 
 ---
 
-# Separación de responsabilidades
+# Separation of responsibilities
 
-La lógica debería dividirse aproximadamente así:
+The logic should be divided approximately like this:
 
 ```text
 CommandDispatcher
-    ├── identifica PASS, NICK o USER
-    └── llama al handler correspondiente
+    ├── identifies PASS, NICK or USER
+    └── calls the corresponding handler
 
 Server
     ├── handlePass()
@@ -580,38 +580,38 @@ Server
     └── normalizeNickname()
 
 Client
-    ├── almacena nickname
-    ├── almacena username
-    ├── almacena real name
-    └── almacena el estado del registro
+    ├── stores nickname
+    ├── stores username
+    ├── stores real name
+    └── stores registration state
 ```
 
-Los handlers deben validar y modificar el estado, pero la decisión final de registrar al cliente debe permanecer centralizada en `tryRegisterClient()`.
+The handlers must validate and modify the state, but the final decision to register the client must stay centralized in `tryRegisterClient()`.
 
 ---
 
-# Errores numéricos necesarios
+# Required numeric errors
 
-| Código | Nombre | Situación |
+| Code | Name | Situation |
 |---:|---|---|
-| `431` | `ERR_NONICKNAMEGIVEN` | `NICK` no contiene nickname |
-| `432` | `ERR_ERRONEUSNICKNAME` | El formato del nickname no es válido |
-| `433` | `ERR_NICKNAMEINUSE` | El nickname ya está ocupado |
-| `451` | `ERR_NOTREGISTERED` | Se utiliza un comando protegido antes del registro |
-| `461` | `ERR_NEEDMOREPARAMS` | Faltan parámetros en `PASS` o `USER` |
-| `462` | `ERR_ALREADYREGISTERED` | Se intenta repetir `PASS` o `USER` después del registro |
-| `464` | `ERR_PASSWDMISMATCH` | La contraseña es incorrecta |
-| `001` | `RPL_WELCOME` | El registro se ha completado correctamente |
+| `431` | `ERR_NONICKNAMEGIVEN` | `NICK` does not contain a nickname |
+| `432` | `ERR_ERRONEUSNICKNAME` | The nickname format is not valid |
+| `433` | `ERR_NICKNAMEINUSE` | The nickname is already taken |
+| `451` | `ERR_NOTREGISTERED` | A protected command is used before registration |
+| `461` | `ERR_NEEDMOREPARAMS` | Parameters are missing in `PASS` or `USER` |
+| `462` | `ERR_ALREADYREGISTERED` | `PASS` or `USER` is repeated after registration |
+| `464` | `ERR_PASSWDMISMATCH` | The password is incorrect |
+| `001` | `RPL_WELCOME` | Registration has completed correctly |
 
-Estas respuestas deben construirse utilizando el sistema centralizado de mensajes de la fase 8.
+These replies must be built using the centralized message system from phase 8.
 
 ---
 
-# Casos de prueba recomendados
+# Recommended test cases
 
-## Registro correcto
+## Correct registration
 
-Entrada:
+Input:
 
 ```irc
 PASS secret
@@ -619,19 +619,19 @@ NICK roxana
 USER roxana 0 * :Roxana Example
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 :server.name 001 roxana :Welcome to the IRC Network roxana!roxana@hostname
 ```
 
-El cliente debe quedar marcado como registrado.
+The client must be marked as registered.
 
 ---
 
-## Orden diferente de `NICK` y `USER`
+## Different order of `NICK` and `USER`
 
-Entrada:
+Input:
 
 ```irc
 PASS secret
@@ -639,42 +639,42 @@ USER roxana 0 * :Roxana Example
 NICK roxana
 ```
 
-Resultado esperado:
+Expected result:
 
-- El registro se completa al recibir `NICK`.
-- El mensaje `001` se envía una sola vez.
+- Registration is completed when `NICK` is received.
+- The `001` message is sent only once.
 
 ---
 
-## Contraseña incorrecta
+## Incorrect password
 
-Entrada:
+Input:
 
 ```irc
-PASS incorrecta
+PASS incorrect
 NICK roxana
 USER roxana 0 * :Roxana Example
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 464 :Password incorrect
 ```
 
-El cliente no debe registrarse.
+The client must not register.
 
 ---
 
-## `PASS` sin parámetro
+## `PASS` without a parameter
 
-Entrada:
+Input:
 
 ```irc
 PASS
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 461 PASS :Not enough parameters
@@ -682,15 +682,15 @@ Resultado esperado:
 
 ---
 
-## `NICK` sin parámetro
+## `NICK` without a parameter
 
-Entrada:
+Input:
 
 ```irc
 NICK
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 431 :No nickname given
@@ -698,15 +698,15 @@ Resultado esperado:
 
 ---
 
-## Nickname inválido
+## Invalid nickname
 
-Entrada:
+Input:
 
 ```irc
 NICK rox@na
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 432 rox@na :Erroneous nickname
@@ -714,21 +714,21 @@ Resultado esperado:
 
 ---
 
-## Nickname ocupado
+## Nickname in use
 
-Primer cliente:
-
-```irc
-NICK roxana
-```
-
-Segundo cliente:
+First client:
 
 ```irc
 NICK roxana
 ```
 
-Resultado esperado para el segundo cliente:
+Second client:
+
+```irc
+NICK roxana
+```
+
+Expected result for the second client:
 
 ```irc
 433 roxana :Nickname is already in use
@@ -736,15 +736,15 @@ Resultado esperado para el segundo cliente:
 
 ---
 
-## Comando protegido antes del registro
+## Protected command before registration
 
-Entrada:
+Input:
 
 ```irc
 JOIN #general
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 451 :You have not registered
@@ -752,68 +752,68 @@ Resultado esperado:
 
 ---
 
-## Intento de repetir `USER`
+## Attempt to repeat `USER`
 
-Después de completar el registro:
+After completing registration:
 
 ```irc
-USER otro 0 * :Otro nombre
+USER other 0 * :Other name
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
 462 :You may not reregister
 ```
 
-Los datos originales del cliente no deben modificarse.
+The client’s original data must not be modified.
 
 ---
 
-## Cambio de nickname después del registro
+## Nickname change after registration
 
-Entrada:
+Input:
 
 ```irc
-NICK nuevaRoxana
+NICK newRoxana
 ```
 
-Resultado esperado:
+Expected result:
 
 ```irc
-:roxana!username@hostname NICK :nuevaRoxana
+:roxana!username@hostname NICK :newRoxana
 ```
 
-Además:
+In addition:
 
-- El nickname anterior debe quedar disponible.
-- El nuevo nickname debe aparecer en el índice global.
-- No debe volver a enviarse el mensaje `001`.
-
----
-
-## Desconexión y liberación del nickname
-
-Después de desconectar a un cliente:
-
-- Su nickname debe eliminarse del índice global.
-- Otro cliente debe poder utilizar ese nickname.
-- No deben quedar punteros inválidos en `clientsByNickname`.
+- The previous nickname must become available.
+- The new nickname must appear in the global index.
+- The `001` message must not be sent again.
 
 ---
 
-# Resultado esperado de la fase
+## Disconnection and nickname release
 
-Al finalizar esta fase, el servidor debe ser capaz de:
+After disconnecting a client:
 
-- Validar la contraseña del servidor.
-- Asignar nicknames válidos y únicos.
-- Guardar el username y el real name.
-- Mantener un índice global de nicknames.
-- Detectar cuándo se cumplen todos los requisitos del registro.
-- Registrar al cliente una sola vez.
-- Enviar correctamente la respuesta `001`.
-- Rechazar comandos protegidos antes del registro.
-- Permitir cambios de nickname después del registro.
-- Liberar el nickname cuando el cliente se desconecta.
-- Responder con los errores numéricos apropiados.
+- Its nickname must be removed from the global index.
+- Another client must be able to use that nickname.
+- No invalid pointers must remain in `clientsByNickname`.
+
+---
+
+# Expected result of the phase
+
+At the end of this phase, the server must be able to:
+
+- Validate the server password.
+- Assign valid and unique nicknames.
+- Store the username and the real name.
+- Keep a global nickname index.
+- Detect when every registration requirement is met.
+- Register the client only once.
+- Send the `001` reply correctly.
+- Reject protected commands before registration.
+- Allow nickname changes after registration.
+- Release the nickname when the client disconnects.
+- Reply with the appropriate numeric errors.

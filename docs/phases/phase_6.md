@@ -1,37 +1,37 @@
-# Fase 6 — Parser IRC
+# Phase 6 — IRC parser
 
-## Objetivo
+## Goal
 
-Implementar un parser que transforme una línea IRC completa en una estructura de datos que pueda utilizar posteriormente el servidor.
+Implement a parser that transforms a complete IRC line into a data structure that the server can use later.
 
-El parser recibe únicamente líneas completas que ya han sido extraídas del buffer TCP durante la fase anterior.
+The parser receives only complete lines that have already been extracted from the TCP buffer during the previous phase.
 
-Por ejemplo:
+For example:
 
 ```text
-PRIVMSG #general :Hola a todo el mundo
+PRIVMSG #general :Hello everyone
 ```
 
-Debe convertirse en:
+Must be converted into:
 
 ```text
 Command
 ├── name: "PRIVMSG"
 └── parameters:
     ├── "#general"
-    └── "Hola a todo el mundo"
+    └── "Hello everyone"
 ```
 
-El parser todavía no ejecuta el comando. Su única responsabilidad es interpretar el texto y separar sus componentes.
+The parser still does not execute the command. Its only responsibility is to interpret the text and separate its components.
 
 ---
 
-## Estructura del comando
+## Command structure
 
-Una estructura sencilla puede almacenar:
+A simple structure can store:
 
-- El nombre del comando.
-- La lista ordenada de parámetros.
+- The command name.
+- The ordered list of parameters.
 
 ```cpp
 class Command
@@ -51,63 +51,63 @@ public:
 };
 ```
 
-El parámetro final, también llamado `trailing`, puede guardarse como el último elemento del vector.
+The final parameter, also called `trailing`, can be stored as the last element of the vector.
 
-Para esta línea:
+For this line:
 
 ```text
-PRIVMSG #general :Hola a todo el mundo
+PRIVMSG #general :Hello everyone
 ```
 
-El resultado sería:
+The result would be:
 
 ```text
 _name = "PRIVMSG"
 
 _parameters[0] = "#general"
-_parameters[1] = "Hola a todo el mundo"
+_parameters[1] = "Hello everyone"
 ```
 
-No es obligatorio crear una variable separada para el `trailing`, siempre que se conserve correctamente como un único parámetro.
+It is not mandatory to create a separate variable for the `trailing`, as long as it is correctly kept as a single parameter.
 
 ---
 
-## Reglas fundamentales del parser
+## Fundamental parser rules
 
-Una línea IRC tiene generalmente esta estructura:
+An IRC line generally has this structure:
 
 ```text
 COMMAND param1 param2 :trailing parameter
 ```
 
-El parser debe reconocer:
+The parser must recognize:
 
-1. El nombre del comando.
-2. Los parámetros normales separados por espacios.
-3. Un parámetro final opcional que comienza con `:`.
-4. El parámetro final puede contener espacios.
-5. El carácter `:` no debe formar parte del valor almacenado.
+1. The command name.
+2. The normal parameters separated by spaces.
+3. An optional final parameter that starts with `:`.
+4. The final parameter may contain spaces.
+5. The `:` character must not form part of the stored value.
 
 ---
 
-## Nombre del comando
+## Command name
 
-El primer elemento de la línea es el nombre del comando.
+The first element of the line is the command name.
 
-Ejemplo:
+Example:
 
 ```text
 NICK roxana
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "NICK"
 parameters[0] = "roxana"
 ```
 
-Es recomendable convertir el nombre del comando a mayúsculas para que el dispatcher pueda tratar de la misma manera entradas como:
+It is recommended to convert the command name to uppercase so the dispatcher can treat entries such as these in the same way:
 
 ```text
 nick roxana
@@ -115,7 +115,7 @@ Nick roxana
 NICK roxana
 ```
 
-Todas ellas deberían producir:
+All of them should produce:
 
 ```text
 name = "NICK"
@@ -123,17 +123,17 @@ name = "NICK"
 
 ---
 
-## Parámetros normales
+## Normal parameters
 
-Los parámetros normales están separados por uno o varios espacios.
+Normal parameters are separated by one or more spaces.
 
-Ejemplo:
+Example:
 
 ```text
 MODE #general +o roxana
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "MODE"
@@ -143,21 +143,21 @@ parameters[1] = "+o"
 parameters[2] = "roxana"
 ```
 
-Los espacios utilizados como separadores no deben guardarse.
+The spaces used as separators must not be stored.
 
 ---
 
-## Parámetro final o `trailing`
+## Final parameter or `trailing`
 
-Cuando un parámetro comienza con `:`, todo el texto restante pertenece al mismo parámetro, aunque contenga espacios.
+When a parameter starts with `:`, the entire remaining text belongs to the same parameter, even if it contains spaces.
 
-Ejemplo:
+Example:
 
 ```text
 USER roxana 0 * :Roxana Example
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "USER"
@@ -168,56 +168,53 @@ parameters[2] = "*"
 parameters[3] = "Roxana Example"
 ```
 
-El parser debe eliminar únicamente el primer `:` que indica el comienzo del parámetro final.
+The parser must remove only the first `:` that marks the start of the final parameter.
 
-Otro ejemplo:
+Another example:
 
 ```text
-PRIVMSG #general :Hola a todo el mundo
+PRIVMSG #general :Hello everyone
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "PRIVMSG"
 
 parameters[0] = "#general"
-parameters[1] = "Hola a todo el mundo"
+parameters[1] = "Hello everyone"
 ```
 
-No debe producir:
+It must not produce:
 
 ```text
-parameters[1] = "Hola"
-parameters[2] = "a"
-parameters[3] = "todo"
-parameters[4] = "el"
-parameters[5] = "mundo"
+parameters[1] = "Hello"
+parameters[2] = "everyone"
 ```
 
 ---
 
-## Funcionamiento general
+## General operation
 
-El parser puede seguir este proceso:
+The parser can follow this process:
 
 ```text
-Línea IRC completa
+Complete IRC line
         ↓
-Ignorar espacios iniciales
+Ignore leading spaces
         ↓
-Extraer el nombre del comando
+Extract the command name
         ↓
-Extraer parámetros separados por espacios
+Extract parameters separated by spaces
         ↓
-Si aparece un parámetro que empieza por ':'
+If a parameter starting with ':' appears
         ↓
-Guardar todo el texto restante como último parámetro
+Store all remaining text as the last parameter
         ↓
-Devolver el objeto Command
+Return the Command object
 ```
 
-Una interfaz posible sería:
+A possible interface would be:
 
 ```cpp
 class MessageParser
@@ -227,195 +224,195 @@ public:
 };
 ```
 
-Uso:
+Use:
 
 ```cpp
 Command command = MessageParser::parse(
-    "PRIVMSG #general :Hola a todo el mundo"
+    "PRIVMSG #general :Hello everyone"
 );
 ```
 
 ---
 
-## Relación con la reconstrucción TCP
+## Relationship with TCP reconstruction
 
-El parser no debe trabajar directamente con los datos devueltos por `recv()`.
+The parser must not work directly with the data returned by `recv()`.
 
-El flujo correcto es:
+The correct flow is:
 
 ```text
 recv()
    ↓
-Se añaden los datos al buffer del cliente
+Data is appended to the client buffer
    ↓
-Se extraen líneas completas terminadas en "\r\n"
+Complete lines ending in "\r\n" are extracted
    ↓
-Cada línea completa se entrega al parser
+Each complete line is delivered to the parser
    ↓
-El parser devuelve un Command
+The parser returns a Command
    ↓
-El dispatcher ejecutará el comando en una fase posterior
+The dispatcher will execute the command in a later phase
 ```
 
-Por ejemplo, si TCP entrega:
+For example, if TCP delivers:
 
 ```text
-Primer recv():  "PRIV"
-Segundo recv(): "MSG #general :Hola\r\n"
+First recv():   "PRIV"
+Second recv():  "MSG #general :Hello\r\n"
 ```
 
-El parser no debe recibir las dos partes por separado.
+The parser must not receive the two parts separately.
 
-Debe recibir:
+It must receive:
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
 
-El terminador `\r\n` ya debe haber sido eliminado durante la extracción de la línea.
+The `\r\n` terminator must already have been removed during line extraction.
 
 ---
 
-## Casos especiales que debe manejar
+## Special cases it must handle
 
-### Línea vacía
+### Empty line
 
 ```text
 
 ```
 
-No contiene ningún comando válido.
+It contains no valid command.
 
-El parser debe indicar que la línea no se puede interpretar, por ejemplo:
+The parser must indicate that the line cannot be interpreted, for example:
 
-- Devolviendo un estado de error.
-- Lanzando una excepción controlada.
-- Devolviendo un objeto `Command` vacío.
+- Returning an error state.
+- Throwing a controlled exception.
+- Returning an empty `Command` object.
 
-La estrategia debe ser consistente en todo el servidor.
+The strategy must be consistent throughout the server.
 
-### Espacios adicionales
+### Extra spaces
 
-Entrada:
+Input:
 
 ```text
    NICK    roxana
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "NICK"
 parameters[0] = "roxana"
 ```
 
-### Comando sin parámetros
+### Command without parameters
 
-Entrada:
+Input:
 
 ```text
 QUIT
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "QUIT"
 parameters = empty
 ```
 
-### `trailing` vacío
+### Empty `trailing`
 
-Entrada:
+Input:
 
 ```text
 QUIT :
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "QUIT"
 parameters[0] = ""
 ```
 
-### Dos puntos dentro del `trailing`
+### Colons inside the `trailing`
 
-Entrada:
+Input:
 
 ```text
-PRIVMSG #general :Hora actual: 14:30
+PRIVMSG #general :Current time: 14:30
 ```
 
-Resultado:
+Result:
 
 ```text
 name = "PRIVMSG"
 parameters[0] = "#general"
-parameters[1] = "Hora actual: 14:30"
+parameters[1] = "Current time: 14:30"
 ```
 
-Una vez detectado el comienzo del `trailing`, los demás caracteres `:` forman parte del texto.
+Once the start of the `trailing` has been detected, the other `:` characters are part of the text.
 
 ---
 
-## Responsabilidades del parser
+## Parser responsibilities
 
-El parser sí debe:
+The parser must:
 
-- Recibir una línea IRC completa.
-- Extraer el nombre del comando.
-- Separar los parámetros normales.
-- Reconocer el parámetro final iniciado por `:`.
-- Conservar los espacios del parámetro final.
-- Mantener el orden de los parámetros.
-- Normalizar el nombre del comando si se decide trabajar en mayúsculas.
-- Detectar líneas vacías o imposibles de interpretar.
+- Receive a complete IRC line.
+- Extract the command name.
+- Separate the normal parameters.
+- Recognize the final parameter started by `:`.
+- Keep the spaces of the final parameter.
+- Keep the order of the parameters.
+- Normalize the command name if working in uppercase is chosen.
+- Detect empty or uninterpretable lines.
 
-El parser no debe:
+The parser must not:
 
-- Comprobar si el cliente está registrado.
-- Validar la contraseña del servidor.
-- Buscar usuarios o canales.
-- Comprobar si un nickname está disponible.
-- Ejecutar comandos como `JOIN`, `PRIVMSG` o `QUIT`.
-- Comprobar permisos de operador.
-- Enviar respuestas al cliente.
-- Generar códigos numéricos IRC.
-- Modificar el estado del servidor.
-- Leer directamente desde el socket.
-- Gestionar el buffer TCP del cliente.
+- Check whether the client is registered.
+- Validate the server password.
+- Look up users or channels.
+- Check whether a nickname is available.
+- Execute commands such as `JOIN`, `PRIVMSG` or `QUIT`.
+- Check operator permissions.
+- Send replies to the client.
+- Generate IRC numeric codes.
+- Modify the server state.
+- Read directly from the socket.
+- Manage the client’s TCP buffer.
 
-Estas responsabilidades pertenecen al dispatcher y a los manejadores de comandos.
+Those responsibilities belong to the dispatcher and the command handlers.
 
 ---
 
-## Separación de responsabilidades
+## Separation of responsibilities
 
 ```text
 Client
-└── Almacena el buffer de entrada
+└── Stores the input buffer
 
 Server
-└── Recibe datos y extrae líneas completas
+└── Receives data and extracts complete lines
 
 MessageParser
-└── Convierte cada línea en un Command
+└── Converts each line into a Command
 
 CommandDispatcher
-└── Selecciona el manejador correspondiente
+└── Selects the corresponding handler
 
 CommandHandler
-└── Valida y ejecuta el comando
+└── Validates and executes the command
 ```
 
-Esta separación evita mezclar la lectura de sockets, el análisis del protocolo y la lógica del servidor.
+This separation avoids mixing socket reading, protocol analysis and server logic.
 
 ---
 
-## Pruebas mínimas
+## Minimum tests
 
-El parser debería probarse al menos con estas entradas:
+The parser should be tested at least with these inputs:
 
 ```text
 PASS secret
@@ -423,12 +420,12 @@ NICK roxana
 USER roxana 0 * :Roxana Example
 PING :server
 JOIN #general
-PRIVMSG #general :Hola a todo el mundo
+PRIVMSG #general :Hello everyone
 QUIT :Leaving the server
 CAP LS 302
 ```
 
-Resultados esperados:
+Expected results:
 
 ```text
 PASS
@@ -447,7 +444,7 @@ JOIN
 └── ["#general"]
 
 PRIVMSG
-└── ["#general", "Hola a todo el mundo"]
+└── ["#general", "Hello everyone"]
 
 QUIT
 └── ["Leaving the server"]
@@ -456,7 +453,7 @@ CAP
 └── ["LS", "302"]
 ```
 
-También deben probarse casos límite:
+Edge cases must also be tested:
 
 ```text
 ""
@@ -464,21 +461,21 @@ También deben probarse casos límite:
 "QUIT"
 "QUIT :"
 "   NICK    roxana"
-"PRIVMSG #general :Hora actual: 14:30"
+"PRIVMSG #general :Current time: 14:30"
 ```
 
 ---
 
-## Resultado esperado de la fase
+## Expected result of the phase
 
-Al terminar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-1. Recibir una línea IRC completa desde el sistema de reconstrucción TCP.
-2. Entregarla al parser.
-3. Obtener un objeto `Command`.
-4. Consultar el nombre del comando.
-5. Consultar sus parámetros en el orden correcto.
-6. Conservar el parámetro final como una única unidad.
-7. Dejar el comando preparado para que el dispatcher lo ejecute en una fase posterior.
+1. Receive a complete IRC line from the TCP reconstruction system.
+2. Deliver it to the parser.
+3. Obtain a `Command` object.
+4. Query the command name.
+5. Query its parameters in the correct order.
+6. Keep the final parameter as a single unit.
+7. Leave the command ready for the dispatcher to execute it in a later phase.
 
-En esta fase todavía no es necesario que los comandos produzcan efectos reales en el servidor.
+In this phase it is still not necessary for the commands to produce real effects on the server.

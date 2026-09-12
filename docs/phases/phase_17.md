@@ -1,58 +1,58 @@
-# Fase 17 — Comando `MODE`
+# Phase 17 — `MODE` command
 
-## Objetivo
+## Goal
 
-Implementar la consulta y modificación de los modos de un canal.
+Implement querying and changing channel modes.
 
-Es recomendable dejar `MODE` para el final de los comandos de operador porque es el handler con más combinaciones, validaciones y consumo de parámetros.
+It is recommended to leave `MODE` for the end of the operator commands because it is the handler with the most combinations, validations and parameter consumption.
 
-El proyecto exige implementar los siguientes modos:
+The project requires implementing the following modes:
 
-| Modo | Función |
+| Mode | Function |
 |---|---|
-| `+i` / `-i` | Activar o desactivar el canal solo para invitados |
-| `+t` / `-t` | Restringir o permitir la modificación del topic |
-| `+k` / `-k` | Establecer o eliminar la contraseña del canal |
-| `+o` / `-o` | Conceder o retirar privilegios de operador |
-| `+l` / `-l` | Establecer o eliminar el límite de usuarios |
+| `+i` / `-i` | Enable or disable the invite-only channel |
+| `+t` / `-t` | Restrict or allow topic changes |
+| `+k` / `-k` | Set or remove the channel password |
+| `+o` / `-o` | Grant or remove operator privileges |
+| `+l` / `-l` | Set or remove the user limit |
 
 ---
 
-## 1. Consultar los modos actuales
+## 1. Query the current modes
 
-Formato:
+Format:
 
 ```text
 MODE #general
 ```
 
-El servidor debe comprobar:
+The server must check:
 
-- Que el canal existe.
-- Que el usuario está registrado.
-- No es necesario ser operador para consultar los modos.
+- That the channel exists.
+- That the user is registered.
+- Being an operator is not required to query the modes.
 
-La respuesta puede utilizar:
+The reply can use:
 
 ```text
 324 RPL_CHANNELMODEIS
 ```
 
-Ejemplo:
+Example:
 
 ```text
 :server.name 324 roxana #general +itkl secret 10
 ```
 
-La respuesta debe incluir:
+The reply must include:
 
-- Los modos activos.
-- La contraseña si está activo `+k`.
-- El límite de usuarios si está activo `+l`.
+- The active modes.
+- The password if `+k` is active.
+- The user limit if `+l` is active.
 
-El modo `+o` no se incluye normalmente en esta lista porque representa un privilegio asociado a usuarios concretos. Los operadores pueden identificarse mediante el prefijo `@` en la respuesta de `NAMES`.
+Mode `+o` is not normally included in this list because it represents a privilege associated with specific users. Operators can be identified through the `@` prefix in the `NAMES` reply.
 
-Es conveniente utilizar siempre el mismo orden al construir la lista de modos, por ejemplo:
+It is useful to always use the same order when building the mode list, for example:
 
 ```text
 itkl
@@ -60,142 +60,142 @@ itkl
 
 ---
 
-## 2. Modos sin argumentos
+## 2. Modes without arguments
 
-Los modos `i` y `t` no consumen parámetros adicionales.
+Modes `i` and `t` do not consume extra parameters.
 
-### Modo de invitación
+### Invite mode
 
 ```text
 MODE #general +i
 MODE #general -i
 ```
 
-Comportamiento:
+Behaviour:
 
-- `+i` activa el modo de acceso solo mediante invitación.
-- `-i` desactiva esta restricción.
-- Cuando está activo, `JOIN` debe rechazar a los usuarios que no estén invitados.
-- Una invitación válida permite superar esta restricción.
+- `+i` enables invite-only access.
+- `-i` disables this restriction.
+- When it is active, `JOIN` must reject users who are not invited.
+- A valid invitation lets them bypass this restriction.
 
-### Restricción del topic
+### Topic restriction
 
 ```text
 MODE #general +t
 MODE #general -t
 ```
 
-Comportamiento:
+Behaviour:
 
-- `+t` permite que solamente los operadores cambien el topic.
-- `-t` permite que cualquier miembro del canal cambie el topic.
-- Este estado debe ser consultado desde el handler de `TOPIC`.
+- `+t` lets only operators change the topic.
+- `-t` lets any channel member change the topic.
+- This state must be queried from the `TOPIC` handler.
 
 ---
 
-## 3. Modos con argumentos
+## 3. Modes with arguments
 
-### Contraseña del canal
+### Channel password
 
 ```text
 MODE #general +k secret
 MODE #general -k
 ```
 
-Comportamiento:
+Behaviour:
 
-- `+k` consume una contraseña como argumento.
-- Guarda la contraseña del canal.
-- Activa el modo de canal con clave.
-- `JOIN` debe comprobar que el usuario proporciona la contraseña correcta.
-- `-k` elimina la contraseña almacenada.
-- `-k` desactiva el modo de canal con clave.
-- En este diseño, `-k` no necesita consumir ningún argumento.
+- `+k` consumes a password as an argument.
+- It stores the channel password.
+- It enables the keyed-channel mode.
+- `JOIN` must check that the user provides the correct password.
+- `-k` removes the stored password.
+- `-k` disables the keyed-channel mode.
+- In this design, `-k` does not need to consume any argument.
 
-La contraseña proporcionada a `+k` no debe estar vacía.
+The password provided to `+k` must not be empty.
 
 ---
 
-### Límite de usuarios
+### User limit
 
 ```text
 MODE #general +l 10
 MODE #general -l
 ```
 
-Comportamiento:
+Behaviour:
 
-- `+l` consume un número como argumento.
-- El número debe ser un entero estrictamente positivo.
-- Guarda el límite máximo de usuarios.
-- `JOIN` debe rechazar nuevas entradas cuando el canal haya alcanzado el límite.
-- `-l` elimina el límite.
-- `-l` no consume ningún argumento.
+- `+l` consumes a number as an argument.
+- The number must be a strictly positive integer.
+- It stores the maximum user limit.
+- `JOIN` must reject new entries when the channel has reached the limit.
+- `-l` removes the limit.
+- `-l` does not consume any argument.
 
-La conversión del límite debe validar:
+Conversion of the limit must validate:
 
-- Que todos los caracteres sean numéricos.
-- Que el valor sea mayor que cero.
-- Que el valor no provoque desbordamiento.
-- Que el valor pueda almacenarse en el tipo utilizado por el canal.
+- That every character is numeric.
+- That the value is greater than zero.
+- That the value does not cause overflow.
+- That the value can be stored in the type used by the channel.
 
 ---
 
-### Operadores del canal
+### Channel operators
 
 ```text
 MODE #general +o roxana
 MODE #general -o roxana
 ```
 
-Comportamiento:
+Behaviour:
 
-- `+o` concede privilegios de operador al usuario indicado.
-- `-o` elimina sus privilegios de operador.
-- Ambos modos consumen un nickname como argumento.
+- `+o` grants operator privileges to the indicated user.
+- `-o` removes their operator privileges.
+- Both modes consume a nickname as an argument.
 
-Antes de modificar los privilegios se debe comprobar:
+Before changing the privileges it must be checked:
 
-- Que el usuario objetivo existe.
-- Que el usuario objetivo pertenece al canal.
-- Que el emisor pertenece al canal.
-- Que el emisor es operador del canal.
+- That the target user exists.
+- That the target user belongs to the channel.
+- That the sender belongs to the channel.
+- That the sender is a channel operator.
 
-La colección de operadores debe impedir duplicados.
+The operator collection must prevent duplicates.
 
-No es necesario expulsar al usuario cuando se le retira el privilegio de operador. Simplemente deja de formar parte de la colección de operadores.
+It is not necessary to kick the user when their operator privilege is removed. They simply stop being part of the operator collection.
 
 ---
 
-## 4. Validaciones generales
+## 4. General validations
 
-Para modificar los modos de un canal se debe comprobar, en este orden:
+To change a channel’s modes it must be checked, in this order:
 
-1. El usuario está registrado.
-2. Se ha proporcionado el nombre del canal.
-3. El canal existe.
-4. Se ha proporcionado una cadena de modos.
-5. El emisor pertenece al canal.
-6. El emisor es operador.
-7. Todos los modos son conocidos.
-8. Cada modo dispone de los argumentos necesarios.
-9. Los argumentos son válidos para el modo correspondiente.
+1. The user is registered.
+2. The channel name has been provided.
+3. The channel exists.
+4. A mode string has been provided.
+5. The sender belongs to the channel.
+6. The sender is an operator.
+7. Every mode is known.
+8. Each mode has the required arguments.
+9. The arguments are valid for the corresponding mode.
 
-Consultar los modos mediante:
+Querying the modes through:
 
 ```text
 MODE #general
 ```
 
-no debería requerir privilegios de operador.
+should not require operator privileges.
 
-Modificar los modos sí debe requerir que el emisor pertenezca al canal y sea operador.
+Changing the modes must require the sender to belong to the channel and be an operator.
 
 ---
 
-## 5. Combinación de modos
+## 5. Combining modes
 
-El comando debe aceptar varios modos dentro de la misma cadena:
+The command must accept several modes inside the same string:
 
 ```text
 MODE #general +it
@@ -205,68 +205,68 @@ MODE #general +o-l roxana
 MODE #general +kol secret roxana 10
 ```
 
-Los símbolos `+` y `-` cambian la operación aplicada a las letras que aparecen después.
+The `+` and `-` symbols change the operation applied to the letters that appear afterwards.
 
-Ejemplo:
+Example:
 
 ```text
 MODE #general +o-l roxana
 ```
 
-Debe interpretarse como:
+Must be interpreted as:
 
-1. `+o roxana`: conceder privilegios de operador a `roxana`.
-2. `-l`: eliminar el límite de usuarios.
+1. `+o roxana`: grant operator privileges to `roxana`.
+2. `-l`: remove the user limit.
 
-Ejemplo:
+Example:
 
 ```text
 MODE #general +kol secret roxana 10
 ```
 
-Debe interpretarse como:
+Must be interpreted as:
 
 1. `+k secret`
 2. `+o roxana`
 3. `+l 10`
 
-Los argumentos se consumen en el mismo orden en el que aparecen las letras de modo.
+Arguments are consumed in the same order in which the mode letters appear.
 
 ---
 
-## 6. Consumo de parámetros
+## 6. Parameter consumption
 
-Cada modo tiene reglas diferentes:
+Each mode has different rules:
 
-| Modo | Con `+` | Con `-` |
+| Mode | With `+` | With `-` |
 |---|---:|---:|
-| `i` | Sin argumento | Sin argumento |
-| `t` | Sin argumento | Sin argumento |
-| `k` | Requiere contraseña | Sin argumento |
-| `l` | Requiere límite | Sin argumento |
-| `o` | Requiere nickname | Requiere nickname |
+| `i` | No argument | No argument |
+| `t` | No argument | No argument |
+| `k` | Requires password | No argument |
+| `l` | Requires limit | No argument |
+| `o` | Requires nickname | Requires nickname |
 
-Ejemplo:
+Example:
 
 ```text
 MODE #general +itkol secret roxana 10
 ```
 
-Consumo de parámetros:
+Parameter consumption:
 
-| Operación | Parámetro consumido |
+| Operation | Consumed parameter |
 |---|---|
-| `+i` | Ninguno |
-| `+t` | Ninguno |
+| `+i` | None |
+| `+t` | None |
 | `+k` | `secret` |
 | `+o` | `roxana` |
 | `+l` | `10` |
 
 ---
 
-## 7. Parser específico de modos
+## 7. Dedicated mode parser
 
-El parser general de IRC debería producir algo equivalente a:
+The general IRC parser should produce something equivalent to:
 
 ```text
 command: MODE
@@ -278,48 +278,48 @@ parameters:
   - "10"
 ```
 
-Después, el handler de `MODE` debe utilizar un parser específico para interpretar la cadena `+kol`.
+Then the `MODE` handler must use a dedicated parser to interpret the `+kol` string.
 
-Flujo recomendado:
+Recommended flow:
 
 ```text
-cadena de modos
+mode string
     ↓
-recorrer cada carácter
+walk each character
     ↓
-si aparece + o - → actualizar la operación actual
+if + or - appears → update the current operation
     ↓
-identificar la letra de modo
+identify the mode letter
     ↓
-determinar si necesita argumento
+determine whether it needs an argument
     ↓
-consumir el siguiente argumento cuando corresponda
+consume the next argument when appropriate
     ↓
-validar la operación
+validate the operation
     ↓
-modificar el estado del canal
+modify the channel state
 ```
 
-El parser debe mantener:
+The parser must keep:
 
-- La operación actual: añadir o eliminar.
-- El índice del parámetro que debe consumirse.
-- La lista de operaciones válidas.
-- Los modos aplicados correctamente.
-- Los argumentos asociados a esos modos.
+- The current operation: add or remove.
+- The index of the parameter that must be consumed.
+- The list of valid operations.
+- The modes applied correctly.
+- The arguments associated with those modes.
 
-Conviene separar:
+It is useful to separate:
 
-1. La interpretación de la cadena de modos.
-2. La validación de cada operación.
-3. La modificación del canal.
-4. La construcción del mensaje que se notificará.
+1. Interpretation of the mode string.
+2. Validation of each operation.
+3. Modification of the channel.
+4. Construction of the message that will be notified.
 
 ---
 
-## 8. Representación interna recomendada
+## 8. Recommended internal representation
 
-Una operación de modo puede representarse conceptualmente con:
+A mode operation can be represented conceptually as:
 
 ```text
 ModeOperation
@@ -329,13 +329,13 @@ ModeOperation
 └── argument
 ```
 
-Ejemplo para:
+Example for:
 
 ```text
 MODE #general +o-l roxana
 ```
 
-Resultado:
+Result:
 
 ```text
 ModeOperation
@@ -346,22 +346,22 @@ ModeOperation
 ModeOperation
 ├── action: remove
 ├── mode: l
-└── argument: ninguno
+└── argument: none
 ```
 
-Generar primero una colección de operaciones facilita:
+First generating a collection of operations makes it easier to:
 
-- Detectar parámetros ausentes.
-- Validar combinaciones.
-- Evitar modificar parcialmente el canal por un error de parsing.
-- Construir correctamente la notificación final.
-- Probar el parser independientemente del servidor.
+- Detect missing parameters.
+- Validate combinations.
+- Avoid partially modifying the channel because of a parsing error.
+- Build the final notification correctly.
+- Test the parser independently of the server.
 
 ---
 
-## 9. Actualización del modelo `Channel`
+## 9. Updating the `Channel` model
 
-La clase `Channel` debe almacenar, como mínimo:
+The `Channel` class must store, at a minimum:
 
 ```cpp
 bool inviteOnly;
@@ -372,13 +372,13 @@ std::string channelKey;
 std::size_t userLimit;
 ```
 
-También debe disponer de una colección de operadores:
+It must also have an operator collection:
 
 ```text
 operators
 ```
 
-Conviene ofrecer funciones claras para consultar y modificar cada estado:
+It is useful to offer clear functions to query and change each state:
 
 ```text
 isInviteOnly()
@@ -402,71 +402,71 @@ addOperator()
 removeOperator()
 ```
 
-La lógica relacionada con los estados del canal debería permanecer dentro de `Channel`, mientras que el handler de `MODE` se encarga de:
+Logic related to channel states should stay inside `Channel`, while the `MODE` handler takes care of:
 
-- Validar el comando.
-- Interpretar los modos.
-- Buscar usuarios y canales.
-- Aplicar las operaciones.
-- Enviar errores.
-- Notificar los cambios.
+- Validating the command.
+- Interpreting the modes.
+- Looking up users and channels.
+- Applying the operations.
+- Sending errors.
+- Notifying the changes.
 
 ---
 
-## 10. Notificación de los cambios
+## 10. Notifying the changes
 
-Cuando una modificación se realiza correctamente, debe notificarse a todos los miembros del canal, incluido el emisor.
+When a change is performed correctly, every channel member must be notified, including the sender.
 
-Ejemplo:
+Example:
 
 ```text
 :roxana!roxana@localhost MODE #general +it
 ```
 
-Ejemplo con argumentos:
+Example with arguments:
 
 ```text
 :roxana!roxana@localhost MODE #general +kl secret 10
 ```
 
-Ejemplo de cambio de operador:
+Example of an operator change:
 
 ```text
-:roxana!roxana@localhost MODE #general +o otroUsuario
+:roxana!roxana@localhost MODE #general +o otherUser
 ```
 
-La notificación debe incluir:
+The notification must include:
 
-- El prefijo completo del usuario que ejecutó el comando.
-- El nombre del canal.
-- Los modos aplicados.
-- Los argumentos correspondientes.
-- La terminación `\r\n`.
+- The full prefix of the user who ran the command.
+- The channel name.
+- The applied modes.
+- The corresponding arguments.
+- The `\r\n` terminator.
 
-No se debe notificar como aplicado un modo que haya sido rechazado.
+A mode that has been rejected must not be notified as applied.
 
 ---
 
-## 11. Respuestas y errores relevantes
+## 11. Relevant replies and errors
 
-| Código | Nombre | Situación |
+| Code | Name | Situation |
 |---:|---|---|
-| `324` | `RPL_CHANNELMODEIS` | Consulta correcta de los modos actuales |
-| `401` | `ERR_NOSUCHNICK` | El usuario indicado para `+o` o `-o` no existe |
-| `403` | `ERR_NOSUCHCHANNEL` | El canal no existe |
-| `441` | `ERR_USERNOTINCHANNEL` | El objetivo de `+o` o `-o` no pertenece al canal |
-| `442` | `ERR_NOTONCHANNEL` | El emisor no pertenece al canal |
-| `461` | `ERR_NEEDMOREPARAMS` | Faltan parámetros obligatorios |
-| `472` | `ERR_UNKNOWNMODE` | Se ha recibido una letra de modo desconocida |
-| `482` | `ERR_CHANOPRIVSNEEDED` | El emisor no es operador del canal |
+| `324` | `RPL_CHANNELMODEIS` | Correct query of the current modes |
+| `401` | `ERR_NOSUCHNICK` | The user indicated for `+o` or `-o` does not exist |
+| `403` | `ERR_NOSUCHCHANNEL` | The channel does not exist |
+| `441` | `ERR_USERNOTINCHANNEL` | The target of `+o` or `-o` does not belong to the channel |
+| `442` | `ERR_NOTONCHANNEL` | The sender does not belong to the channel |
+| `461` | `ERR_NEEDMOREPARAMS` | Mandatory parameters are missing |
+| `472` | `ERR_UNKNOWNMODE` | An unknown mode letter has been received |
+| `482` | `ERR_CHANOPRIVSNEEDED` | The sender is not a channel operator |
 
-Ejemplo de modo desconocido:
+Unknown mode example:
 
 ```text
 MODE #general +x
 ```
 
-Respuesta posible:
+Possible reply:
 
 ```text
 :server.name 472 roxana x :is unknown mode char to me
@@ -474,48 +474,48 @@ Respuesta posible:
 
 ---
 
-## 12. Integración con otros comandos
+## 12. Integration with other commands
 
-La implementación de `MODE` debe modificar el comportamiento de otros handlers.
+The `MODE` implementation must change the behaviour of other handlers.
 
 ### `JOIN`
 
-Debe consultar:
+Must query:
 
-- `+i`: comprobar si el usuario está invitado.
-- `+k`: comprobar la contraseña.
-- `+l`: comprobar el límite de usuarios.
+- `+i`: check whether the user is invited.
+- `+k`: check the password.
+- `+l`: check the user limit.
 
 ### `TOPIC`
 
-Debe consultar:
+Must query:
 
-- `+t`: solamente un operador puede modificar el topic.
-- `-t`: cualquier miembro puede modificarlo.
+- `+t`: only an operator can change the topic.
+- `-t`: any member can change it.
 
 ### `INVITE`
 
-Debe consultar si el emisor tiene los privilegios necesarios cuando corresponda.
+Must check whether the sender has the required privileges when appropriate.
 
 ### `KICK`
 
-Debe comprobar que el emisor es operador.
+Must check that the sender is an operator.
 
 ### `MODE`
 
-El modo `+o` debe modificar la misma colección de operadores utilizada por `KICK`, `INVITE`, `TOPIC` y el propio `MODE`.
+Mode `+o` must modify the same operator collection used by `KICK`, `INVITE`, `TOPIC` and `MODE` itself.
 
 ---
 
-## 13. Orden de implementación recomendado
+## 13. Recommended implementation order
 
-1. Implementar la consulta:
+1. Implement the query:
 
    ```text
    MODE #general
    ```
 
-2. Implementar modos simples:
+2. Implement simple modes:
 
    ```text
    MODE #general +i
@@ -524,58 +524,58 @@ El modo `+o` debe modificar la misma colección de operadores utilizada por `KIC
    MODE #general -t
    ```
 
-3. Implementar la contraseña:
+3. Implement the password:
 
    ```text
    MODE #general +k secret
    MODE #general -k
    ```
 
-4. Implementar el límite:
+4. Implement the limit:
 
    ```text
    MODE #general +l 10
    MODE #general -l
    ```
 
-5. Implementar los operadores:
+5. Implement operators:
 
    ```text
    MODE #general +o roxana
    MODE #general -o roxana
    ```
 
-6. Implementar combinaciones con un único signo:
+6. Implement combinations with a single sign:
 
    ```text
    MODE #general +it
    MODE #general +kol secret roxana 10
    ```
 
-7. Implementar cambios de signo dentro de la misma cadena:
+7. Implement sign changes inside the same string:
 
    ```text
    MODE #general +o-l roxana
    MODE #general +it-k secret
    ```
 
-8. Integrar los estados con `JOIN`, `TOPIC`, `INVITE` y `KICK`.
+8. Integrate the states with `JOIN`, `TOPIC`, `INVITE` and `KICK`.
 
-9. Añadir pruebas de errores y combinaciones.
+9. Add error and combination tests.
 
 ---
 
-## 14. Casos mínimos de prueba
+## 14. Minimum test cases
 
-### Consulta
+### Query
 
 ```text
 MODE #general
 ```
 
-Debe devolver los modos actuales.
+Must return the current modes.
 
-### Activación y desactivación
+### Enable and disable
 
 ```text
 MODE #general +i
@@ -584,38 +584,38 @@ MODE #general +t
 MODE #general -t
 ```
 
-### Contraseña
+### Password
 
 ```text
 MODE #general +k secret
-JOIN #general incorrecta
+JOIN #general incorrect
 JOIN #general secret
 MODE #general -k
 ```
 
-### Límite
+### Limit
 
 ```text
 MODE #general +l 2
 MODE #general -l
 ```
 
-También deben probarse límites inválidos:
+Invalid limits must also be tested:
 
 ```text
 MODE #general +l 0
 MODE #general +l -5
-MODE #general +l texto
+MODE #general +l text
 ```
 
-### Operadores
+### Operators
 
 ```text
 MODE #general +o roxana
 MODE #general -o roxana
 ```
 
-### Combinaciones
+### Combinations
 
 ```text
 MODE #general +it
@@ -625,35 +625,35 @@ MODE #general +o-l roxana
 MODE #general +kol secret roxana 10
 ```
 
-### Errores
+### Errors
 
-Probar:
+Try:
 
-- Canal inexistente.
-- Usuario objetivo inexistente.
-- Usuario objetivo fuera del canal.
-- Emisor fuera del canal.
-- Emisor sin privilegios de operador.
-- Modo desconocido.
-- Contraseña ausente.
-- Límite ausente.
-- Límite inválido.
-- Nickname ausente para `+o`.
-- Nickname ausente para `-o`.
-- Combinaciones con menos argumentos de los necesarios.
+- Nonexistent channel.
+- Nonexistent target user.
+- Target user outside the channel.
+- Sender outside the channel.
+- Sender without operator privileges.
+- Unknown mode.
+- Missing password.
+- Missing limit.
+- Invalid limit.
+- Missing nickname for `+o`.
+- Missing nickname for `-o`.
+- Combinations with fewer arguments than needed.
 
 ---
 
-## Resultado esperado de la fase
+## Expected result of the phase
 
-Al finalizar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-- Consultar los modos activos de un canal.
-- Activar y desactivar `i`, `t`, `k`, `o` y `l`.
-- Consumir correctamente los parámetros de cada modo.
-- Interpretar varios modos dentro del mismo comando.
-- Cambiar entre `+` y `-` dentro de la misma cadena.
-- Validar permisos de miembro y operador.
-- Notificar los cambios a todos los miembros del canal.
-- Aplicar los modos al comportamiento de `JOIN`, `TOPIC`, `INVITE` y `KICK`.
-- Responder coherentemente ante modos, parámetros o usuarios inválidos.
+- Query a channel’s active modes.
+- Enable and disable `i`, `t`, `k`, `o` and `l`.
+- Consume each mode’s parameters correctly.
+- Interpret several modes inside the same command.
+- Switch between `+` and `-` inside the same string.
+- Validate member and operator permissions.
+- Notify changes to every channel member.
+- Apply the modes to the behaviour of `JOIN`, `TOPIC`, `INVITE` and `KICK`.
+- Reply consistently to invalid modes, parameters or users.

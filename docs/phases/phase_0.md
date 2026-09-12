@@ -1,12 +1,12 @@
-# Fase 0
+# Phase 0
 
-## Flujo `irssi`
+## `irssi` flow
 
-El servidor deberá recibir exactamente esa línea:
+The server must receive exactly this line:
 
 `CAP LS 302\r\n`
 
-Y el parser debe convertirlo a:
+And the parser must convert it to:
 
 ```text
 command: "CAP"
@@ -14,18 +14,18 @@ parameters[0]: "LS"
 parameters[1]: "302"
 ```
 
-Después, el servidor tendrá que responder:
+Then the server will have to reply:
 
 ```text
 :irc.local CAP * LS :\r\n
 ```
 
-Al recibir esa respuesta, Irssi podrá continuar el proceso de conexión.
+After receiving that reply, Irssi can continue the connection process.
 
-La comunicación sería:
+The communication would be:
 
 ```text
-Irssi                                    Servidor
+Irssi                                    Server
   │                                         │
   │ CAP LS 302                              │
   │────────────────────────────────────────>│
@@ -39,37 +39,37 @@ Irssi                                    Servidor
   │────────────────────────────────────────>│
 ```
 
-## Primeros comandos soportados por el servidor
+## First commands supported by the server
 
 ```text
-Negociación y registro	    CAP, PASS, NICK, USER
-Conexión	                PING, PONG, QUIT
-Mensajería	                PRIVMSG, NOTICE
-Canales básicos	            JOIN, PART, NAMES
-Requeridos por el subject	KICK, INVITE, TOPIC, MODE
+Negotiation and registration    CAP, PASS, NICK, USER
+Connection                      PING, PONG, QUIT
+Messaging                       PRIVMSG, NOTICE
+Basic channels                  JOIN, PART, NAMES
+Required by the subject         KICK, INVITE, TOPIC, MODE
 ```
 
 ## `CAP`
 
-Aunque no se implementen capacidades IRCv3, hay que responder. Ignorarlo sin respuesta puede dejar al cliente esperando.
+Even if IRCv3 capabilities are not implemented, a reply is required. Ignoring it without a reply can leave the client waiting.
 
 ```text
-Entrada del cliente	    Respuesta
-CAP LS 302	            :irc.local CAP * LS :
-CAP LIST	            :irc.local CAP * LIST :
-CAP REQ :algo	        :irc.local CAP * NAK :algo
-CAP END	                Ninguna
+Client input            Reply
+CAP LS 302              :irc.local CAP * LS :
+CAP LIST                :irc.local CAP * LIST :
+CAP REQ :something      :irc.local CAP * NAK :something
+CAP END                 None
 ```
 
-`CAP` no debe bloquear el registro: el usuario queda registrado cuando haya enviado correctamente `PASS`, `NICK` y `USER`.
+`CAP` must not block registration: the user is registered when they have correctly sent `PASS`, `NICK` and `USER`.
 
-## Reglas de registro
+## Registration rules
 
-Cada cliente mantiene este estado:
+Each client keeps this state:
 
 `CONNECTED → REGISTERING → REGISTERED → QUITTING`
 
-Y estos datos:
+And this data:
 
 ```text
 passwordAccepted
@@ -78,27 +78,27 @@ username
 realname
 ```
 
-El registro se completa una única vez cuando:
+Registration completes exactly once when:
 
 ```text
 passwordAccepted == true
-nickname no está vacío
-username no está vacío
+nickname is not empty
+username is not empty
 ```
 
-Y entonces se envía numerics de bienvenida.
+And then welcome numerics are sent.
 
-Reglas importantes:
+Important rules:
 
-- `PASS \<password>`: valida la contraseña del servidor.
-- `NICK \<nick>`: obligatorio; puede cambiarse tras el registro.
-- `USER \<user> 0 * :Nombre real`: obligatorio; solo se acepta una vez.
-- Los comandos de canal o mensajería antes del registro responden `451 ERR_NOTREGISTERED`.
-- `CAP` puede recibirse antes de `PASS`.
-- `PING` debe poder responderse incluso antes de completar el registro.
-- Un nick ya usado responde `433 ERR_NICKNAMEINUSE`.
+- `PASS \<password>`: validates the server password.
+- `NICK \<nick>`: mandatory; may be changed after registration.
+- `USER \<user> 0 * :Real name`: mandatory; accepted only once.
+- Channel or messaging commands before registration reply `451 ERR_NOTREGISTERED`.
+- `CAP` may be received before `PASS`.
+- `PING` must be answerable even before registration is complete.
+- A nick already in use replies `433 ERR_NICKNAMEINUSE`.
 
-## Formato interno del mensaje 
+## Internal message format 
 
 ```cpp
 struct IrcMessage
@@ -110,86 +110,86 @@ struct IrcMessage
 };
 ```
 
-Ejemplo:
+Example:
 
-`:roxana!roxana@localhost PRIVMSG #general :Hola a todas`
+`:roxana!roxana@localhost PRIVMSG #general :Hello everyone`
 
-Resultado:
+Result:
 
 ```text
 hasPrefix: true
 prefix: "roxana!roxana@localhost"
 command: "PRIVMSG"
 parameters[0]: "#general"
-parameters[1]: "Hola a todas"
+parameters[1]: "Hello everyone"
 ```
 
-El `:` indica que ese último parámetro puede contener espacios.
+The `:` indicates that this last parameter may contain spaces.
 
-El parser debe:
+The parser must:
 
-- Acumular datos por cliente hasta encontrar `\r\n`.
-- Rechazar o cerrar limpiamente líneas que superen el límite IRC tradicional: 512 bytes incluyendo `\r\n`.
-- Extraer opcionalmente el prefijo inicial `:prefijo`.
-- Convertir el comando a mayúsculas.
-- Separar parámetros normales por espacios.
-- Tratar `:texto con espacios` como un único último parámetro.
-- No permitir `\r` o `\n` dentro de valores generados por el servidor.
+- Accumulate data per client until it finds `\r\n`.
+- Reject or cleanly close lines that exceed the traditional IRC limit: 512 bytes including `\r\n`.
+- Optionally extract the initial `:prefix`.
+- Convert the command to uppercase.
+- Split normal parameters on spaces.
+- Treat `:text with spaces` as a single last parameter.
+- Not allow `\r` or `\n` inside values generated by the server.
 
-Y para enviar respuestas, usar un único serializador. Nunca concatenar mensajes IRC repartidos por handlers.
+And to send replies, use a single serializer. Never concatenate IRC messages scattered across handlers.
 
 `[:prefix ]COMMAND [param1] [param2] [:last parameter with spaces]\r\n`
 
-## Mensajes y prefijos que emitirá el servidor
+## Messages and prefixes the server will emit
 
-Los mensajes del servidor deben tener un nombre estable, por ejemplo:
+Server messages must have a stable name, for example:
 
 `irc.local`
 
-Los mensajes de un usuario usarán:
+User messages will use:
 
 `:nick!username@hostname`
 
-Ejemplos:
+Examples:
 
 ```text
 :roxana!roxana@localhost JOIN :#general
-:roxana!roxana@localhost PRIVMSG #general :Hola
-:irc.local 332 roxana #general :Tema actual
+:roxana!roxana@localhost PRIVMSG #general :Hello
+:irc.local 332 roxana #general :Current topic
 ```
 
-No hardcodear roxana: en los numerics, el segundo parámetro suele ser siempre el nick actual del cliente receptor.
+Do not hardcode roxana: in numerics, the second parameter is usually always the current nick of the receiving client.
 
-## Numerics mínimos en este punto
+## Minimum numerics at this point
 
 ```text
-Bienvenida	                001 RPL_WELCOME
-Información del servidor	002, 003, 004
-Capacidades del servidor	005 RPL_ISUPPORT
-Falta de parámetros	        461 ERR_NEEDMOREPARAMS
-Ya registrado	            462 ERR_ALREADYREGISTRED
-Contraseña incorrecta	    464 ERR_PASSWDMISMATCH
-Sin nick	                431 ERR_NONICKNAMEGIVEN
-Nick inválido / ocupado	    432, 433
-No registrado	            451 ERR_NOTREGISTERED
-Comando desconocido	        421 ERR_UNKNOWNCOMMAND
-Usuario inexistente	        401 ERR_NOSUCHNICK
-Canal inexistente	        403 ERR_NOSUCHCHANNEL
-No se puede enviar al canal	404 ERR_CANNOTSENDTOCHAN
-Sin destinatario / texto	411, 412
-No está en el canal	        442 ERR_NOTONCHANNEL
-Usuario ya está en el canal	443 ERR_USERONCHANNEL
-Canal lleno	                471 ERR_CHANNELISFULL
-Canal por invitación	    473 ERR_INVITEONLYCHAN
-Clave incorrecta	        475 ERR_BADCHANNELKEY
-Sin privilegios de operador	482 ERR_CHANOPRIVSNEEDED
-Sin tema / tema actual	    331, 332
-Lista de usuarios	        353, 366
-Modos actuales del canal	324
-Invitación confirmada	    341
+Welcome                         001 RPL_WELCOME
+Server information              002, 003, 004
+Server capabilities             005 RPL_ISUPPORT
+Missing parameters              461 ERR_NEEDMOREPARAMS
+Already registered              462 ERR_ALREADYREGISTRED
+Incorrect password              464 ERR_PASSWDMISMATCH
+No nick                         431 ERR_NONICKNAMEGIVEN
+Invalid / taken nick            432, 433
+Not registered                  451 ERR_NOTREGISTERED
+Unknown command                 421 ERR_UNKNOWNCOMMAND
+No such user                    401 ERR_NOSUCHNICK
+No such channel                 403 ERR_NOSUCHCHANNEL
+Cannot send to channel          404 ERR_CANNOTSENDTOCHAN
+No recipient / text             411, 412
+Not on the channel              442 ERR_NOTONCHANNEL
+User already on the channel     443 ERR_USERONCHANNEL
+Channel full                    471 ERR_CHANNELISFULL
+Invite-only channel             473 ERR_INVITEONLYCHAN
+Incorrect key                   475 ERR_BADCHANNELKEY
+No operator privileges          482 ERR_CHANOPRIVSNEEDED
+No topic / current topic        331, 332
+User list                       353, 366
+Current channel modes           324
+Invitation confirmed            341
 ```
 
-Tras registrar correctamente:
+After registering correctly:
 
 ```text
 :irc.local 001 roxana :Welcome to the ft_irc network roxana
@@ -199,49 +199,49 @@ Tras registrar correctamente:
 :irc.local 005 roxana CHANTYPES=# PREFIX=(o)@ CHANMODES=,k,l,it :are supported by this server
 ```
 
-El `005` debe reflejar la implementación real.
+The `005` must reflect the real implementation.
 
-## Contrato concreto de los canales
+## Concrete channel contract
 
-Definir estas reglas ahora; evitará contradicciones más adelante.
+Define these rules now; it will prevent contradictions later.
 
-- Los canales empiezan por `#`.
-- La primera persona que entra crea el canal y recibe operador (`+o`).
-- Al hacer `JOIN`, difundir el `JOIN` a todos los miembros.
-- Después enviar al usuario que entra:
-    - `331` o `332` para el tema;
-    - `353` con los miembros;
-    - `366` al terminar la lista.
-- `PART` y `QUIT` se difunden a los usuarios que compartan canal.
-- `PRIVMSG` a canal se envía a sus miembros, excepto al emisor.
-- `PRIVMSG` a nick se entrega solo al usuario destino.
-- Un `NOTICE` se comporta como `PRIVMSG`, pero no genera mensajes de error automáticos.
-- `+i`: solo se entra con invitación.
-- `+t`: solo operadores cambian el tema.
-- `+k \<clave>`: exige clave al hacer `JOIN #canal clave`.
-- `+l \<número>`: limita miembros.
-- `+o \<nick>` y `-o \<nick>`: dan o retiran operador.
-- Solo operadores pueden usar `KICK`, `INVITE` y modificar modos.
-- `TOPIC #canal` sin texto consulta el tema; con texto lo modifica.
-- `MODE #canal` sin argumentos devuelve `324`.
+- Channels start with `#`.
+- The first person who enters creates the channel and receives operator (`+o`).
+- On `JOIN`, broadcast the `JOIN` to every member.
+- Then send to the joining user:
+    - `331` or `332` for the topic;
+    - `353` with the members;
+    - `366` at the end of the list.
+- `PART` and `QUIT` are broadcast to users who share a channel.
+- Channel `PRIVMSG` is sent to its members, except the sender.
+- Nick `PRIVMSG` is delivered only to the target user.
+- A `NOTICE` behaves like `PRIVMSG`, but does not generate automatic error messages.
+- `+i`: entry only with an invitation.
+- `+t`: only operators change the topic.
+- `+k \<key>`: requires a key on `JOIN #channel key`.
+- `+l \<number>`: limits members.
+- `+o \<nick>` and `-o \<nick>`: grant or remove operator.
+- Only operators can use `KICK`, `INVITE` and change modes.
+- `TOPIC #channel` without text queries the topic; with text it changes it.
+- `MODE #channel` without arguments returns `324`.
 
-No anunciar modos que no existen: si no se implementa voz, bans o canales secretos, no devolver `+v`, `+b`, `+s`, etc.
+Do not advertise modes that do not exist: if voice, bans or secret channels are not implemented, do not return `+v`, `+b`, `+s`, etc.
 
-## Comparación de nicks y canales
+## Comparing nicks and channels
 
-IRC no trata los nicks como texto estrictamente sensible a mayúsculas. Definir desde ya una función de normalización para buscar usuarios y canales.
+IRC does not treat nicks as strictly case-sensitive text. Define a normalization function from the start to look up users and channels.
 
-Con `CASEMAPPING=rfc1459`, por ejemplo, `Roxana`, `roxana` y `ROXANA` son el mismo nick. También se consideran equivalentes ciertos caracteres como `[` y `{`.
+With `CASEMAPPING=rfc1459`, for example, `Roxana`, `roxana` and `ROXANA` are the same nick. Certain characters such as `[` and `{` are also considered equivalent.
 
-Guardar nombre original para mostrarlo, pero usar una versión normalizada como clave en los mapas.
+Store the original name for display, but use a normalized version as the key in maps.
 
-## Resultado final en fase 0
+## Final result of phase 0
 
-Un `PROTOCOL.md` breve con:
+A short `PROTOCOL.md` with:
 
-- La lista anterior de comandos soportados y no soportados.
-- El ciclo de registro.
-- El formato `IrcMessage`.
-- La tabla de numerics.
-- Las reglas de canales y modos.
-- Un transcript real de irssi al conectar y al ejecutar `/join`, `/msg`, `/topic`, `/mode`, `/invite`, `/kick` y `/quit`.
+- The previous list of supported and unsupported commands.
+- The registration cycle.
+- The `IrcMessage` format.
+- The numeric table.
+- The channel and mode rules.
+- A real irssi transcript when connecting and when running `/join`, `/msg`, `/topic`, `/mode`, `/invite`, `/kick` and `/quit`.

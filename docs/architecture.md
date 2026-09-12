@@ -27,7 +27,7 @@
  - command
  - parameters
 
-## Flujo general
+## General flow
 
 ```text
 socket → Client → MessageParser → CommandDispatcher → CommandHandler
@@ -37,46 +37,46 @@ socket → Client → MessageParser → CommandDispatcher → CommandHandler
                             Client    Channel      Bot
 ```
 
-Responsabilidades de cada parte:
+Responsibilities of each part:
 
-- `Client`: conexión, buffers y estado del usuario.
-- `MessageParser`: convierte texto IRC en IrcMessage.
-- `CommandDispatcher`: selecciona el manejador de `NICK`, `JOIN`, `PRIVMSG`, etc.
-- `MessageRouter`: decide quién recibe un mensaje.
-- `Bot`: procesa únicamente los mensajes dirigidos a él.
-- `Channel`: administra miembros, operadores e invitaciones.
+- `Client`: connection, buffers, and user state.
+- `MessageParser`: converts IRC text into an IrcMessage.
+- `CommandDispatcher`: selects the handler for `NICK`, `JOIN`, `PRIVMSG`, and so on.
+- `MessageRouter`: decides who receives a message.
+- `Bot`: processes only the messages directed at it.
+- `Channel`: manages members, operators, and invitations.
 
 ### Bot
 
-El bonus del bot está implementado como un `Client` virtual (`fd < 0`) sin entrada en `poll()`. `Bot` posee esa identidad, reserva el nick `marvin` y se une a `#bot` al arrancar. Los usuarios reales tienen socket y buffers; el bot comparte el modelo de canales, `NAMES` e `INVITE` sin un descriptor extra.
+The bot bonus is implemented as a virtual `Client` (`fd < 0`) with no entry in `poll()`. `Bot` owns that identity, reserves the nick `marvin`, and joins `#bot` at startup. Real users have a socket and buffers; the bot shares the channel model, `NAMES`, and `INVITE` without an extra descriptor.
 
-Los `PRIVMSG` dirigidos al nick o a un canal del que es miembro se procesan en `Bot`; `NOTICE` no genera respuesta automática. Un `INVITE` provoca un `JOIN` del bot.
+`PRIVMSG` directed at the nick or at a channel the bot is a member of is processed in `Bot`; `NOTICE` does not generate an automatic reply. An `INVITE` causes the bot to `JOIN`.
 
-### Transferencia de archivos
+### File transfer
 
-En IRC normalmente el archivo no pasa por el servidor IRC. Se utiliza DCC:
+In IRC the file does not normally pass through the IRC server. DCC is used:
 
-- El emisor abre un socket TCP para el archivo.
-- Envía al receptor un mensaje CTCP mediante PRIVMSG.
-- El servidor IRC retransmite ese mensaje sin modificarlo.
-- El receptor se conecta directamente al socket del emisor.
-- Los bytes del archivo circulan directamente entre ambos clientes.
+- The sender opens a TCP socket for the file.
+- It sends the receiver a CTCP message via PRIVMSG.
+- The IRC server forwards that message unchanged.
+- The receiver connects directly to the sender’s socket.
+- The file bytes travel directly between the two clients.
 
-Un mensaje se parece a:
+A message looks like:
 
 `PRIVMSG Roxana :\x01DCC SEND example.txt 2130706433 5000 1200\x01`
 
-Los caracteres `\x01` delimitan un mensaje CTCP. Para el servidor sigue siendo un `PRIVMSG` normal.
+The `\x01` characters delimit a CTCP message. For the server it remains a normal `PRIVMSG`.
 
-Por tanto, para soportar DCC hay que asegurar que:
+Therefore, to support DCC you must ensure that:
 
-- El parser conserva completo el trailing parameter después de `:`.
-- No dividir el contenido de `PRIVMSG por` espacios.
-- No eliminar el carácter `\x01`.
-- No reinterpretar el mensaje `DCC SEND`.
-- Retransmitir el contenido exactamente al destinatario.
-- Los sockets IRC son no bloqueantes y soportan envíos parciales mediante el buffer de salida.
-- Solo rechazar los caracteres realmente inválidos para una línea IRC, como CR/LF internos o NUL.
+- The parser keeps the full trailing parameter after `:`.
+- The contents of `PRIVMSG` are not split on spaces.
+- The `\x01` character is not removed.
+- The `DCC SEND` message is not reinterpreted.
+- The content is forwarded exactly to the recipient.
+- IRC sockets are non-blocking and support partial sends through the output buffer.
+- Only characters that are truly invalid for an IRC line are rejected, such as internal CR/LF or NUL.
 
 ```text
 command: "PRIVMSG"

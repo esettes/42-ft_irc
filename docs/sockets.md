@@ -1,49 +1,49 @@
-### Sockets no bloqueantes
+### Non-blocking sockets
 
 ```mermaid
 flowchart TD
-    Poll["poll() espera actividad"] --> Ready["Detecta sockets preparados"]
-    Ready --> Accept["Acepta conexiones disponibles"]
-    Ready --> Receive["Lee datos disponibles"]
-    Ready --> Send["Envía lo que sea posible"]
+    Poll["poll() waits for activity"] --> Ready["Detects ready sockets"]
+    Ready --> Accept["Accepts available connections"]
+    Ready --> Receive["Reads available data"]
+    Ready --> Send["Sends what is possible"]
     Receive --> Poll
     Send --> Poll
     Accept --> Poll
 ```
 
-### ¿Por qué tiene que ser no bloqueante?
+### Why must it be non-blocking?
 
-Más adelante, el servidor utilizará `poll()` para gestionar varios clientes.
+Later the server will use `poll()` to manage several clients.
 
-Si el socket fuese bloqueante, una llamada como:
+If the socket were blocking, a call such as:
 
 `::accept(...);`
 
-podría detener la ejecución hasta que apareciese una conexión. Durante ese tiempo, el servidor no podría atender correctamente otros eventos.
+could stop execution until a connection appeared. During that time the server could not handle other events correctly.
 
-Con `O_NONBLOCK`, si no existe ninguna conexión pendiente, `accept()` devuelve inmediatamente `-1` y normalmente deja:
+With `O_NONBLOCK`, if there is no pending connection, `accept()` returns immediately `-1` and normally leaves:
 
 `errno == EAGAIN`
 
-o:
+or:
 
 `errno == EWOULDBLOCK`
 
-Eso no representará un fallo grave, sino que simplemente significará: “ahora mismo no hay ninguna conexión que aceptar”.
+That does not represent a serious failure; it simply means: “there is no connection to accept right now”.
 
 ---
 
-`INADDR_ANY` significa que el servidor escuchará en todas las interfaces IPv4 disponibles. Esto incluye:
+`INADDR_ANY` means the server will listen on every available IPv4 interface. This includes:
 
-- `127.0.0.1`, para conexiones locales.
-- La IP de la red local.
-- Otras interfaces IPv4 presentes en el equipo.
+- `127.0.0.1`, for local connections.
+- The local network IP.
+- Other IPv4 interfaces present on the machine.
 
-Por eso se puede probar:
+That is why you can test with:
 
 `nc 127.0.0.1 6667`
 
-`INADDR_ANY` no es una IP a la que se conecte el cliente; es una instrucción para `bind()` equivalente a “acepta conexiones destinadas a cualquiera de mis direcciones IPv4”.
+`INADDR_ANY` is not an IP the client connects to; it is an instruction for `bind()` equivalent to “accept connections destined for any of my IPv4 addresses”.
 
 ```cpp
 serverAddress.sin_port = htons(
@@ -51,42 +51,42 @@ serverAddress.sin_port = htons(
 );
 ```
 
-Asigna el puerto validado durante la fase 1.
+Assigns the port validated during phase 1.
 
-`htons()` convierte un entero corto desde el orden de bytes del ordenador al orden utilizado por la red:
+`htons()` converts a short integer from the computer’s byte order to the order used by the network:
 
 `host to network short`
 
-`INADDR_ANY` acepta conexiones enviadas a cualquier interfaz de red del ordenador(`0.0.0.0`), dependiendo también del firewall:
+`INADDR_ANY` accepts connections sent to any network interface on the computer (`0.0.0.0`), also depending on the firewall:
 
 - 127.0.0.1
-- La IP de la red local, como 192.168.1.50
-- Otras IP asignadas a la máquina
+- The local network IP, such as 192.168.1.50
+- Other IPs assigned to the machine
 
-Si se quiere limitar el servidor exclusivamente al propio ordenador:
+If you want to limit the server exclusively to the local machine:
 
 ```cpp
 serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 ```
 ---
 
-`SO_REUSEADDR` es importante activarlo porque permite reiniciar tu servidor y volver a asociarlo al mismo puerto inmediatamente, sin tener que esperar a que el sistema operativo libere por completo las conexiones anteriores.
+`SO_REUSEADDR` is important to enable because it lets you restart your server and bind it to the same port immediately, without waiting for the operating system to fully release the previous connections.
 
-El problema que evita
+The problem it avoids
 
-Cuando cierras un servidor TCP, algunas conexiones pueden permanecer temporalmente en estado `TIME_WAIT`. Esto es parte del funcionamiento normal de TCP: evita que paquetes atrasados de una conexión antigua interfieran con una conexión nueva.
+When you close a TCP server, some connections may remain temporarily in the `TIME_WAIT` state. This is part of how TCP normally works: it prevents late packets from an old connection from interfering with a new one.
 
-Sin `SO_REUSEADDR`, al reiniciar rápidamente:
+Without `SO_REUSEADDR`, after a quick restart:
 
 `./ircserv 6667 password`
 
-`bind()` podría fallar con:
+`bind()` might fail with:
 
 `bind: Address already in use`
 
-aunque el servidor anterior ya no esté ejecutándose.
+even though the previous server is no longer running.
 
-Con esta opción activada:
+With this option enabled:
 
 ```cpp
 int reuseAddressOption = 1;
@@ -100,36 +100,36 @@ int reuseAddressOption = 1;
 );
 ```
 
-el sistema permite que el nuevo socket vuelva a utilizar esa dirección y ese puerto.
+the system allows the new socket to reuse that address and port.
 
-### Lo que no hace
+### What it does not do
 
-`SO_REUSEADDR` no permite normalmente iniciar dos servidores escuchando simultáneamente en la misma dirección y el mismo puerto.
+`SO_REUSEADDR` does not normally allow two servers to listen at the same time on the same address and port.
 
-Si ya tienes una instancia activa:
-
-`./ircserv 6667 password`
-
-y ejecutas otra:
+If you already have an active instance:
 
 `./ircserv 6667 password`
 
-la segunda debería seguir fallando en `bind()` porque el primer servidor todavía posee el puerto.
+and you run another:
 
-Es decir:
+`./ircserv 6667 password`
 
-| Situación                               |      Sin `SO_REUSEADDR` |              Con `SO_REUSEADDR` |
-| --------------------------------------- | ----------------------: | ------------------------------: |
-| Reiniciar rápidamente el servidor       |            Puede fallar |            Normalmente funciona |
-| Puerto ocupado por otro servidor activo |                   Falla |                  Sigue fallando |
-| Conexiones antiguas en `TIME_WAIT`      | Pueden impedir `bind()` | Se permite reutilizar el puerto |
+the second one should still fail in `bind()` because the first server still owns the port.
+
+That is:
+
+| Situation                               |      Without `SO_REUSEADDR` |              With `SO_REUSEADDR` |
+| --------------------------------------- | --------------------------: | -------------------------------: |
+| Restart the server quickly              |               May fail      |            Normally works        |
+| Port occupied by another active server  |                      Fails  |                  Still fails     |
+| Old connections in `TIME_WAIT`          |      May prevent `bind()`   | The port may be reused           |
 
 
-No debe confundirse con `SO_REUSEPORT`, que sí está relacionado con permitir que varios sockets utilicen el mismo puerto bajo determinadas condiciones.
+It must not be confused with `SO_REUSEPORT`, which is related to allowing several sockets to use the same port under certain conditions.
 
-### Por qué se configura antes de `bind()`
+### Why it is configured before `bind()`
 
-La opción afecta a la asociación del socket con una dirección. Por eso el orden debe ser:
+The option affects the association of the socket with an address. That is why the order must be:
 
 ```text
 socket()
@@ -141,17 +141,17 @@ bind()
 listen()
 ```
 
-Activarla después de `bind()` sería demasiado tarde: `bind()` ya podría haber fallado.
+Enabling it after `bind()` would be too late: `bind()` may already have failed.
 
-Durante el desarrollo de `ft_irc`, hay que detener y reiniciar el servidor continuamente. Sin `SO_REUSEADDR`, habría que esperar antes de volver a utilizar el puerto `6667`, lo que haría las pruebas muy incómodas.
+During `ft_irc` development the server must be stopped and restarted continuously. Without `SO_REUSEADDR`, you would have to wait before using port `6667` again, which would make testing very inconvenient.
 
 ---
 
 #### `bind()`
 
-Asocia un socket con una dirección IP local y un puerto concreto.
+Associates a socket with a local IP address and a specific port.
 
-Después de configurar la dirección, `bind()` vincula esa dirección al socket:
+After the address is configured, `bind()` binds that address to the socket:
 
 ```cpp
 bind(
@@ -169,21 +169,20 @@ bind(
 ::listen(listenSocket, SOMAXCONN);
 ```
 
-El segundo argumento establece el límite de la cola de conexiones pendientes.
+The second argument sets the limit of the pending-connection queue.
 
-Cuando un cliente intenta conectarse, el sistema operativo puede completar la conexión TCP y dejarla esperando en esa cola hasta que el servidor ejecute `accept()`.
+When a client tries to connect, the operating system can complete the TCP connection and leave it waiting in that queue until the server runs `accept()`.
 
 ```text
-Cliente se conecta
+Client connects
         ↓
-Conexión pendiente en la cola
+Pending connection in the queue
         ↓
-accept() la recoge
+accept() picks it up
 ```
 
-`SOMAXCONN` solicita el máximo de conexiones pendientes permitido por el sistema. No representa:
+`SOMAXCONN` requests the maximum pending connections allowed by the system. It does not represent:
 
-- El máximo total de clientes del servidor.
-- El número de clientes actualmente conectados.
-- Un número de conexiones reservado de antemano.
-
+- The total maximum number of clients of the server.
+- The number of currently connected clients.
+- A number of connections reserved in advance.

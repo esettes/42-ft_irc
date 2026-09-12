@@ -1,140 +1,140 @@
-# Fase 5 — Reconstrucción del flujo TCP
+# Phase 5 — Reconstructing the TCP stream
 
-## Objetivo
+## Goal
 
-Implementar la reconstrucción de mensajes IRC completos a partir de los bytes recibidos mediante `recv()`.
+Implement the reconstruction of complete IRC messages from the bytes received through `recv()`.
 
-TCP transmite un **flujo continuo de bytes** y no conserva la separación entre los mensajes enviados. Por eso, una llamada a `recv()` puede devolver:
+TCP transmits a **continuous byte stream** and does not preserve the separation between the messages that were sent. That is why a call to `recv()` may return:
 
-- Una parte de un comando.
-- Un comando completo.
-- Varios comandos juntos.
-- Uno o varios comandos completos junto con parte del siguiente.
+- Part of a command.
+- A complete command.
+- Several commands together.
+- One or more complete commands together with part of the next one.
 
-Los datos recibidos no deben enviarse directamente al parser IRC.
+Received data must not be sent directly to the IRC parser.
 
 ---
 
-## 1. Añadir un buffer persistente a cada cliente
+## 1. Add a persistent buffer to each client
 
-Cada objeto `Client` debe almacenar los datos recibidos que todavía no formen un comando completo:
+Each `Client` object must store the received data that does not yet form a complete command:
 
 ```cpp
 std::string _inputBuffer;
 ```
 
-El buffer debe pertenecer al cliente porque cada conexión TCP tiene su propio flujo de datos.
+The buffer must belong to the client because each TCP connection has its own data stream.
 
-No debe existir un único buffer compartido entre todos los clientes.
+There must not be a single buffer shared among all clients.
 
 ---
 
-## 2. Añadir los datos recibidos al buffer
+## 2. Append received data to the buffer
 
-Cuando `recv()` devuelva una cantidad positiva de bytes, estos deben añadirse al final del buffer del cliente:
+When `recv()` returns a positive number of bytes, they must be appended to the end of the client’s buffer:
 
 ```text
 recv()
    ↓
-bytes recibidos
+received bytes
    ↓
 inputBuffer
 ```
 
-Conceptualmente:
+Conceptually:
 
 ```cpp
 client.appendInput(receivedData, receivedByteCount);
 ```
 
-Los datos que ya estaban almacenados no deben eliminarse hasta que se haya reconstruido una línea IRC completa.
+Data that was already stored must not be removed until a complete IRC line has been reconstructed.
 
 ---
 
-## 3. Interpretar el resultado de `recv()`
+## 3. Interpret the result of `recv()`
 
-El valor devuelto por `recv()` debe gestionarse de la siguiente manera:
+The value returned by `recv()` must be handled as follows:
 
-- `receivedByteCount > 0`: se han recibido datos y deben añadirse al buffer.
-- `receivedByteCount == 0`: el cliente ha cerrado la conexión.
-- `receivedByteCount == -1`: se ha producido un error o no hay más datos disponibles.
+- `receivedByteCount > 0`: data has been received and must be appended to the buffer.
+- `receivedByteCount == 0`: the client has closed the connection.
+- `receivedByteCount == -1`: an error has occurred or there is no more data available.
 
-En sockets no bloqueantes:
+On non-blocking sockets:
 
-- `EAGAIN` y `EWOULDBLOCK` indican que actualmente no quedan más datos disponibles. No debe desconectarse al cliente.
-- `EINTR` indica que la llamada fue interrumpida por una señal. La operación puede volver a intentarse.
-- Otros errores pueden requerir cerrar la conexión del cliente.
+- `EAGAIN` and `EWOULDBLOCK` indicate that no more data is currently available. The client must not be disconnected.
+- `EINTR` indicates that the call was interrupted by a signal. The operation can be retried.
+- Other errors may require closing the client’s connection.
 
 ---
 
-## 4. Extraer únicamente líneas completas
+## 4. Extract only complete lines
 
-Los mensajes IRC terminan normalmente con:
+IRC messages normally end with:
 
 ```text
 \r\n
 ```
 
-Después de añadir los bytes recibidos, debe buscarse este terminador dentro de `_inputBuffer`.
+After appending the received bytes, this terminator must be searched for inside `_inputBuffer`.
 
-Mientras exista al menos una línea completa:
+While there is at least one complete line:
 
-1. Localizar la posición de `\r\n`.
-2. Extraer el contenido anterior al terminador.
-3. Eliminar del buffer la línea extraída y su `\r\n`.
-4. Entregar la línea completa al siguiente nivel del servidor.
-5. Repetir el proceso por si existen más comandos completos.
+1. Locate the position of `\r\n`.
+2. Extract the content before the terminator.
+3. Remove the extracted line and its `\r\n` from the buffer.
+4. Deliver the complete line to the next server level.
+5. Repeat the process in case there are more complete commands.
 
-Los datos situados después del último terminador deben permanecer en el buffer para la siguiente llamada a `recv()`.
+Data after the last terminator must stay in the buffer for the next call to `recv()`.
 
 ---
 
-## 5. Gestionar comandos fragmentados
+## 5. Handle fragmented commands
 
-TCP puede dividir un comando entre varias recepciones.
+TCP may split a command across several receptions.
 
-Ejemplo:
+Example:
 
 ```text
-Primer recv():   "PRIV"
-Segundo recv():  "MSG #general :Hola"
-Tercer recv():   "\r\n"
+First recv():    "PRIV"
+Second recv():   "MSG #general :Hello"
+Third recv():    "\r\n"
 ```
 
-Evolución del buffer:
+Buffer evolution:
 
 ```text
 "PRIV"
-"PRIVMSG #general :Hola"
-"PRIVMSG #general :Hola\r\n"
+"PRIVMSG #general :Hello"
+"PRIVMSG #general :Hello\r\n"
 ```
 
-Solo después de recibir `\r\n` debe extraerse:
+Only after receiving `\r\n` should this be extracted:
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
 
-El parser nunca debe recibir por separado:
+The parser must never receive separately:
 
 ```text
 PRIV
-MSG #general :Hola
+MSG #general :Hello
 ```
 
-El test del subject divide intencionadamente una palabra entre varios envíos para comprobar que el servidor reconstruye correctamente el flujo TCP.
+The subject test deliberately splits a word across several sends to check that the server reconstructs the TCP stream correctly.
 
 ---
 
-## 6. Gestionar varios comandos en una recepción
+## 6. Handle several commands in one reception
 
-También pueden recibirse varios comandos en una única llamada a `recv()`:
+Several commands can also be received in a single call to `recv()`:
 
 ```text
 PASS secret\r\nNICK roxana\r\nUSER roxana 0 * :Roxana\r\n
 ```
 
-El sistema debe extraer tres líneas independientes:
+The system must extract three independent lines:
 
 ```text
 PASS secret
@@ -142,44 +142,44 @@ NICK roxana
 USER roxana 0 * :Roxana
 ```
 
-No basta con buscar un único terminador. La extracción debe repetirse mientras el buffer contenga líneas completas.
+It is not enough to look for a single terminator. Extraction must be repeated while the buffer contains complete lines.
 
 ---
 
-## 7. Conservar los fragmentos incompletos
+## 7. Keep incomplete fragments
 
-Una recepción puede contener comandos completos y parte del siguiente:
+A reception may contain complete commands and part of the next one:
 
 ```text
 PASS secret\r\nNICK roxana\r\nUS
 ```
 
-Deben extraerse:
+These must be extracted:
 
 ```text
 PASS secret
 NICK roxana
 ```
 
-El buffer debe conservar:
+The buffer must keep:
 
 ```text
 US
 ```
 
-Si posteriormente llega:
+If later this arrives:
 
 ```text
 ER roxana 0 * :Roxana\r\n
 ```
 
-El buffer pasará a contener:
+The buffer will then contain:
 
 ```text
 USER roxana 0 * :Roxana\r\n
 ```
 
-Entonces podrá extraerse:
+Then this can be extracted:
 
 ```text
 USER roxana 0 * :Roxana
@@ -187,42 +187,42 @@ USER roxana 0 * :Roxana
 
 ---
 
-## 8. Separar framing y parsing
+## 8. Separate framing and parsing
 
-En esta fase todavía no es necesario interpretar la estructura interna de los comandos IRC.
+In this phase it is still not necessary to interpret the internal structure of IRC commands.
 
-Debe mantenerse el siguiente flujo:
+The following flow must be kept:
 
 ```text
 recv()
    ↓
-añadir bytes al buffer
+append bytes to the buffer
    ↓
-buscar terminadores \r\n
+search for \r\n terminators
    ↓
-extraer líneas completas
+extract complete lines
    ↓
-enviar cada línea completa al parser
+send each complete line to the parser
 ```
 
-Responsabilidades:
+Responsibilities:
 
-- `recv()` obtiene bytes del socket.
-- `Client` conserva los bytes pendientes.
-- El sistema de **framing** reconstruye líneas completas.
-- El parser interpreta posteriormente cada línea IRC.
+- `recv()` obtains bytes from the socket.
+- `Client` keeps the pending bytes.
+- The **framing** system reconstructs complete lines.
+- The parser later interprets each IRC line.
 
-Regla arquitectónica principal:
+Main architectural rule:
 
-> `recv()` no debe llamar directamente al parser con los bytes que acaba de recibir.
+> `recv()` must not call the parser directly with the bytes it just received.
 
-El parser solamente debe recibir líneas IRC completas.
+The parser must only receive complete IRC lines.
 
 ---
 
-## 9. Métodos recomendados para `Client`
+## 9. Recommended methods for `Client`
 
-La clase `Client` puede proporcionar los siguientes métodos:
+The `Client` class can provide the following methods:
 
 ```cpp
 void appendInput(
@@ -233,13 +233,13 @@ void appendInput(
 bool extractNextLine(std::string &line);
 ```
 
-### Método `appendInput()`
+### `appendInput()` method
 
-Debe añadir al buffer exactamente la cantidad de bytes indicada por `receivedByteCount`.
+It must append to the buffer exactly the number of bytes indicated by `receivedByteCount`.
 
-No debe asumir que los datos recibidos terminan en `'\0'`.
+It must not assume that the received data ends with `'\0'`.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 void Client::appendInput(
@@ -251,17 +251,17 @@ void Client::appendInput(
 }
 ```
 
-### Método `extractNextLine()`
+### `extractNextLine()` method
 
-Debe:
+It must:
 
-- Buscar el siguiente `\r\n`.
-- Devolver `false` si todavía no existe una línea completa.
-- Guardar la línea extraída en el parámetro `line`.
-- Eliminar del buffer la línea y su terminador.
-- Devolver `true` cuando se haya extraído correctamente una línea.
+- Search for the next `\r\n`.
+- Return `false` if a complete line does not exist yet.
+- Store the extracted line in the `line` parameter.
+- Remove the line and its terminator from the buffer.
+- Return `true` when a line has been extracted correctly.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 bool Client::extractNextLine(std::string &line)
@@ -283,7 +283,7 @@ bool Client::extractNextLine(std::string &line)
 }
 ```
 
-Uso conceptual:
+Conceptual use:
 
 ```cpp
 std::string line;
@@ -296,51 +296,51 @@ while (client.extractNextLine(line))
 
 ---
 
-## 10. Controlar el tamaño de las líneas
+## 10. Control line size
 
-Un cliente podría enviar datos indefinidamente sin incluir ningún terminador:
+A client could send data indefinitely without including any terminator:
 
 ```text
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
 ```
 
-Si no se establece un límite, `_inputBuffer` podría crecer indefinidamente y consumir toda la memoria del servidor.
+If no limit is set, `_inputBuffer` could grow indefinitely and consume all of the server’s memory.
 
-Un mensaje IRC tradicional puede ocupar como máximo:
+A traditional IRC message can occupy at most:
 
 ```text
-512 bytes incluyendo \r\n
+512 bytes including \r\n
 ```
 
-Por tanto, el contenido anterior al terminador puede ocupar como máximo:
+Therefore the content before the terminator can occupy at most:
 
 ```text
 510 bytes
 ```
 
-Debe definirse una política para entradas excesivas, por ejemplo:
+A policy for excessive input must be defined, for example:
 
-- Rechazar la línea.
-- Limpiar el buffer.
-- Desconectar al cliente.
+- Reject the line.
+- Clear the buffer.
+- Disconnect the client.
 
-Para una primera implementación, desconectar al cliente que envíe una entrada excesiva es una solución sencilla y segura.
+For a first implementation, disconnecting the client that sends excessive input is a simple and safe solution.
 
-También puede establecerse un límite general para el buffer pendiente como protección adicional.
+A general limit for the pending buffer can also be set as extra protection.
 
 ---
 
-## 11. Pruebas necesarias
+## 11. Required tests
 
-### Prueba 1 — Comando completo
+### Test 1 — Complete command
 
-Enviar:
+Send:
 
 ```text
 NICK roxana\r\n
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 NICK roxana
@@ -348,9 +348,9 @@ NICK roxana
 
 ---
 
-### Prueba 2 — Comando fragmentado
+### Test 2 — Fragmented command
 
-Enviar por separado:
+Send separately:
 
 ```text
 "NI"
@@ -359,25 +359,25 @@ Enviar por separado:
 "\n"
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 NICK roxana
 ```
 
-Debe extraerse una única línea y solamente después de recibir el `\n` final.
+A single line must be extracted and only after receiving the final `\n`.
 
 ---
 
-### Prueba 3 — Varios comandos juntos
+### Test 3 — Several commands together
 
-Enviar:
+Send:
 
 ```text
 PASS secret\r\nNICK roxana\r\nUSER roxana 0 * :Roxana\r\n
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 PASS secret
@@ -387,34 +387,34 @@ USER roxana 0 * :Roxana
 
 ---
 
-### Prueba 4 — Comandos completos y fragmento pendiente
+### Test 4 — Complete commands and pending fragment
 
-Enviar:
+Send:
 
 ```text
 PASS secret\r\nNICK roxana\r\nUS
 ```
 
-Deben extraerse:
+These must be extracted:
 
 ```text
 PASS secret
 NICK roxana
 ```
 
-El buffer debe conservar:
+The buffer must keep:
 
 ```text
 US
 ```
 
-Después, enviar:
+Then send:
 
 ```text
 ER roxana 0 * :Roxana\r\n
 ```
 
-Debe extraerse:
+This must be extracted:
 
 ```text
 USER roxana 0 * :Roxana
@@ -422,35 +422,35 @@ USER roxana 0 * :Roxana
 
 ---
 
-### Prueba 5 — Cliente desconectado
+### Test 5 — Disconnected client
 
-Si `recv()` devuelve `0`, el servidor debe:
+If `recv()` returns `0`, the server must:
 
-1. Cerrar el file descriptor del cliente.
-2. Eliminarlo de la colección de clientes.
-3. Eliminar su entrada correspondiente de `poll()`.
-4. Liberar cualquier recurso asociado.
-
----
-
-### Prueba 6 — Entrada sin terminador
-
-Enviar una gran cantidad de datos sin `\r\n`.
-
-El servidor debe impedir que el buffer crezca indefinidamente y aplicar la política definida para entradas excesivas.
+1. Close the client’s file descriptor.
+2. Remove it from the client collection.
+3. Remove its corresponding entry from `poll()`.
+4. Free any associated resource.
 
 ---
 
-## Criterio de finalización
+### Test 6 — Input without a terminator
 
-La fase estará completada cuando:
+Send a large amount of data without `\r\n`.
 
-- Cada cliente tenga su propio buffer de entrada persistente.
-- Los bytes recibidos se añadan al buffer correspondiente.
-- Los comandos fragmentados se reconstruyan correctamente.
-- Se puedan extraer varios comandos recibidos juntos.
-- Los fragmentos incompletos permanezcan almacenados.
-- La extracción se repita mientras existan líneas completas.
-- El parser solamente reciba líneas IRC completas.
-- Se gestionen correctamente la desconexión y los errores de `recv()`.
-- El buffer no pueda crecer indefinidamente.
+The server must prevent the buffer from growing indefinitely and apply the policy defined for excessive input.
+
+---
+
+## Completion criterion
+
+The phase will be complete when:
+
+- Each client has its own persistent input buffer.
+- Received bytes are appended to the corresponding buffer.
+- Fragmented commands are reconstructed correctly.
+- Several commands received together can be extracted.
+- Incomplete fragments remain stored.
+- Extraction is repeated while complete lines exist.
+- The parser only receives complete IRC lines.
+- Disconnection and `recv()` errors are handled correctly.
+- The buffer cannot grow indefinitely.

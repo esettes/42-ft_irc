@@ -1,24 +1,24 @@
-# Fase 4 — Modelo básico de cliente
+# Phase 4 — Basic client model
 
-## Objetivo
+## Goal
 
-Crear una clase `Client` que represente el estado de cada usuario conectado al servidor.
+Create a `Client` class that represents the state of each user connected to the server.
 
-Cada vez que el servidor acepte una nueva conexión TCP mediante `accept()`, deberá crear un objeto `Client` asociado al **file descriptor del socket** de esa conexión.
+Every time the server accepts a new TCP connection through `accept()`, it must create a `Client` object associated with that connection’s **socket file descriptor**.
 
-En esta fase todavía no es necesario implementar por completo los comandos IRC. El objetivo es preparar el modelo de datos que permitirá gestionar posteriormente:
+In this phase it is still not necessary to fully implement the IRC commands. The goal is to prepare the data model that will later allow managing:
 
-* [x] La recepción y el envío de información.
-* [ ] La autenticación mediante contraseña.
-* [ ] El registro IRC mediante `NICK` y `USER`.
-* [ ] Los canales a los que pertenece el cliente (como en slack).
-* [ ] La desconexión y eliminación segura del cliente.
+* [x] Receiving and sending information.
+* [ ] Password authentication.
+* [ ] IRC registration through `NICK` and `USER`.
+* [ ] The channels the client belongs to (as in Slack).
+* [ ] Safe disconnection and removal of the client.
 
 ---
 
-## 1. Crear la clase `Client`
+## 1. Create the `Client` class
 
-La clase debe almacenar como mínimo los siguientes datos:
+The class must store at least the following data:
 
 ```text
 Client
@@ -35,7 +35,7 @@ Client
 └── channels joined
 ```
 
-Una posible declaración inicial sería:
+A possible initial declaration would be:
 
 ```cpp
 class Client
@@ -63,27 +63,27 @@ class Client
 };
 ```
 
-El contenedor utilizado para los canales puede cambiar más adelante cuando se implemente la clase `Channel`. Por ahora, un `std::set<std::string>` permite almacenar los nombres sin duplicados.
+The container used for channels may change later when the `Channel` class is implemented. For now, a `std::set<std::string>` lets you store the names without duplicates.
 
 ---
 
-## 2. Almacenar el file descriptor
+## 2. Store the file descriptor
 
-Cada cliente debe conocer el file descriptor del socket utilizado para comunicarse con él:
+Each client must know the file descriptor of the socket used to communicate with it:
 
 ```cpp
 int _socketFileDescriptor;
 ```
 
-Este descriptor permite identificar la conexión en:
+This descriptor lets you identify the connection in:
 
-* El contenedor de clientes del servidor.
-* La estructura utilizada por `poll()`.
-* Las llamadas a `recv()`.
-* Las llamadas a `send()`.
-* La gestión de desconexiones.
+* The server’s client container.
+* The structure used by `poll()`.
+* Calls to `recv()`.
+* Calls to `send()`.
+* Disconnection handling.
 
-Debe proporcionarse un método para consultarlo:
+A method to query it must be provided:
 
 ```cpp
 int getSocketFileDescriptor() const;
@@ -91,55 +91,55 @@ int getSocketFileDescriptor() const;
 
 ---
 
-## 3. Implementar el buffer de entrada
+## 3. Implement the input buffer
 
-El buffer de entrada almacena los bytes recibidos mediante `recv()`:
+The input buffer stores the bytes received through `recv()`:
 
 ```cpp
 std::string _inputBuffer;
 ```
 
-TCP no garantiza que un comando IRC llegue completo en una sola llamada. También puede entregar varios comandos juntos.
+TCP does not guarantee that an IRC command arrives complete in a single call. It may also deliver several commands together.
 
-Por ejemplo, un cliente puede enviar:
+For example, a client may send:
 
 ```text
 NICK roxana\r\nUSER roxana 0 * :Roxana\r\n
 ```
 
-El servidor podría recibir esos datos:
+The server might receive that data:
 
-* En una sola llamada a `recv()`.
-* Divididos en varias llamadas.
-* Junto con otros comandos posteriores.
+* In a single call to `recv()`.
+* Split across several calls.
+* Together with later commands.
 
-Por eso, los datos deben añadirse al buffer:
+That is why the data must be appended to the buffer:
 
 ```cpp
 void appendToInputBuffer(const std::string &receivedData);
 ```
 
-También será necesario extraer únicamente las líneas completas terminadas en `\r\n`:
+It will also be necessary to extract only the complete lines ending in `\r\n`:
 
 ```cpp
 bool extractNextLine(std::string &line);
 ```
 
-Si todavía no existe una línea completa, los datos deben permanecer guardados en el buffer hasta la siguiente lectura.
+If a complete line does not exist yet, the data must stay stored in the buffer until the next read.
 
 ---
 
-## 4. Implementar el buffer de salida
+## 4. Implement the output buffer
 
-El buffer de salida almacena las respuestas pendientes de enviar:
+The output buffer stores the replies pending to send:
 
 ```cpp
 std::string _outputBuffer;
 ```
 
-No se debe asumir que `send()` enviará todos los bytes solicitados, especialmente porque los sockets son no bloqueantes.
+You must not assume that `send()` will send every requested byte, especially because the sockets are non-blocking.
 
-Métodos recomendados:
+Recommended methods:
 
 ```cpp
 void appendToOutputBuffer(const std::string &message);
@@ -148,15 +148,15 @@ void removeSentOutput(std::size_t sentByteCount);
 bool hasPendingOutput() const;
 ```
 
-Cuando `send()` consiga enviar una parte del buffer, solamente deben eliminarse los bytes realmente enviados.
+When `send()` manages to send part of the buffer, only the bytes actually sent must be removed.
 
-Si todavía quedan datos pendientes, el cliente deberá seguir vigilándose con el evento `POLLOUT`.
+If data is still pending, the client must keep being watched with the `POLLOUT` event.
 
 ---
 
-## 5. Almacenar la identidad IRC
+## 5. Store the IRC identity
 
-El cliente debe guardar los datos recibidos durante el registro:
+The client must store the data received during registration:
 
 ```cpp
 std::string _nickname;
@@ -166,30 +166,30 @@ std::string _realName;
 
 ### Nickname
 
-Se recibe mediante:
+It is received through:
 
 ```text
 NICK <nickname>
 ```
 
-El nickname debe ser válido y no puede estar siendo utilizado por otro cliente.
+The nickname must be valid and cannot be in use by another client.
 
-Métodos recomendados:
+Recommended methods:
 
 ```cpp
 const std::string &getNickname() const;
 void setNickname(const std::string &nickname);
 ```
 
-### Username y real name
+### Username and real name
 
-Se reciben mediante:
+They are received through:
 
 ```text
 USER <username> 0 * :<real name>
 ```
 
-Métodos recomendados:
+Recommended methods:
 
 ```cpp
 const std::string &getUsername() const;
@@ -201,15 +201,15 @@ void setRealName(const std::string &realName);
 
 ---
 
-## 6. Representar por separado los estados del registro
+## 6. Represent registration states separately
 
-El registro IRC depende de varias condiciones. Por eso no conviene representarlo mediante un único estado como:
+IRC registration depends on several conditions. That is why it is not a good idea to represent it with a single state such as:
 
 ```cpp
 bool _authenticated;
 ```
 
-En su lugar, deben almacenarse por separado:
+Instead, they must be stored separately:
 
 ```cpp
 bool _passwordAccepted;
@@ -218,16 +218,16 @@ bool _usernameReceived;
 bool _registered;
 ```
 
-Cada estado tiene una responsabilidad concreta:
+Each state has a concrete responsibility:
 
-| Estado              | Significado                                                      |
-| ------------------- | ---------------------------------------------------------------- |
-| `_passwordAccepted` | El cliente ha enviado la contraseña correcta mediante `PASS`.    |
-| `_nicknameReceived` | El servidor ha aceptado un nickname válido y disponible.         |
-| `_usernameReceived` | El servidor ha recibido correctamente el comando `USER`.         |
-| `_registered`       | El cliente ha completado todas las condiciones del registro IRC. |
+| State               | Meaning                                                        |
+| ------------------- | -------------------------------------------------------------- |
+| `_passwordAccepted` | The client has sent the correct password through `PASS`.       |
+| `_nicknameReceived` | The server has accepted a valid and available nickname.        |
+| `_usernameReceived` | The server has correctly received the `USER` command.          |
+| `_registered`       | The client has completed every IRC registration condition.     |
 
-Métodos recomendados:
+Recommended methods:
 
 ```cpp
 bool isPasswordAccepted() const;
@@ -244,19 +244,19 @@ bool isRegistered() const;
 
 ---
 
-## 7. Comprobar cuándo se completa el registro
+## 7. Check when registration is complete
 
-Un cliente estará registrado cuando se cumplan simultáneamente estas condiciones:
+A client will be registered when these conditions are met at the same time:
 
 ```text
-PASS correcto
+correct PASS
     +
-NICK válido y disponible
+valid and available NICK
     +
-USER recibido
+USER received
 ```
 
-La condición puede representarse así:
+The condition can be represented like this:
 
 ```cpp
 _passwordAccepted
@@ -264,15 +264,15 @@ _passwordAccepted
     && _usernameReceived
 ```
 
-La comprobación debe realizarse después de procesar cada comando relacionado con el registro:
+The check must be performed after processing each registration-related command:
 
 * `PASS`
 * `NICK`
 * `USER`
 
-Esto es necesario porque `NICK` y `USER` pueden recibirse en distinto orden.
+This is necessary because `NICK` and `USER` may be received in a different order.
 
-Por ejemplo, ambos órdenes son posibles:
+For example, both orders are possible:
 
 ```text
 PASS secret
@@ -286,7 +286,7 @@ USER roxana 0 * :Roxana
 NICK roxana
 ```
 
-Puede añadirse un método como:
+A method such as this can be added:
 
 ```cpp
 bool Client::canBeRegistered() const
@@ -297,7 +297,7 @@ bool Client::canBeRegistered() const
 }
 ```
 
-El servidor podrá utilizarlo para completar el registro:
+The server will be able to use it to complete registration:
 
 ```cpp
 if (!client.isRegistered() && client.canBeRegistered())
@@ -306,9 +306,9 @@ if (!client.isRegistered() && client.canBeRegistered())
 }
 ```
 
-Es importante comprobar primero `isRegistered()` para no completar el registro ni enviar el mensaje de bienvenida varias veces.
+It is important to check `isRegistered()` first so registration is not completed and the welcome message is not sent several times.
 
-Método recomendado:
+Recommended method:
 
 ```cpp
 void markAsRegistered();
@@ -316,9 +316,9 @@ void markAsRegistered();
 
 ---
 
-## 8. Inicializar correctamente el cliente
+## 8. Initialize the client correctly
 
-El constructor debe recibir el file descriptor de la conexión e inicializar todos los estados:
+The constructor must receive the connection file descriptor and initialize every state:
 
 ```cpp
 Client::Client(int socketFileDescriptor)
@@ -337,26 +337,26 @@ Client::Client(int socketFileDescriptor)
 }
 ```
 
-Cuando se crea un cliente:
+When a client is created:
 
-* Tiene una conexión TCP activa.
-* Todavía no ha aceptado la contraseña.
-* Todavía no ha enviado un nickname válido.
-* Todavía no ha enviado `USER`.
-* Todavía no está registrado.
-* Todavía no pertenece a ningún canal.
+* It has an active TCP connection.
+* It has not accepted the password yet.
+* It has not sent a valid nickname yet.
+* It has not sent `USER` yet.
+* It is not registered yet.
+* It does not belong to any channel yet.
 
 ---
 
-## 9. Almacenar los canales del cliente
+## 9. Store the client’s channels
 
-El cliente debe saber a qué canales pertenece:
+The client must know which channels it belongs to:
 
 ```cpp
 std::set<std::string> _joinedChannels;
 ```
 
-Métodos recomendados:
+Recommended methods:
 
 ```cpp
 void joinChannel(const std::string &channelName);
@@ -365,53 +365,53 @@ bool isInChannel(const std::string &channelName) const;
 const std::set<std::string> &getJoinedChannels() const;
 ```
 
-En esta fase basta con preparar la estructura. La lógica completa de `JOIN`, `PART` y la clase `Channel` se implementará más adelante.
+In this phase it is enough to prepare the structure. The full logic of `JOIN`, `PART` and the `Channel` class will be implemented later.
 
 ---
 
-## 10. Crear un cliente al aceptar una conexión
+## 10. Create a client when accepting a connection
 
-Después de que `accept()` devuelva un nuevo file descriptor, el servidor debe:
+After `accept()` returns a new file descriptor, the server must:
 
-1. Configurar el nuevo socket como no bloqueante.
-2. Crear el objeto `Client`.
-3. Guardarlo en el contenedor de clientes.
-4. Añadir su file descriptor a los elementos vigilados por `poll()`.
+1. Configure the new socket as non-blocking.
+2. Create the `Client` object.
+3. Store it in the client container.
+4. Add its file descriptor to the elements watched by `poll()`.
 
-Una estructura habitual en `Server` es:
+A usual structure in `Server` is:
 
 ```cpp
 std::map<int, Client *> _clients;
 ```
 
-El file descriptor funciona como clave:
+The file descriptor works as the key:
 
 ```cpp
 Client *newClient = new Client(clientSocketFileDescriptor);
 _clients[clientSocketFileDescriptor] = newClient;
 ```
 
-Si el proyecto permite que `Client` sea copiable y su destructor sea accesible, también puede estudiarse almacenar objetos directamente:
+If the project allows `Client` to be copyable and its destructor to be accessible, storing objects directly can also be considered:
 
 ```cpp
 std::map<int, Client> _clients;
 ```
 
-La decisión debe mantener una propiedad clara: el servidor es responsable de todos los clientes que contiene y debe liberarlos cuando se desconecten.
+The decision must keep ownership clear: the server is responsible for every client it contains and must free them when they disconnect.
 
 ---
 
-## 11. Eliminar correctamente un cliente
+## 11. Remove a client correctly
 
-Cuando un cliente se desconecte o se produzca un error fatal, el servidor deberá:
+When a client disconnects or a fatal error occurs, the server must:
 
-1. Retirarlo de los elementos vigilados por `poll()`.
-2. Eliminarlo de todos los canales.
-3. Cerrar su socket.
-4. Eliminar su objeto `Client`.
-5. Borrarlo del contenedor de clientes.
+1. Remove it from the elements watched by `poll()`.
+2. Remove it from every channel.
+3. Close its socket.
+4. Delete its `Client` object.
+5. Erase it from the client container.
 
-Si se utilizan punteros:
+If pointers are used:
 
 ```cpp
 std::map<int, Client *>::iterator clientIterator =
@@ -424,55 +424,55 @@ if (clientIterator != _clients.end())
 }
 ```
 
-Debe decidirse claramente quién cierra el socket:
+It must be decided clearly who closes the socket:
 
-* El destructor de `Client`.
-* O el método de desconexión de `Server`.
+* The `Client` destructor.
+* Or the `Server` disconnection method.
 
-No deben hacerlo ambos, porque se produciría un cierre duplicado del mismo file descriptor.
+Both must not do it, because that would produce a duplicate close of the same file descriptor.
 
 ---
 
-## 12. Responsabilidades de cada clase
+## 12. Responsibilities of each class
 
 ### `Client`
 
-Debe encargarse de almacenar y modificar:
+Must take care of storing and modifying:
 
-* El file descriptor.
-* Los buffers de entrada y salida.
-* La identidad IRC.
-* El progreso del registro.
-* Los canales a los que pertenece.
+* The file descriptor.
+* The input and output buffers.
+* The IRC identity.
+* Registration progress.
+* The channels it belongs to.
 
 ### `Server`
 
-Debe encargarse de:
+Must take care of:
 
-* Aceptar conexiones.
-* Crear y almacenar clientes.
-* Comprobar que los nicknames no estén ocupados.
-* Procesar los comandos recibidos.
-* Completar el registro.
-* Añadir o retirar clientes de los canales.
-* Desconectar y eliminar clientes.
+* Accepting connections.
+* Creating and storing clients.
+* Checking that nicknames are not taken.
+* Processing received commands.
+* Completing registration.
+* Adding or removing clients from channels.
+* Disconnecting and deleting clients.
 
-La clase `Client` representa el estado de una conexión, pero no debe conocer ni controlar todo el servidor.
+The `Client` class represents the state of a connection, but it must not know or control the whole server.
 
 ---
 
-## Resultado esperado
+## Expected result
 
-Al finalizar esta fase:
+At the end of this phase:
 
-* Cada conexión aceptada tiene su propio objeto `Client`.
-* Cada cliente está asociado a un file descriptor.
-* Los datos recibidos pueden acumularse en un buffer de entrada.
-* Las respuestas pendientes pueden conservarse en un buffer de salida.
-* El cliente almacena nickname, username y real name.
-* El progreso del registro se representa mediante estados separados.
-* El registro puede completarse independientemente del orden de `NICK` y `USER`.
-* Existe una estructura para recordar los canales del cliente.
-* El servidor puede eliminar correctamente un cliente desconectado.
+* Each accepted connection has its own `Client` object.
+* Each client is associated with a file descriptor.
+* Received data can be accumulated in an input buffer.
+* Pending replies can be kept in an output buffer.
+* The client stores nickname, username and real name.
+* Registration progress is represented through separate states.
+* Registration can be completed independently of the order of `NICK` and `USER`.
+* There is a structure to remember the client’s channels.
+* The server can correctly remove a disconnected client.
 
-En esta fase todavía no es necesario implementar completamente `PASS`, `NICK`, `USER`, `JOIN` o `PART`. Debe quedar preparado el modelo sobre el que funcionarán esos comandos.
+In this phase it is still not necessary to fully implement `PASS`, `NICK`, `USER`, `JOIN` or `PART`. The model those commands will run on must be ready.

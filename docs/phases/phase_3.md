@@ -1,47 +1,47 @@
-# Fase 3 — Bucle principal con un único `poll()`
+# Phase 3 — Main loop with a single `poll()`
 
-## Objetivo de la fase
+## Goal of the phase
 
-Implementar el bucle principal de eventos del servidor utilizando una única llamada central a `poll()`.
+Implement the server’s main event loop using a single central `poll()` call.
 
-Al finalizar esta fase, el servidor debe ser capaz de:
+At the end of this phase, the server must be able to:
 
-* Aceptar varios clientes simultáneamente.
-* Mantener todos los sockets en modo no bloqueante.
-* Detectar cuándo hay datos disponibles para leer.
-* Enviar datos únicamente cuando el socket permita escribir.
-* Detectar errores y desconexiones.
-* Cerrar y eliminar correctamente los clientes desconectados.
-* Continuar funcionando aunque uno de los clientes se desconecte o provoque un error.
+* Accept several clients simultaneously.
+* Keep every socket in non-blocking mode.
+* Detect when there is data available to read.
+* Send data only when the socket allows writing.
+* Detect errors and disconnections.
+* Close and remove disconnected clients correctly.
+* Keep running even if one of the clients disconnects or causes an error.
 
-En esta fase todavía no es necesario interpretar comandos IRC.
+In this phase it is still not necessary to interpret IRC commands.
 
 ---
 
-## 1. Mantener una colección de descriptores
+## 1. Keep a collection of descriptors
 
-El servidor debe almacenar todos los sockets que necesita vigilar en una colección:
+The server must store every socket it needs to watch in a collection:
 
 ```cpp
 std::vector<pollfd> pollDescriptors;
 ```
 
-Normalmente, el primer elemento será siempre el socket de escucha:
+Normally the first element will always be the listening socket:
 
 ```text
-pollDescriptors[0] → socket de escucha
-pollDescriptors[1] → primer cliente
-pollDescriptors[2] → segundo cliente
-pollDescriptors[3] → tercer cliente
+pollDescriptors[0] → listening socket
+pollDescriptors[1] → first client
+pollDescriptors[2] → second client
+pollDescriptors[3] → third client
 ```
 
-Cada estructura `pollfd` contiene:
+Each `pollfd` structure contains:
 
-* `fd`: descriptor del socket.
-* `events`: operaciones que queremos vigilar.
-* `revents`: eventos que realmente han ocurrido.
+* `fd`: socket descriptor.
+* `events`: operations we want to watch.
+* `revents`: events that actually occurred.
 
-El socket de escucha debe vigilar inicialmente `POLLIN`:
+The listening socket must initially watch `POLLIN`:
 
 ```cpp
 pollfd listeningDescriptor;
@@ -51,252 +51,252 @@ listeningDescriptor.events = POLLIN;
 listeningDescriptor.revents = 0;
 ```
 
-En el socket de escucha, `POLLIN` significa que existe al menos una conexión pendiente que puede aceptarse mediante `accept()`.
+On the listening socket, `POLLIN` means there is at least one pending connection that can be accepted through `accept()`.
 
 ---
 
-## 2. Crear un único bucle principal
+## 2. Create a single main loop
 
-El servidor debe ejecutar un bucle mientras permanezca activo:
+The server must run a loop while it stays active:
 
 ```text
-while servidor activo
-    llamar a poll()
-    procesar socket de escucha
-    procesar sockets de clientes
+while server is active
+    call poll()
+    process listening socket
+    process client sockets
 ```
 
-Debe existir una única llamada central a `poll()` encargada de vigilar:
+There must be a single central `poll()` call in charge of watching:
 
-* El socket de escucha.
-* La lectura de los clientes.
-* La escritura hacia los clientes.
-* Los errores.
-* Las desconexiones.
+* The listening socket.
+* Reading from clients.
+* Writing to clients.
+* Errors.
+* Disconnections.
 
-No se debe crear un `poll()` separado para cada operación.
+A separate `poll()` must not be created for each operation.
 
 ---
 
-## 3. Comprobar el resultado de `poll()`
+## 3. Check the result of `poll()`
 
-La función `poll()` puede devolver:
+The `poll()` function can return:
 
-* Un valor mayor que `0`: hay descriptores con eventos pendientes.
-* `0`: terminó el tiempo de espera sin que ocurriera ningún evento.
-* `-1`: ocurrió un error.
+* A value greater than `0`: there are descriptors with pending events.
+* `0`: the wait time ended without any event occurring.
+* `-1`: an error occurred.
 
-Si `poll()` devuelve `-1`:
+If `poll()` returns `-1`:
 
-* Si `errno == EINTR`, la llamada fue interrumpida por una señal y el bucle puede continuar.
-* Para otros errores, debe notificarse el problema y finalizar el servidor de forma controlada.
+* If `errno == EINTR`, the call was interrupted by a signal and the loop can continue.
+* For other errors, the problem must be reported and the server terminated in a controlled way.
 
-Un timeout permite que el servidor recupere periódicamente el control, aunque no haya actividad:
+A timeout lets the server periodically regain control even if there is no activity:
 
 ```cpp
 const int pollTimeoutMilliseconds = 1000;
 ```
 
-También se puede utilizar `-1` para esperar indefinidamente, siempre que la finalización mediante señales esté correctamente diseñada.
+`-1` can also be used to wait indefinitely, as long as signal-based termination is designed correctly.
 
 ---
 
-## 4. Aceptar nuevos clientes
+## 4. Accept new clients
 
-Cuando el socket de escucha tenga el evento `POLLIN`, se debe llamar a:
+When the listening socket has the `POLLIN` event, you must call:
 
 ```cpp
 accept();
 ```
 
-Después de aceptar una conexión:
+After accepting a connection:
 
-1. Obtener el descriptor del nuevo socket.
-2. Configurarlo como no bloqueante mediante `fcntl()`.
-3. Crear la representación interna del cliente.
-4. Añadir un nuevo `pollfd` a `pollDescriptors`.
-5. Configurarlo inicialmente para vigilar `POLLIN`.
-6. Mostrar un mensaje indicando que el cliente se ha conectado.
+1. Obtain the new socket’s descriptor.
+2. Configure it as non-blocking through `fcntl()`.
+3. Create the client’s internal representation.
+4. Add a new `pollfd` to `pollDescriptors`.
+5. Configure it initially to watch `POLLIN`.
+6. Show a message indicating that the client has connected.
 
-El descriptor del cliente debería empezar con:
+The client descriptor should start with:
 
 ```cpp
 clientDescriptor.events = POLLIN;
 ```
 
-Si la configuración o el registro del cliente falla después de `accept()`, el descriptor recién creado debe cerrarse para evitar una fuga de recursos.
+If the client’s configuration or registration fails after `accept()`, the newly created descriptor must be closed to avoid a resource leak.
 
 ---
 
-## 5. Recibir datos de los clientes
+## 5. Receive data from clients
 
-Cuando un cliente tenga el evento `POLLIN`, significa que `recv()` puede ejecutarse sin bloquear el servidor.
+When a client has the `POLLIN` event, it means `recv()` can run without blocking the server.
 
-El resultado de `recv()` debe interpretarse de la siguiente manera:
+The result of `recv()` must be interpreted as follows:
 
-### `recv()` devuelve un valor mayor que cero
+### `recv()` returns a value greater than zero
 
-Se han recibido datos.
+Data has been received.
 
-Los bytes deben añadirse al búfer de entrada del cliente:
+The bytes must be appended to the client’s input buffer:
 
 ```text
 client input buffer += received data
 ```
 
-En esta fase todavía no es necesario interpretar esos datos como comandos IRC. El objetivo es comprobar que el servidor puede recibirlos sin bloquearse.
+In this phase it is still not necessary to interpret that data as IRC commands. The goal is to check that the server can receive them without blocking.
 
-### `recv()` devuelve cero
+### `recv()` returns zero
 
-El cliente ha cerrado la conexión de manera ordenada.
+The client has closed the connection in an orderly way.
 
-El servidor debe:
+The server must:
 
-* Cerrar su descriptor.
-* Eliminar su información interna.
-* Eliminar su correspondiente `pollfd`.
-* Informar de la desconexión.
+* Close its descriptor.
+* Remove its internal information.
+* Remove its corresponding `pollfd`.
+* Report the disconnection.
 
-### `recv()` devuelve `-1`
+### `recv()` returns `-1`
 
-Se debe comprobar `errno`:
+`errno` must be checked:
 
-* `EAGAIN` o `EWOULDBLOCK`: en ese momento no quedan datos disponibles; no es una desconexión.
-* `EINTR`: la operación fue interrumpida; puede intentarse de nuevo en una iteración posterior.
-* Cualquier otro error: debe eliminarse el cliente.
+* `EAGAIN` or `EWOULDBLOCK`: no more data is available at that moment; it is not a disconnection.
+* `EINTR`: the operation was interrupted; it can be tried again in a later iteration.
+* Any other error: the client must be removed.
 
-Nunca debe ejecutarse `recv()` sobre un cliente sin haber detectado previamente `POLLIN` mediante el `poll()` central.
+`recv()` must never be run on a client without first detecting `POLLIN` through the central `poll()`.
 
 ---
 
-## 6. Enviar datos a los clientes
+## 6. Send data to clients
 
-Cada cliente debería disponer de un búfer de salida con los datos pendientes de enviar.
+Each client should have an output buffer with the data pending to send.
 
-Cuando ese búfer no esté vacío, se debe activar `POLLOUT`:
+When that buffer is not empty, `POLLOUT` must be enabled:
 
 ```cpp
 clientDescriptor.events |= POLLOUT;
 ```
 
-Cuando `poll()` indique `POLLOUT`, se puede llamar a `send()`.
+When `poll()` reports `POLLOUT`, `send()` can be called.
 
-`send()` puede enviar menos bytes de los solicitados. Por tanto:
+`send()` may send fewer bytes than requested. Therefore:
 
-1. Se eliminan del búfer solamente los bytes que realmente se enviaron.
-2. El resto permanece pendiente para el siguiente `POLLOUT`.
-3. Cuando el búfer queda vacío, se desactiva `POLLOUT`.
+1. Only the bytes that were actually sent are removed from the buffer.
+2. The rest remains pending for the next `POLLOUT`.
+3. When the buffer becomes empty, `POLLOUT` is disabled.
 
 ```cpp
 clientDescriptor.events &= ~POLLOUT;
 ```
 
-No debe mantenerse `POLLOUT` activado permanentemente. Un socket suele estar disponible para escritura casi todo el tiempo y esto haría que `poll()` regresara continuamente, provocando consumo innecesario de CPU.
+`POLLOUT` must not stay enabled permanently. A socket is usually available for writing almost all the time and this would make `poll()` return continuously, causing unnecessary CPU use.
 
-Nunca se debe llamar a `send()` si `poll()` no ha indicado previamente `POLLOUT`.
-
----
-
-## 7. Detectar errores y desconexiones
-
-Para cada cliente deben comprobarse también los siguientes eventos:
-
-* `POLLERR`: ocurrió un error en el socket.
-* `POLLHUP`: el otro extremo cerró la conexión.
-* `POLLNVAL`: el descriptor no es válido.
-
-Ante cualquiera de estos eventos, el cliente debe ser eliminado de forma segura.
-
-Si `POLLIN` y `POLLHUP` aparecen simultáneamente, puede haber últimos datos pendientes. Una implementación robusta procesa primero la lectura y después elimina el cliente si continúa conectado.
-
-Un error en un cliente no debe detener todo el servidor.
+`send()` must never be called if `poll()` has not previously reported `POLLOUT`.
 
 ---
 
-## 8. Eliminar correctamente un cliente
+## 7. Detect errors and disconnections
 
-Eliminar un cliente implica realizar todas estas operaciones:
+For each client the following events must also be checked:
 
-1. Obtener su descriptor.
-2. Cerrar el socket con `close()`.
-3. Eliminar el objeto `Client` o su información asociada.
-4. Eliminar su entrada de `pollDescriptors`.
-5. Informar de la desconexión.
+* `POLLERR`: an error occurred on the socket.
+* `POLLHUP`: the other end closed the connection.
+* `POLLNVAL`: the descriptor is not valid.
 
-Hay que tener cuidado al eliminar elementos de un `std::vector` mientras se está recorriendo.
+On any of these events, the client must be removed safely.
 
-Al ejecutar `erase()`, los elementos posteriores cambian de posición. Para evitar saltarse un cliente:
+If `POLLIN` and `POLLHUP` appear at the same time, there may be last pending data. A robust implementation processes the read first and then removes the client if it is still connected.
 
-* Se puede recorrer el vector de atrás hacia delante.
-* O controlar manualmente el índice y no incrementarlo después de eliminar un elemento.
-* O marcar los clientes y eliminarlos después de procesar los eventos.
-
-El socket de escucha no debe tratarse como un cliente ni eliminarse mediante la lógica normal de desconexión.
+An error on one client must not stop the whole server.
 
 ---
 
-## 9. Mantener sincronizados descriptores y clientes
+## 8. Remove a client correctly
 
-El servidor necesita poder encontrar el objeto `Client` asociado a cada descriptor.
+Removing a client implies performing all of these operations:
 
-Una posible organización es mantener:
+1. Obtain its descriptor.
+2. Close the socket with `close()`.
+3. Delete the `Client` object or its associated information.
+4. Remove its entry from `pollDescriptors`.
+5. Report the disconnection.
+
+Care is needed when removing elements from a `std::vector` while it is being traversed.
+
+When `erase()` is run, later elements change position. To avoid skipping a client:
+
+* The vector can be traversed from back to front.
+* Or the index can be controlled manually and not incremented after removing an element.
+* Or clients can be marked and removed after processing the events.
+
+The listening socket must not be treated as a client or removed through the normal disconnection logic.
+
+---
+
+## 9. Keep descriptors and clients synchronized
+
+The server needs to be able to find the `Client` object associated with each descriptor.
+
+One possible organization is to keep:
 
 ```cpp
 std::vector<pollfd> pollDescriptors;
 std::map<int, Client> clients;
 ```
 
-El descriptor del socket puede utilizarse como identificador:
+The socket descriptor can be used as the identifier:
 
 ```text
-descriptor → objeto Client
+descriptor → Client object
 ```
 
-Cada vez que se acepta un cliente, debe añadirse a ambas colecciones.
+Every time a client is accepted, it must be added to both collections.
 
-Cada vez que se desconecta, debe eliminarse de ambas.
+Every time it disconnects, it must be removed from both.
 
-No debe quedar:
+There must not remain:
 
-* Un descriptor dentro de `pollDescriptors` sin cliente asociado.
-* Un cliente registrado cuyo descriptor ya se haya cerrado.
-* Un descriptor cerrado que continúe siendo vigilado por `poll()`.
+* A descriptor inside `pollDescriptors` without an associated client.
+* A registered client whose descriptor has already been closed.
+* A closed descriptor that continues to be watched by `poll()`.
 
 ---
 
-## 10. Flujo general del bucle
+## 10. General loop flow
 
-El funcionamiento conceptual debe ser:
+The conceptual behaviour must be:
 
 ```text
 poll()
 │
-├── listener contiene POLLIN
+├── listener contains POLLIN
 │   └── accept()
-│       ├── configurar socket no bloqueante
-│       ├── registrar cliente
-│       └── añadir pollfd
+│       ├── configure non-blocking socket
+│       ├── register client
+│       └── add pollfd
 │
-├── cliente contiene POLLIN
+├── client contains POLLIN
 │   └── recv()
-│       ├── datos recibidos → guardar en input buffer
-│       ├── resultado 0 → desconectar
-│       └── error fatal → desconectar
+│       ├── data received → store in input buffer
+│       ├── result 0 → disconnect
+│       └── fatal error → disconnect
 │
-├── cliente contiene POLLOUT
+├── client contains POLLOUT
 │   └── send()
-│       ├── eliminar bytes enviados
-│       └── desactivar POLLOUT si no quedan datos
+│       ├── remove sent bytes
+│       └── disable POLLOUT if no data remains
 │
-└── POLLERR, POLLHUP o POLLNVAL
-    └── cerrar y eliminar cliente
+└── POLLERR, POLLHUP or POLLNVAL
+    └── close and remove client
 ```
 
 ---
 
-## 11. Mensajes de estado recomendados
+## 11. Recommended status messages
 
-Durante esta fase resulta útil mostrar información como:
+During this phase it is useful to show information such as:
 
 ```text
 [SERVER] Event loop started
@@ -308,66 +308,66 @@ Durante esta fase resulta útil mostrar información como:
 [SERVER] Shutting down
 ```
 
-Estos mensajes facilitan comprobar que:
+These messages make it easier to check that:
 
-* Se aceptan varios clientes.
-* Cada descriptor se procesa correctamente.
-* Las desconexiones se detectan.
-* El servidor continúa funcionando después de eliminar un cliente.
+* Several clients are accepted.
+* Each descriptor is processed correctly.
+* Disconnections are detected.
+* The server keeps running after removing a client.
 
 ---
 
-## 12. Pruebas de la fase
+## 12. Phase tests
 
-### Iniciar el servidor
+### Start the server
 
 ```bash
 ./ircserv 6667 password
 ```
 
-### Abrir varios clientes
+### Open several clients
 
-Desde distintas terminales:
+From different terminals:
 
 ```bash
 nc 127.0.0.1 6667
 ```
 
-Debe ser posible abrir varias conexiones simultáneamente.
+It must be possible to open several connections at the same time.
 
-### Enviar datos
+### Send data
 
-Escribir texto desde cada cliente y comprobar que el servidor registra la recepción sin quedarse bloqueado.
+Type text from each client and check that the server logs the reception without becoming blocked.
 
-### Desconectar clientes
+### Disconnect clients
 
-Cerrar una de las conexiones y comprobar que:
+Close one of the connections and check that:
 
-* El servidor detecta la desconexión.
-* Cierra el descriptor.
-* Elimina el cliente.
-* Los demás clientes siguen conectados.
-* Se pueden conectar nuevos clientes posteriormente.
+* The server detects the disconnection.
+* It closes the descriptor.
+* It removes the client.
+* The other clients stay connected.
+* New clients can be connected afterwards.
 
 ---
 
-## Criterios para considerar terminada la fase
+## Criteria to consider the phase finished
 
-La fase 3 está completada cuando:
+Phase 3 is complete when:
 
-* Existe una única llamada central a `poll()`.
-* El socket de escucha forma parte de `pollDescriptors`.
-* Los nuevos clientes se aceptan mediante `POLLIN`.
-* Los sockets aceptados se configuran como no bloqueantes.
-* Se pueden mantener varios clientes conectados.
-* `recv()` solamente se ejecuta después de recibir `POLLIN`.
-* `send()` solamente se ejecuta después de recibir `POLLOUT`.
-* `POLLOUT` solo está activado cuando existen datos pendientes.
-* Las lecturas no bloquean el servidor.
-* Se detecta correctamente `recv() == 0`.
-* Se procesan `POLLERR`, `POLLHUP` y `POLLNVAL`.
-* Los clientes desconectados se cierran y eliminan.
-* No quedan descriptores cerrados dentro de `pollDescriptors`.
-* La eliminación de un cliente no provoca que se omitan otros eventos.
-* La desconexión de un cliente no detiene el servidor.
-* Todavía no se interpretan comandos IRC.
+* There is a single central `poll()` call.
+* The listening socket is part of `pollDescriptors`.
+* New clients are accepted through `POLLIN`.
+* Accepted sockets are configured as non-blocking.
+* Several clients can stay connected.
+* `recv()` is only run after receiving `POLLIN`.
+* `send()` is only run after receiving `POLLOUT`.
+* `POLLOUT` is only enabled when there is pending data.
+* Reads do not block the server.
+* `recv() == 0` is detected correctly.
+* `POLLERR`, `POLLHUP` and `POLLNVAL` are processed.
+* Disconnected clients are closed and removed.
+* No closed descriptors remain inside `pollDescriptors`.
+* Removing a client does not cause other events to be skipped.
+* Disconnecting a client does not stop the server.
+* IRC commands are still not interpreted.

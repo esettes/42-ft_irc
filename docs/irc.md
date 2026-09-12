@@ -1,69 +1,69 @@
-Un servidor IRC necesita hacer funcionar dos capas distintas:
+An IRC server needs to make two distinct layers work:
 
-- La capa de red TCP: aceptar y mantener conexiones.
-- La capa IRC: interpretar comandos y gestionar usuarios y canales.
+- The TCP network layer: accept and keep connections.
+- The IRC layer: interpret commands and manage users and channels.
 
-## 1. Arrancar el servidor
+## 1. Starting the server
 
-El ejecutable normalmente se inicia así:
+The executable is normally started like this:
 
 ```bash
 ./ircserv <port> <password>
 ```
 
-Por ejemplo:
+For example:
 
 ```bash
 ./ircserv 6667 secret
 ```
 
-El servidor debe:
+The server must:
 
-- Validar el puerto.
-- Guardar la contraseña.
-- Crear el socket principal.
-- Asociarlo al puerto.
-- Empezar a escuchar conexiones.
-- Entrar en un bucle de eventos.
+- Validate the port.
+- Store the password.
+- Create the main socket.
+- Bind it to the port.
+- Start listening for connections.
+- Enter an event loop.
 
-## 2. Crear el socket que escucha
+## 2. Creating the listening socket
 
-El servidor necesita un socket TCP principal:
+The server needs a main TCP socket:
 
 ```cpp
 int serverSocketFileDescriptor = socket(AF_INET, SOCK_STREAM, 0);
 ```
 
-Después debe:
+Then it must:
 
-- Configurar el socket como no bloqueante.
-- Asociarlo a una dirección y un puerto mediante bind().
-- Ponerlo en modo escucha mediante listen().
+- Configure the socket as non-blocking.
+- Associate it with an address and a port through bind().
+- Put it into listening mode through listen().
 
-Conceptualmente:
+Conceptually:
 
 `socket() → fcntl() → bind() → listen()`
 
-Este socket no representa a un cliente. Su función es exclusivamente recibir nuevas conexiones.
+This socket does not represent a client. Its only job is to receive new connections.
 
-## 3. Esperar actividad con poll()
+## 3. Waiting for activity with poll()
 
-El servidor no puede quedarse bloqueado atendiendo exclusivamente a un cliente. Debe poder gestionar varios clientes simultáneamente.
+The server cannot stay blocked serving a single client. It must be able to manage several clients at the same time.
 
-Para eso se utiliza `poll()`:
+That is what `poll()` is for:
 
 ```cpp
 poll(socketDescriptors, descriptorCount, -1);
 ```
 
-`poll()` informa de qué sockets tienen actividad:
+`poll()` reports which sockets have activity:
 
-- El socket principal tiene actividad: hay una conexión nueva.
-- Un socket de cliente tiene actividad: ese cliente ha enviado datos.
-- Un socket tiene un error o se ha cerrado: hay que desconectar al cliente.
-- Un cliente puede recibir datos: hay mensajes pendientes de envío.
+- The main socket has activity: there is a new connection.
+- A client socket has activity: that client has sent data.
+- A socket has an error or has been closed: the client must be disconnected.
+- A client can receive data: there are pending messages to send.
 
-La estructura general:
+The overall structure:
 
 ```text
 while (server is running)
@@ -75,26 +75,26 @@ while (server is running)
     disconnect invalid or closed clients
 ```
 
-## 4. Aceptar clientes
+## 4. Accepting clients
 
-Cuando el socket principal tiene actividad, se llama a:
+When the main socket has activity, the server calls:
 
 ```cpp
 int clientSocketFileDescriptor = accept(...);
 ```
 
-El valor devuelto identifica la conexión concreta con ese cliente.
+The returned value identifies the specific connection with that client.
 
-Por ejemplo:
+For example:
 
 ```text
-Socket 3 → socket principal del servidor
-Socket 4 → primer cliente
-Socket 5 → segundo cliente
-Socket 6 → tercer cliente
+Socket 3 → server listening socket
+Socket 4 → first client
+Socket 5 → second client
+Socket 6 → third client
 ```
 
-Cada cliente necesita su propio estado:
+Each client needs its own state:
 
 ```cpp
 class Client
@@ -110,11 +110,11 @@ private:
 };
 ```
 
-El descriptor identifica la conexión, pero no contiene toda la información IRC del usuario. Por eso necesitas un objeto `Client`.
+The descriptor identifies the connection, but it does not contain all of the user’s IRC information. That is why you need a `Client` object.
 
-## 5. Recibir datos
+## 5. Receiving data
 
-Cuando `poll()` avisa de que un cliente ha enviado algo, se utiliza `recv()`:
+When `poll()` reports that a client has sent something, `recv()` is used:
 
 ```cpp
 char buffer[4096];
@@ -127,48 +127,48 @@ ssize_t receivedBytes = recv(
 );
 ```
 
-Pero hay una cuestión fundamental: TCP no conserva los límites de los mensajes.
+But there is a fundamental point: TCP does not preserve message boundaries.
 
-El cliente puede enviar:
+The client may send:
 
 `NICK roxana\r\nUSER roxana 0 * :Roxana\r\n`
 
-Y `recv()` podría entregártelo de formas diferentes:
+And `recv()` might deliver it in different ways:
 
 ```text
-Primer recv:  NICK ro
-Segundo recv: xana\r\nUSER rox
-Tercer recv:  ana 0 * :Roxana\r\n
+First recv:   NICK ro
+Second recv:  xana\r\nUSER rox
+Third recv:   ana 0 * :Roxana\r\n
 ```
 
-Por eso cada cliente necesita un `inputBuffer`.
+That is why each client needs an `inputBuffer`.
 
-Los datos recibidos se añaden:
+Received data is appended:
 
 ```cpp
 client.getInputBuffer().append(buffer, receivedBytes);
 ```
 
-Solo se procesa una instrucción cuando aparece el final IRC:
+An instruction is processed only when the IRC terminator appears:
 
 `\r\n`
 
-## 6. Parsear los comandos IRC
+## 6. Parsing IRC commands
 
-Cuando tienes una línea completa:
+When you have a complete line:
 
-`PRIVMSG #general :Hola a todos\r\n`
+`PRIVMSG #general :Hello everyone\r\n`
 
-El parser debe separarla en algo similar a:
+The parser must split it into something similar to:
 
 ```text
 Command: PRIVMSG
 Parameters:
     #general
-    Hola a todos
+    Hello everyone
 ```
 
-Una estructura útil podría ser:
+A useful structure could be:
 
 ```cpp
 class Message
@@ -180,17 +180,17 @@ public:
 };
 ```
 
-El último parámetro puede comenzar con `:` y contener espacios:
+The last parameter may start with `:` and contain spaces:
 
-`PRIVMSG #general :Este mensaje contiene espacios`
+`PRIVMSG #general :This message contains spaces`
 
-Aquí `Este mensaje contiene espacios` es un único parámetro.
+Here `This message contains spaces` is a single parameter.
 
-## 7. Registrar al cliente
+## 7. Registering the client
 
-Una conexión TCP no convierte automáticamente al cliente en un usuario IRC registrado.
+A TCP connection does not automatically turn the client into a registered IRC user.
 
-Normalmente, el cliente debe enviar:
+Normally the client must send:
 
 ```text
 PASS secret
@@ -198,53 +198,53 @@ NICK roxana
 USER roxana 0 * :Roxana
 ```
 
-El servidor debe verificar:
+The server must verify:
 
-- Que la contraseña sea correcta.
-- Que el nickname sea válido.
-- Que el nickname no esté ocupado.
-- Que haya recibido NICK.
-- Que haya recibido USER.
+- That the password is correct.
+- That the nickname is valid.
+- That the nickname is not already taken.
+- That it has received NICK.
+- That it has received USER.
 
-Cuando se cumplen todas las condiciones:
+When all conditions are met:
 
 ```cpp
 client.setRegistered(true);
 ```
 
-Entonces se envía el mensaje de bienvenida, normalmente con respuestas numéricas IRC:
+Then the welcome message is sent, normally with IRC numeric replies:
 
 `:irc.local 001 roxana :Welcome to the IRC Network roxana`
 
-Por eso Irssi puede mostrar:
+That is why Irssi may show:
 
 ```text
 Connection established
 Not connected to server
 ```
 
-La conexión TCP se ha establecido, pero no se ha completado correctamente el registro IRC.
+The TCP connection has been established, but IRC registration has not completed correctly.
 
-## 8. Ejecutar comandos
+## 8. Executing commands
 
-El servidor necesita asociar cada comando con su comportamiento.
+The server needs to associate each command with its behaviour.
 
-Como mínimo:
+At a minimum:
 
-- `PASS`: comprobar la contraseña.
-- `NICK`: asignar o cambiar nickname.
-- `USER`: guardar los datos del usuario.
-- `PING/PONG`: mantener la conexión.
-- `QUIT`: desconectar al usuario.
-- `JOIN`: entrar en un canal.
-- `PART`: salir de un canal.
-- `PRIVMSG`: enviar mensajes.
-- `KICK`: expulsar a un usuario.
-- `INVITE`: invitar a un usuario.
-- `TOPIC`: consultar o cambiar el tema.
-- `MODE`: configurar modos del canal.
+- `PASS`: check the password.
+- `NICK`: assign or change the nickname.
+- `USER`: store the user data.
+- `PING/PONG`: keep the connection alive.
+- `QUIT`: disconnect the user.
+- `JOIN`: enter a channel.
+- `PART`: leave a channel.
+- `PRIVMSG`: send messages.
+- `KICK`: remove a user.
+- `INVITE`: invite a user.
+- `TOPIC`: query or change the topic.
+- `MODE`: configure channel modes.
 
-Un dispatcher puede tomar esta decisión:
+A dispatcher can make that decision:
 
 ```cpp
 if (message.getCommand() == "NICK")
@@ -255,11 +255,11 @@ else if (message.getCommand() == "PRIVMSG")
     handlePrivmsg(client, message);
 ```
 
-Más adelante se puede sustituir esa cadena de if por un mapa de funciones.
+Later that if-chain can be replaced by a map of functions.
 
-## 9. Gestionar canales
+## 9. Managing channels
 
-El servidor necesita guardar los canales existentes:
+The server needs to store the existing channels:
 
 ```cpp
 class Channel
@@ -277,23 +277,23 @@ private:
 };
 ```
 
-Cuando alguien ejecuta:
+When someone runs:
 
 `JOIN #general`
 
-El servidor debe:
+The server must:
 
-- Buscar el canal.
-- Crearlo si no existe.
-- Comprobar contraseña, invitación y límite.
-- Añadir al cliente.
-- Informar a los miembros.
-- Enviar el tema.
-- Enviar la lista de usuarios.
+- Look up the channel.
+- Create it if it does not exist.
+- Check the password, invitation, and limit.
+- Add the client.
+- Inform the members.
+- Send the topic.
+- Send the user list.
 
-## 10. Enviar mensajes
+## 10. Sending messages
 
-Para contestar se utiliza `send()`:
+Replies are sent with `send()`:
 
 ```cpp
 send(
@@ -304,71 +304,71 @@ send(
 );
 ```
 
-Sin embargo, `send()` puede enviar solo una parte del mensaje. Por eso es recomendable que cada cliente tenga un `outputBuffer`.
+However, `send()` may send only part of the message. That is why each client should have an `outputBuffer`.
 
-Ejemplo:
+Example:
 
 ```text
-Mensaje pendiente: 120 bytes
-send() envía:        70 bytes
-Restan:              50 bytes
+Pending message: 120 bytes
+send() sends:     70 bytes
+Remaining:        50 bytes
 ```
 
-Esos 50 bytes deben mantenerse para enviarlos después.
+Those 50 bytes must be kept so they can be sent later.
 
-Todos los mensajes IRC deben terminar en:
+All IRC messages must end with:
 
 `\r\n`
 
-Por ejemplo:
+For example:
 
 ```cpp
 std::string response =
     ":irc.local 001 roxana :Welcome to the IRC Network\r\n";
 ```
 
-## 11. Respuestas y errores numéricos
+## 11. Numeric replies and errors
 
-IRC utiliza códigos numéricos para muchas respuestas:
+IRC uses numeric codes for many replies:
 
 ```text
-001 → bienvenida
-331 → el canal no tiene tema
-332 → tema del canal
-353 → lista de usuarios
-366 → fin de la lista de usuarios
-401 → nickname inexistente
-403 → canal inexistente
-431 → falta nickname
-433 → nickname ocupado
-461 → faltan parámetros
-464 → contraseña incorrecta
+001 → welcome
+331 → the channel has no topic
+332 → channel topic
+353 → user list
+366 → end of the user list
+401 → no such nickname
+403 → no such channel
+431 → nickname missing
+433 → nickname already in use
+461 → missing parameters
+464 → incorrect password
 ```
 
-El servidor debe construirlos con el formato correcto. No basta con enviar simplemente:
+The server must build them with the correct format. It is not enough to send simply:
 
-`Error: nickname ocupado`
+`Error: nickname already in use`
 
-Irssi espera respuestas compatibles con el protocolo IRC.
+Irssi expects replies that are compatible with the IRC protocol.
 
-## 12. Desconexión y limpieza
+## 12. Disconnection and cleanup
 
-Un cliente puede desconectarse porque:
+A client may disconnect because:
 
-- Ejecuta QUIT.
-- Cierra Irssi.
-- `recv()` devuelve 0.
-- Se produce un error de socket.
-- El servidor rechaza la contraseña.
-- Su conexión deja de ser válida.
+- It runs QUIT.
+- It closes Irssi.
+- `recv()` returns 0.
+- A socket error occurs.
+- The server rejects the password.
+- Its connection is no longer valid.
 
-Al desconectarlo, el servidor debe:
+When disconnecting it, the server must:
 
-- Avisar a los usuarios afectados.
-- Sacarlo de todos los canales.
-- Eliminar canales vacíos cuando corresponda.
-- Quitar su descriptor de poll().
-- Cerrar el socket.
-- Destruir el objeto Client.
+- Notify the affected users.
+- Remove it from every channel.
+- Delete empty channels when appropriate.
+- Remove its descriptor from poll().
+- Close the socket.
+- Destroy the Client object.
 
-Es importante no dejar punteros al cliente dentro de ningún canal.
+It is important not to leave pointers to the client inside any channel.

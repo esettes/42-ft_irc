@@ -1,181 +1,181 @@
-# Fase 13 — Comando `PRIVMSG`
+# Phase 13 — `PRIVMSG` command
 
-## Objetivo
+## Goal
 
-Implementar el envío de mensajes:
+Implement sending messages:
 
-- Entre dos usuarios.
-- Desde un usuario hacia un canal.
-- Sin bloquear el servidor.
-- Conservando el prefijo completo del emisor.
+- Between two users.
+- From a user to a channel.
+- Without blocking the server.
+- Keeping the sender’s full prefix.
 
-El comando tiene estas dos formas principales:
+The command has these two main forms:
 
 ```text
-PRIVMSG roxana :Hola
-PRIVMSG #general :Hola a todos
+PRIVMSG roxana :Hello
+PRIVMSG #general :Hello everyone
 ```
 
 ---
 
-## 1. Requisitos previos
+## 1. Prerequisites
 
-Antes de procesar `PRIVMSG`, el servidor debe comprobar que el cliente está registrado.
+Before processing `PRIVMSG`, the server must check that the client is registered.
 
-Si todavía no ha completado `PASS`, `NICK` y `USER`, debe responder:
+If they have not yet completed `PASS`, `NICK` and `USER`, it must reply:
 
 ```text
 451 ERR_NOTREGISTERED
 ```
 
-El comando también depende de que ya existan:
+The command also depends on already having:
 
-- La búsqueda global de clientes mediante nickname.
-- El modelo de canales.
-- La lista de miembros de cada canal.
-- El sistema centralizado de respuestas IRC.
-- El buffer de salida no bloqueante de cada cliente.
+- Global client lookup by nickname.
+- The channel model.
+- Each channel’s member list.
+- The centralized IRC reply system.
+- Each client’s non-blocking output buffer.
 
 ---
 
-## 2. Parámetros del comando
+## 2. Command parameters
 
-Un mensaje privado necesita dos datos:
+A private message needs two pieces of data:
 
-1. El destinatario.
-2. El texto del mensaje.
+1. The target.
+2. The message text.
 
-Por ejemplo:
+For example:
 
 ```text
-PRIVMSG roxana :Hola
+PRIVMSG roxana :Hello
 ```
 
-El parser debería producir algo equivalente a:
+The parser should produce something equivalent to:
 
 ```text
 commandName = "PRIVMSG"
 parameters[0] = "roxana"
-parameters[1] = "Hola"
+parameters[1] = "Hello"
 ```
 
-En un mensaje dirigido a un canal:
+In a message directed at a channel:
 
 ```text
-PRIVMSG #general :Hola a todos
+PRIVMSG #general :Hello everyone
 ```
 
-El resultado debería ser:
+The result should be:
 
 ```text
 commandName = "PRIVMSG"
 parameters[0] = "#general"
-parameters[1] = "Hola a todos"
+parameters[1] = "Hello everyone"
 ```
 
-El texto introducido después de `:` debe mantenerse como un único parámetro, aunque contenga espacios.
+The text introduced after `:` must be kept as a single parameter, even if it contains spaces.
 
 ---
 
-## 3. Orden recomendado de validación
+## 3. Recommended validation order
 
-El handler de `PRIVMSG` debería realizar las comprobaciones en este orden:
+The `PRIVMSG` handler should perform the checks in this order:
 
 ```text
-¿Cliente registrado?
+Is the client registered?
     ↓
-¿Existe destinatario?
+Does a target exist?
     ↓
-¿Existe texto?
+Does text exist?
     ↓
-¿El destinatario es un canal o un usuario?
-    ├── usuario → buscar nickname
-    └── canal   → buscar canal y comprobar pertenencia
+Is the target a channel or a user?
+    ├── user    → look up nickname
+    └── channel → look up channel and check membership
     ↓
-construir mensaje con el prefijo del emisor
+build the message with the sender’s prefix
     ↓
-añadir el mensaje al buffer de salida de los receptores
+append the message to the receivers’ output buffers
 ```
 
-Este orden permite devolver un único error coherente y detener el procesamiento en cuanto se detecta un problema.
+This order lets you return a single consistent error and stop processing as soon as a problem is detected.
 
 ---
 
-## 4. Mensajes privados entre usuarios
+## 4. Private messages between users
 
-Ejemplo recibido:
-
-```text
-PRIVMSG roxana :Hola
-```
-
-El servidor debe:
-
-1. Comprobar que existe el parámetro del destinatario.
-2. Comprobar que existe el texto.
-3. Buscar globalmente al cliente cuyo nickname sea `roxana`.
-4. Construir el mensaje con el prefijo completo del emisor.
-5. Añadir el mensaje al buffer de salida del destinatario.
-
-Mensaje enviado al receptor:
+Received example:
 
 ```text
-:alice!alice@localhost PRIVMSG roxana :Hola
+PRIVMSG roxana :Hello
 ```
 
-El prefijo debe corresponder al usuario que envió el mensaje:
+The server must:
+
+1. Check that the target parameter exists.
+2. Check that the text exists.
+3. Globally look up the client whose nickname is `roxana`.
+4. Build the message with the sender’s full prefix.
+5. Append the message to the target’s output buffer.
+
+Message sent to the receiver:
+
+```text
+:alice!alice@localhost PRIVMSG roxana :Hello
+```
+
+The prefix must correspond to the user who sent the message:
 
 ```text
 :nickname!username@hostname
 ```
 
-El servidor no debe sustituir ese prefijo por su propio nombre.
+The server must not replace that prefix with its own name.
 
-El mensaje normalmente solo se envía al destinatario. No es necesario reenviarlo al emisor.
-
----
-
-## 5. Mensajes dirigidos a canales
-
-Ejemplo recibido:
-
-```text
-PRIVMSG #general :Hola a todos
-```
-
-El servidor debe:
-
-1. Comprobar que el canal existe.
-2. Comprobar que el emisor pertenece al canal.
-3. Construir el mensaje con el prefijo completo del emisor.
-4. Recorrer los miembros del canal.
-5. Enviar el mensaje a todos los miembros excepto al emisor.
-
-Mensaje recibido por los demás miembros:
-
-```text
-:alice!alice@localhost PRIVMSG #general :Hola a todos
-```
-
-El mensaje no debe reenviarse al propio emisor.
-
-La distribución sería equivalente a:
-
-```text
-Canal #general
-├── alice    ← emisor, no recibe copia
-├── roxana   ← recibe el mensaje
-├── bob      ← recibe el mensaje
-└── carol    ← recibe el mensaje
-```
-
-Todos los receptores deben recibir exactamente el mismo mensaje.
+The message is normally only sent to the target. It is not necessary to forward it back to the sender.
 
 ---
 
-## 6. Identificación del tipo de destinatario
+## 5. Messages directed at channels
 
-Una forma sencilla de distinguir un canal de un nickname es comprobar el primer carácter:
+Received example:
+
+```text
+PRIVMSG #general :Hello everyone
+```
+
+The server must:
+
+1. Check that the channel exists.
+2. Check that the sender belongs to the channel.
+3. Build the message with the sender’s full prefix.
+4. Traverse the channel members.
+5. Send the message to every member except the sender.
+
+Message received by the other members:
+
+```text
+:alice!alice@localhost PRIVMSG #general :Hello everyone
+```
+
+The message must not be forwarded back to the sender.
+
+The distribution would be equivalent to:
+
+```text
+Channel #general
+├── alice    ← sender, does not receive a copy
+├── roxana   ← receives the message
+├── bob      ← receives the message
+└── carol    ← receives the message
+```
+
+Every receiver must receive exactly the same message.
+
+---
+
+## 6. Identifying the target type
+
+A simple way to distinguish a channel from a nickname is to check the first character:
 
 ```cpp
 bool isChannelTarget(const std::string &target)
@@ -184,7 +184,7 @@ bool isChannelTarget(const std::string &target)
 }
 ```
 
-El flujo del handler puede dividirse en dos funciones:
+The handler flow can be split into two functions:
 
 ```cpp
 void handlePrivateMessage(Client &sender, const Command &command);
@@ -200,15 +200,15 @@ void sendMessageToChannel(
 );
 ```
 
-Esto evita concentrar toda la lógica en una sola función.
+This avoids concentrating all of the logic in a single function.
 
 ---
 
-## 7. Construcción del mensaje
+## 7. Building the message
 
-Conviene reutilizar la función encargada de construir el prefijo del cliente.
+It is useful to reuse the function in charge of building the client prefix.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```cpp
 std::string message =
@@ -220,91 +220,91 @@ std::string message =
     + "\r\n";
 ```
 
-El resultado debe respetar el formato IRC:
+The result must respect the IRC format:
 
 ```text
-:alice!alice@localhost PRIVMSG #general :Hola a todos\r\n
+:alice!alice@localhost PRIVMSG #general :Hello everyone\r\n
 ```
 
-No debe olvidarse la terminación `\r\n`.
+The `\r\n` terminator must not be forgotten.
 
 ---
 
-## 8. Envío no bloqueante
+## 8. Non-blocking send
 
-`PRIVMSG` no debe llamar a `send()` directamente desde el handler.
+`PRIVMSG` must not call `send()` directly from the handler.
 
-El mensaje debe añadirse al buffer de salida del receptor:
+The message must be appended to the receiver’s output buffer:
 
 ```text
-mensaje construido
+built message
     ↓
-se añade al outputBuffer del receptor
+it is appended to the receiver’s outputBuffer
     ↓
-se activa POLLOUT
+POLLOUT is enabled
     ↓
-poll() informa de que el socket permite escribir
+poll() reports that the socket allows writing
     ↓
-se envían los bytes disponibles
+the available bytes are sent
 ```
 
-Para un canal, el mismo mensaje se añade al buffer de salida de cada miembro receptor.
+For a channel, the same message is appended to each receiving member’s output buffer.
 
-Esto mantiene el comportamiento no bloqueante implementado en la fase 7.
+This keeps the non-blocking behaviour implemented in phase 7.
 
 ---
 
-## 9. Errores relevantes
+## 9. Relevant errors
 
 ### `401 ERR_NOSUCHNICK`
 
-Se devuelve cuando el nickname destinatario no existe.
+Returned when the target nickname does not exist.
 
-Ejemplo:
+Example:
 
 ```text
-PRIVMSG usuarioInexistente :Hola
+PRIVMSG nonexistentUser :Hello
 ```
 
-Respuesta:
+Reply:
 
 ```text
-:server.name 401 alice usuarioInexistente :No such nick
+:server.name 401 alice nonexistentUser :No such nick
 ```
 
 ---
 
 ### `403 ERR_NOSUCHCHANNEL`
 
-Se devuelve cuando el canal destinatario no existe.
+Returned when the target channel does not exist.
 
-Ejemplo:
+Example:
 
 ```text
-PRIVMSG #inexistente :Hola
+PRIVMSG #nonexistent :Hello
 ```
 
-Respuesta:
+Reply:
 
 ```text
-:server.name 403 alice #inexistente :No such channel
+:server.name 403 alice #nonexistent :No such channel
 ```
 
 ---
 
 ### `404 ERR_CANNOTSENDTOCHAN`
 
-Se devuelve cuando el usuario no puede enviar mensajes al canal.
+Returned when the user cannot send messages to the channel.
 
-En esta fase, debe utilizarse cuando el emisor no pertenece al canal.
+In this phase, it must be used when the sender does not belong to the channel.
 
-Ejemplo:
+Example:
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 404 alice #general :Cannot send to channel
@@ -314,15 +314,15 @@ Respuesta:
 
 ### `411 ERR_NORECIPIENT`
 
-Se devuelve cuando no se ha indicado ningún destinatario.
+Returned when no target has been indicated.
 
-Ejemplo:
+Example:
 
 ```text
 PRIVMSG
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 411 alice :No recipient given (PRIVMSG)
@@ -332,39 +332,39 @@ Respuesta:
 
 ### `412 ERR_NOTEXTTOSEND`
 
-Se devuelve cuando existe un destinatario, pero no hay texto para enviar.
+Returned when a target exists, but there is no text to send.
 
-Ejemplos:
+Examples:
 
 ```text
 PRIVMSG roxana
 PRIVMSG roxana :
 ```
 
-Respuesta:
+Reply:
 
 ```text
 :server.name 412 alice :No text to send
 ```
 
-También conviene considerar vacío el trailing de `PRIVMSG roxana :`.
+The trailing of `PRIVMSG roxana :` should also be considered empty.
 
 ---
 
-## 10. Resumen de errores
+## 10. Error summary
 
-| Situación | Código | Nombre |
+| Situation | Code | Name |
 |---|---:|---|
-| Cliente no registrado | `451` | `ERR_NOTREGISTERED` |
-| Falta el destinatario | `411` | `ERR_NORECIPIENT` |
-| Falta el texto | `412` | `ERR_NOTEXTTOSEND` |
-| Nickname inexistente | `401` | `ERR_NOSUCHNICK` |
-| Canal inexistente | `403` | `ERR_NOSUCHCHANNEL` |
-| El usuario no puede escribir en el canal | `404` | `ERR_CANNOTSENDTOCHAN` |
+| Unregistered client | `451` | `ERR_NOTREGISTERED` |
+| Missing target | `411` | `ERR_NORECIPIENT` |
+| Missing text | `412` | `ERR_NOTEXTTOSEND` |
+| Nonexistent nickname | `401` | `ERR_NOSUCHNICK` |
+| Nonexistent channel | `403` | `ERR_NOSUCHCHANNEL` |
+| The user cannot write to the channel | `404` | `ERR_CANNOTSENDTOCHAN` |
 
 ---
 
-## 11. Estructura recomendada del handler
+## 11. Recommended handler structure
 
 ```cpp
 void CommandDispatcher::handlePrivmsg(
@@ -404,49 +404,49 @@ void CommandDispatcher::handlePrivmsg(
 }
 ```
 
-Los nombres concretos pueden adaptarse a la arquitectura del proyecto.
+The concrete names can be adapted to the project architecture.
 
 ---
 
-## 12. Casos de prueba mínimos
+## 12. Minimum test cases
 
-### Mensaje correcto entre usuarios
-
-```text
-PRIVMSG roxana :Hola
-```
-
-Resultado esperado:
+### Correct message between users
 
 ```text
-:alice!alice@localhost PRIVMSG roxana :Hola
+PRIVMSG roxana :Hello
 ```
 
-Solo `roxana` recibe el mensaje.
+Expected result:
+
+```text
+:alice!alice@localhost PRIVMSG roxana :Hello
+```
+
+Only `roxana` receives the message.
 
 ---
 
-### Mensaje correcto a un canal
+### Correct message to a channel
 
 ```text
-PRIVMSG #general :Hola a todos
+PRIVMSG #general :Hello everyone
 ```
 
-Todos los miembros de `#general`, excepto el emisor, reciben:
+Every member of `#general`, except the sender, receives:
 
 ```text
-:alice!alice@localhost PRIVMSG #general :Hola a todos
+:alice!alice@localhost PRIVMSG #general :Hello everyone
 ```
 
 ---
 
-### Nickname inexistente
+### Nonexistent nickname
 
 ```text
-PRIVMSG nadie :Hola
+PRIVMSG nobody :Hello
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 401 ERR_NOSUCHNICK
@@ -454,13 +454,13 @@ Resultado esperado:
 
 ---
 
-### Canal inexistente
+### Nonexistent channel
 
 ```text
-PRIVMSG #inexistente :Hola
+PRIVMSG #nonexistent :Hello
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 403 ERR_NOSUCHCHANNEL
@@ -468,13 +468,13 @@ Resultado esperado:
 
 ---
 
-### Emisor fuera del canal
+### Sender outside the channel
 
 ```text
-PRIVMSG #general :Hola
+PRIVMSG #general :Hello
 ```
 
-Si el emisor no pertenece a `#general`:
+If the sender does not belong to `#general`:
 
 ```text
 404 ERR_CANNOTSENDTOCHAN
@@ -482,13 +482,13 @@ Si el emisor no pertenece a `#general`:
 
 ---
 
-### Falta el destinatario
+### Missing target
 
 ```text
 PRIVMSG
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 411 ERR_NORECIPIENT
@@ -496,13 +496,13 @@ Resultado esperado:
 
 ---
 
-### Falta el texto
+### Missing text
 
 ```text
 PRIVMSG roxana
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 412 ERR_NOTEXTTOSEND
@@ -510,13 +510,13 @@ Resultado esperado:
 
 ---
 
-### Texto vacío
+### Empty text
 
 ```text
 PRIVMSG roxana :
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 412 ERR_NOTEXTTOSEND
@@ -524,20 +524,20 @@ Resultado esperado:
 
 ---
 
-## 13. Criterios para completar la fase
+## 13. Criteria to complete the phase
 
-La fase estará terminada cuando:
+The phase will be finished when:
 
-- `PRIVMSG` rechace a los clientes no registrados.
-- Se puedan enviar mensajes privados entre usuarios.
-- Se puedan enviar mensajes a canales.
-- Los mensajes de canal lleguen a todos los miembros excepto al emisor.
-- Un usuario externo no pueda escribir en un canal al que no pertenece.
-- Los mensajes conserven el prefijo completo del emisor.
-- Los nicknames y canales inexistentes produzcan el error correspondiente.
-- La ausencia de destinatario o texto produzca el error correspondiente.
-- Todos los mensajes terminen en `\r\n`.
-- El envío utilice los buffers de salida no bloqueantes.
-- El servidor continúe funcionando correctamente después de recibir comandos `PRIVMSG` inválidos.
+- `PRIVMSG` rejects unregistered clients.
+- Private messages can be sent between users.
+- Messages can be sent to channels.
+- Channel messages reach every member except the sender.
+- An external user cannot write to a channel they do not belong to.
+- Messages keep the sender’s full prefix.
+- Nonexistent nicknames and channels produce the corresponding error.
+- The absence of a target or text produces the corresponding error.
+- Every message ends with `\r\n`.
+- Sending uses the non-blocking output buffers.
+- The server keeps working correctly after receiving invalid `PRIVMSG` commands.
 
-> El objetivo principal de esta fase es completar el sistema básico de comunicación exigido por el proyecto: mensajes privados entre usuarios y distribución de mensajes entre los miembros de un canal.
+> The main goal of this phase is to complete the basic communication system required by the project: private messages between users and distribution of messages among the members of a channel.
